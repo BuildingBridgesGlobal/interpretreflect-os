@@ -15,8 +15,7 @@ export default function SupabaseStatus() {
       supabase
         .from("onboarding")
         .select("id", { head: true, count: "exact" })
-        .then((res) => setDbReachable(!res.error))
-        .catch(() => setDbReachable(false));
+        .then((res) => setDbReachable(!res.error));
     } else {
       setAuthOk(false);
       setDbReachable(false);
