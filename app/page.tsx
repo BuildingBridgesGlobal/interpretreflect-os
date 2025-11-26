@@ -16,6 +16,7 @@ export default function Page() {
     <div className="min-h-screen bg-slate-950 text-slate-50">
       <Header />
       <main>
+        <div className="px-4 py-2 text-xs text-slate-300">Deploy trigger</div>
         <Hero primaryHref="/start" secondaryHref="#os-preview" />
         <OSPreview />
         <ValueStrip />
