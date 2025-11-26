@@ -27,13 +27,13 @@ export default function Step5Account({ email, password, weekly_summary_opt_in, p
         const now = new Date().toISOString();
         const goalsRows = (selected_skill_ids ?? []).map((skill_id) => ({ user_id: userId, skill_id, target_level: 4, source: "onboarding", created_at: now }));
         if (goalsRows.length) {
-          await supabase.from("skill_goals").insert(goalsRows);
+          await (supabase.from("skill_goals") as any).insert(goalsRows);
         }
         const assessmentsRows = Object.entries(skill_levels_by_id ?? {}).map(([skillId, level]) => ({ user_id: userId, skill_id: Number(skillId), level, source: "onboarding", created_at: now }));
         if (assessmentsRows.length) {
-          await supabase.from("skill_assessments").insert(assessmentsRows);
+          await (supabase.from("skill_assessments") as any).insert(assessmentsRows);
         }
-        await supabase.from("agent_events").insert({ user_id: userId, agent: "onboarding", event_type: "skills_captured", metadata: { primary_goal, selected_skill_ids, skill_levels_by_id }, created_at: now });
+        await (supabase.from("agent_events") as any).insert({ user_id: userId, agent: "onboarding", event_type: "skills_captured", metadata: { primary_goal, selected_skill_ids, skill_levels_by_id }, created_at: now });
       }
       onSubmit();
     } catch (e: any) {

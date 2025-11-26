@@ -65,7 +65,7 @@ export const CatalystChat: React.FC<Props> = ({ userId }) => {
     setSending(true);
     setError(null);
     try {
-      await supabase.from("agent_events").insert({
+      await (supabase.from("agent_events") as any).insert({
         user_id: userId,
         agent: "catalyst",
         event_type: "user_message",

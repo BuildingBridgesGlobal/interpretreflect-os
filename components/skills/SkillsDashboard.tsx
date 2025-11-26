@@ -59,7 +59,7 @@ export const SkillsDashboard: React.FC = () => {
         .order("created_at", { ascending: false })
         .limit(1);
       if (!existing || existing.length === 0) {
-        await supabase.from("agent_events").insert({ user_id: uid, agent: "practice", event_type: "practice_recommendation", metadata: { items: generated } });
+        await (supabase.from("agent_events") as any).insert({ user_id: uid, agent: "practice", event_type: "practice_recommendation", metadata: { items: generated } });
       }
     };
     run();
