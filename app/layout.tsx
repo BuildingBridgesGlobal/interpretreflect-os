@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="bg-slate-950">
+    <html lang="en" className="bg-slate-950" data-build="trigger4">
       <body className={inter.className}>
         {process.env.NEXT_PUBLIC_GTAG_ID && (
           <>
