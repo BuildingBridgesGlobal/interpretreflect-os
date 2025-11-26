@@ -1,1 +1,1 @@
-﻿const nextConfig = { reactStrictMode: true }; export default nextConfig;
+﻿const nextConfig = { reactStrictMode: true, turbopack: { root: __dirname } }; export default nextConfig;
