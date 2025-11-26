@@ -17,23 +17,22 @@ export default function Step5Account({ email, password, weekly_summary_opt_in, p
         setError("Supabase not configured.");
         return;
       }
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email: email!, password: password! });
+      const { error: signUpError } = await supabase.auth.signUp({ email: email!, password: password! });
       if (signUpError) {
         setError(signUpError.message);
         return;
       }
-      const userId = signUpData.user?.id;
-      if (userId && (selected_skill_ids?.length || skill_levels_by_id)) {
-        const now = new Date().toISOString();
-        const goalsRows = (selected_skill_ids ?? []).map((skill_id) => ({ user_id: userId, skill_id, target_level: 4, source: "onboarding", created_at: now }));
+      if (selected_skill_ids?.length || skill_levels_by_id) {
+        // user_id is set by database trigger
+        const goalsRows = (selected_skill_ids ?? []).map((skill_id) => ({ skill_id, target_level: 4, source: "onboarding" }));
         if (goalsRows.length) {
-          await (supabase.from("skill_goals") as any).insert(goalsRows);
+          await supabase.from("skill_goals").insert(goalsRows as any);
         }
-        const assessmentsRows = Object.entries(skill_levels_by_id ?? {}).map(([skillId, level]) => ({ user_id: userId, skill_id: Number(skillId), level, source: "onboarding", created_at: now }));
+        const assessmentsRows = Object.entries(skill_levels_by_id ?? {}).map(([skillId, level]) => ({ skill_id: Number(skillId), level, source: "onboarding" }));
         if (assessmentsRows.length) {
-          await (supabase.from("skill_assessments") as any).insert(assessmentsRows);
+          await supabase.from("skill_assessments").insert(assessmentsRows as any);
         }
-        await (supabase.from("agent_events") as any).insert({ user_id: userId, agent: "onboarding", event_type: "skills_captured", metadata: { primary_goal, selected_skill_ids, skill_levels_by_id }, created_at: now });
+        await supabase.from("agent_events").insert({ agent: "onboarding", event_type: "skills_captured", metadata: { primary_goal, selected_skill_ids, skill_levels_by_id } } as any);
       }
       onSubmit();
     } catch (e: any) {

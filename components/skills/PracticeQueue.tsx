@@ -36,18 +36,17 @@ export const PracticeQueue: React.FC<Props> = ({ userId, items, onSessionLogged 
     setLoadingId(item.id);
 
     try {
-      const { error: practiceError } = await (supabase.from("practice_sessions") as any).insert({
-        user_id: userId,
+      // user_id is set by database trigger
+      const { error: practiceError } = await supabase.from("practice_sessions").insert({
         skill_id: Number(item.skillId),
         session_type: item.sessionType,
         duration_minutes: item.suggestedDuration,
         quality_rating: null,
         notes: `Queued from Skills OS: ${item.reason}`,
-      });
+      } as any);
       if (practiceError) throw practiceError;
 
-      const { error: eventError } = await (supabase.from("agent_events") as any).insert({
-        user_id: userId,
+      const { error: eventError } = await supabase.from("agent_events").insert({
         agent: "skills",
         event_type: "session_started",
         metadata: {
@@ -57,7 +56,7 @@ export const PracticeQueue: React.FC<Props> = ({ userId, items, onSessionLogged 
           suggested_duration: item.suggestedDuration,
           source: "practice_queue",
         },
-      });
+      } as any);
       if (eventError) throw eventError;
 
       if (onSessionLogged) onSessionLogged();

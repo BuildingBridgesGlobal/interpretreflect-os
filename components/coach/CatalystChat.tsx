@@ -11,7 +11,7 @@ type AgentEvent = {
 };
 
 type PracticeSession = {
-  id: string;
+  id: number;
   skill_key: string | null;
   session_type: string;
   duration_minutes: number | null;
@@ -65,12 +65,12 @@ export const CatalystChat: React.FC<Props> = ({ userId }) => {
     setSending(true);
     setError(null);
     try {
-      await (supabase.from("agent_events") as any).insert({
-        user_id: userId,
+      // user_id is set by database trigger
+      await supabase.from("agent_events").insert({
         agent: "catalyst",
         event_type: "user_message",
         metadata: { message: input },
-      });
+      } as any);
       setInput("");
     } catch (err: any) {
       setError("Something went wrong sending your question.");

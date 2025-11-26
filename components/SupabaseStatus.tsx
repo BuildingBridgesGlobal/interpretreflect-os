@@ -13,7 +13,7 @@ export default function SupabaseStatus() {
     if (hasEnv && supabase) {
       supabase.auth.getSession().then((res) => setAuthOk(res.error ? false : true));
       supabase
-        .from("onboarding")
+        .from("skills")
         .select("id", { head: true, count: "exact" })
         .then((res) => setDbReachable(!res.error));
     } else {
