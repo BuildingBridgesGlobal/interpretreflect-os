@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="bg-slate-950" data-build="trigger4">
+    <html lang="en" className="bg-slate-950" data-build="trigger5">
       <body className={inter.className}>
         <AuthProvider>
         {process.env.NEXT_PUBLIC_GTAG_ID && (
