@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Inter } from "next/font/google";
 import Script from "next/script";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
@@ -8,6 +9,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="bg-slate-950" data-build="trigger4">
       <body className={inter.className}>
+        <AuthProvider>
         {process.env.NEXT_PUBLIC_GTAG_ID && (
           <>
             <Script src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GTAG_ID}`} strategy="afterInteractive" />
@@ -27,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </>
         )}
         {children}
+        </AuthProvider>
       </body>
     </html>
   );

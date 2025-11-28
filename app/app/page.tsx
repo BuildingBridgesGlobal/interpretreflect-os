@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import TodaySnapshot from "@/components/dashboard/TodaySnapshot";
 import QuadrantPerformance from "@/components/dashboard/QuadrantPerformance";
@@ -9,6 +9,8 @@ import QuadrantBurnout from "@/components/dashboard/QuadrantBurnout";
 import QuadrantDomains from "@/components/dashboard/QuadrantDomains";
 import QuadrantSupportStack from "@/components/dashboard/QuadrantSupportStack";
 import FirstActionsStrip from "@/components/dashboard/FirstActionsStrip";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 type OnboardingData = {
   role?: string;
@@ -18,10 +20,12 @@ type OnboardingData = {
   primary_goal?: "burnout" | "recovery" | "growth" | "season";
 };
 
-export default function AppDashboard() {
+function DashboardContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const firstRun = searchParams.get("firstRun") === "1";
   const [data, setData] = useState<OnboardingData | null>(null);
+  const { user, signOut } = useAuth();
 
   useEffect(() => {
     const stored = localStorage.getItem("ir_onboarding");
@@ -34,6 +38,11 @@ export default function AppDashboard() {
     }
   }, []);
 
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/");
+  };
+
   const loadSeed = data?.week_load_score ?? 5;
 
   return (
@@ -43,8 +52,16 @@ export default function AppDashboard() {
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <span className="text-lg font-bold text-teal-400">InterpretReflect OS</span>
           <nav className="flex items-center gap-4 text-sm text-slate-300">
-            <Link href="/app" className="hover:text-teal-300">Dashboard</Link>
+            <Link href="/app" className="text-teal-300">Dashboard</Link>
             <Link href="/app/skills" className="hover:text-teal-300">Skills</Link>
+            <span className="text-slate-500">|</span>
+            <span className="text-slate-400 text-xs">{user?.email}</span>
+            <button
+              onClick={handleSignOut}
+              className="text-slate-400 hover:text-red-400 text-xs"
+            >
+              Sign out
+            </button>
           </nav>
         </div>
       </header>
@@ -63,10 +80,18 @@ export default function AppDashboard() {
         <div className="grid gap-6 md:grid-cols-2">
           <QuadrantPerformance seed={loadSeed} />
           <QuadrantBurnout />
-          <QuadrantDomains />
+          <QuadrantDomains domains={data?.settings ?? []} />
           <QuadrantSupportStack />
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AppDashboard() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }

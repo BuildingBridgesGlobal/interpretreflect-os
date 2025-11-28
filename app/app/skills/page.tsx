@@ -1,7 +1,20 @@
-import { SkillsDashboard } from "@/components/skills/SkillsDashboard";
-import Link from "next/link";
+"use client";
 
-export default function SkillsPage() {
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { SkillsDashboard } from "@/components/skills/SkillsDashboard";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { useAuth } from "@/components/auth/AuthProvider";
+
+function SkillsContent() {
+  const router = useRouter();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/");
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
       {/* Simple nav */}
@@ -11,6 +24,14 @@ export default function SkillsPage() {
           <nav className="flex items-center gap-4 text-sm text-slate-300">
             <Link href="/app" className="hover:text-teal-300">Dashboard</Link>
             <Link href="/app/skills" className="text-teal-300">Skills</Link>
+            <span className="text-slate-500">|</span>
+            <span className="text-slate-400 text-xs">{user?.email}</span>
+            <button
+              onClick={handleSignOut}
+              className="text-slate-400 hover:text-red-400 text-xs"
+            >
+              Sign out
+            </button>
           </nav>
         </div>
       </header>
@@ -19,5 +40,13 @@ export default function SkillsPage() {
         <SkillsDashboard />
       </main>
     </div>
+  );
+}
+
+export default function SkillsPage() {
+  return (
+    <ProtectedRoute>
+      <SkillsContent />
+    </ProtectedRoute>
   );
 }
