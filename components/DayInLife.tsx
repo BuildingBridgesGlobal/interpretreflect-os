@@ -127,7 +127,7 @@ export const DayInLife: React.FC<DayInLifeProps> = ({
                 <li className="flex gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-400" /><span>You can see patterns across weeks and advocate for changes with data, not just feelings.</span></li>
               </ul>
             </div>
-            <p className="text-[0.7rem] text-slate-500">The point is not to gamify your stress. It’s to give you a quiet, reliable operating system that respects the complexity of your work and helps you stay in it longer — with less cost.</p>
+            <p className="text-[0.7rem] text-slate-500">The point is not to gamify your stress. It's to give you a reliable operating system that respects the complexity of your work and helps you stay in it longer — with less cost.</p>
           </div>
         </div>
       </div>
