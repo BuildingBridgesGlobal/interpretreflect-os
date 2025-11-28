@@ -1,5 +1,7 @@
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
+import { InterpreterOS } from "@/components/InterpreterOS";
+import { PrepWorkflow } from "@/components/PrepWorkflow";
 import { OSPreview } from "@/components/OSPreview";
 import { ValueStrip } from "@/components/ValueStrip";
 import { DayInLife } from "@/components/DayInLife";
@@ -16,16 +18,46 @@ export default function Page() {
     <div className="min-h-screen bg-slate-950 text-slate-50">
       <Header />
       <main>
-        <div className="px-4 py-2 text-xs text-slate-300">Deploy trigger #2</div>
-        <Hero primaryHref="/start" secondaryHref="#os-preview" />
+        {/* Hero: Career OS positioning */}
+        <Hero primaryHref="/start" secondaryHref="#interpreter-os" />
+
+        {/* The Interpreter OS: Lifecycle coverage + Copilot analogy */}
+        <InterpreterOS />
+
+        {/* Prep Workflow: The 30-minute demo */}
+        <PrepWorkflow />
+
+        {/* Value Strip */}
+        <ValueStrip
+          eyebrow="Why an operating system for your career?"
+          title="Because exceptional work requires more than just showing up."
+        />
+
+        {/* OS Preview - Shows the system */}
         <OSPreview />
-        <ValueStrip />
-        <DayInLife />
+
+        {/* Day in Life */}
+        <DayInLife
+          title="A Day with Your Interpreter OS"
+          subhead="Same schedule. Same assignments. The difference is you have a system handling the cognitive load — so you can be fully present for the work itself."
+        />
+
+        {/* Features */}
         <FeatureGrid />
+
+        {/* Science backing */}
         <ScienceSection />
+
+        {/* Teams and Programs */}
         <TeamsPrograms />
+
+        {/* Pricing */}
         <Pricing />
+
+        {/* Social Proof */}
         <SocialProof />
+
+        {/* Final CTA */}
         <FinalCTA />
       </main>
       <Footer />

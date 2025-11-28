@@ -7,28 +7,28 @@ type ValueStripProps = {
 
 const valueItems = [
   {
-    label: "Less invisible load",
-    detail: "Turn emotional + cognitive strain into visible, trackable signals.",
-    metric: "-22%",
-    metricHint: "self-reported overwhelm after 4 weeks*",
+    label: "Less cognitive load",
+    detail: "Stop carrying everything in your head. The OS handles prep, credentials, reflections, and growth tracking.",
+    metric: "1",
+    metricHint: "system for your whole career",
   },
   {
-    label: "More grounded decisions",
-    detail: "See patterns across domains, teams, and time instead of guessing.",
-    metric: "3x",
-    metricHint: "more reflective check-ins completed vs. generic apps*",
+    label: "More presence",
+    detail: "When you're not worried about what you forgot to prep, you can be fully present for the work itself.",
+    metric: "100%",
+    metricHint: "focus on interpretation",
   },
   {
-    label: "Protected longevity",
-    detail: "Catch burnout drift early and adjust your work, not just your willpower.",
-    metric: "+5–10 yrs",
-    metricHint: "career longevity target the OS is built to support",
+    label: "Longer career",
+    detail: "Catch drift before burnout. Build skills intentionally. Stay in the profession you love.",
+    metric: "+5-10 yrs",
+    metricHint: "career longevity target",
   },
 ];
 
 export const ValueStrip: React.FC<ValueStripProps> = ({
-  eyebrow = "Why an Interpreter OS (and not another wellness app)?",
-  title = "Because your work blends ethics, emotion, and performance — and generic tools don’t.",
+  eyebrow = "Why an operating system for your career?",
+  title = "Because exceptional work requires more than just showing up.",
 }) => {
   return (
     <section id="value-strip" className="border-t border-slate-900/80 bg-slate-950/60">
@@ -39,7 +39,7 @@ export const ValueStrip: React.FC<ValueStripProps> = ({
             <p className="mt-2 text-sm md:text-base text-slate-300">{title}</p>
           </div>
           <p className="max-w-sm text-xs text-slate-500">
-            The OS is built around interpreters’ real days: fluctuating demand, high-stakes assignments, and the emotional residue that lingers long after you log out.
+            InterpretReflect is a reliable operating system that respects the complexity of your work and helps you stay in it longer with less cost.
           </p>
         </div>
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -56,7 +56,6 @@ export const ValueStrip: React.FC<ValueStripProps> = ({
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[0.65rem] text-slate-500">*Sample metrics shown for illustration. Your OS instance learns from your actual patterns over time.</p>
       </div>
     </section>
   );

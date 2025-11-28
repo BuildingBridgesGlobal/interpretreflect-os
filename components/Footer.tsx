@@ -7,7 +7,7 @@ export const Footer: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
           <div className="max-w-sm">
             <p className="text-xs font-semibold tracking-[0.16em] uppercase text-slate-400">InterpretReflect</p>
-            <p className="mt-2 text-sm text-slate-300">The operating system for interpreters — wellbeing, skills, and growth. Built with interpreters, educators, and mental-health experts.</p>
+            <p className="mt-2 text-sm text-slate-300">The operating system for interpreters, focused on wellbeing, skills, and growth. Built with interpreters, educators, and mental-health experts.</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-8 text-sm">
             <div>

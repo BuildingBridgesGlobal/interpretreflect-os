@@ -18,7 +18,7 @@ const timeline: TimelineItem[] = [
     time: "7:45 AM",
     label: "Pre-assignment centering",
     context: "You’re heading into a double medical block with a mix of outpatient and inpatient encounters.",
-    osAction: "OS surfaces a 90-second body scan and one question: “What am I assuming about today’s work?” — then logs your baseline.",
+    osAction: "OS surfaces a 90-second body scan and one question: 'What am I assuming about today's work?' It then logs your baseline.",
     tag: "Pre-load check",
   },
   {
@@ -31,7 +31,7 @@ const timeline: TimelineItem[] = [
   {
     time: "2:15 PM",
     label: "Between assignments",
-    context: "You’re switching domains — from medical to a remote K–12 IEP meeting.",
+    context: "You're switching domains, from medical to a remote K-12 IEP meeting.",
     osAction: "The OS flags the domain switch and offers a quick cognitive transition: what needs to shift in language, power dynamics, and pace.",
     tag: "Domain shift",
   },
@@ -127,7 +127,7 @@ export const DayInLife: React.FC<DayInLifeProps> = ({
                 <li className="flex gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-400" /><span>You can see patterns across weeks and advocate for changes with data, not just feelings.</span></li>
               </ul>
             </div>
-            <p className="text-[0.7rem] text-slate-500">The point is not to gamify your stress. It’s to give you a quiet, reliable operating system that respects the complexity of your work and helps you stay in it longer — with less cost.</p>
+            <p className="text-[0.7rem] text-slate-500">The point is not to gamify your stress. It's to give you a quiet, reliable operating system that respects the complexity of your work and helps you stay in it longer, with less cost.</p>
           </div>
         </div>
       </div>

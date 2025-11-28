@@ -7,49 +7,65 @@ export const Pricing: React.FC = () => {
         <div className="max-w-3xl">
           <p className="text-[0.75rem] font-medium uppercase tracking-[0.16em] text-teal-300/80">Pricing</p>
           <h2 className="mt-2 text-3xl md:text-4xl font-semibold text-slate-50 tracking-tight">Calm, clear pricing for individuals and programs.</h2>
-          <p className="mt-3 text-base text-slate-300">Free forever for individual interpreters. Upgrade only if you need advanced insights and domain mapping. Programs get ethical, anonymized pattern-level dashboards.</p>
+          <p className="mt-3 text-base text-slate-300">Professional infrastructure that respects your work. Choose the plan that fits your needs.</p>
         </div>
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-6">
-            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-slate-400">For Individual Interpreters</p>
+            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-slate-400">Basic</p>
             <div className="mt-3 flex items-baseline gap-2">
-              <p className="text-2xl font-semibold text-slate-50">Free</p>
-              <span className="text-[0.75rem] text-slate-400">forever</span>
+              <p className="text-2xl font-semibold text-slate-50">$12</p>
+              <span className="text-[0.75rem] text-slate-400">/month</span>
             </div>
+            <p className="mt-2 text-sm text-slate-400">Core tools for professional interpreters</p>
             <ul className="mt-4 space-y-2 text-sm text-slate-300">
-              <li>• Quick Reflect</li>
-              <li>• Tools Library</li>
-              <li>• Affirmations</li>
-              <li>• Basic Insights</li>
-              <li>• Journal</li>
-            </ul>
-            <div className="mt-5 flex items-baseline gap-2">
-              <p className="text-xl font-semibold text-slate-50">Pro</p>
-              <span className="text-[0.85rem] text-slate-300">$12/mo or $99/yr</span>
-            </div>
-            <ul className="mt-2 space-y-2 text-sm text-slate-300">
-              <li>• Full Insights</li>
-              <li>• Burnout Drift</li>
+              <li>• Assignment prep workflow</li>
+              <li>• Reflection & debriefing tools</li>
+              <li>• Burnout drift tracking</li>
               <li>• Domain mapping</li>
-              <li>• Advanced tools</li>
-              <li>• Reflection tagging</li>
-              <li>• Early access to agents</li>
+              <li>• Skills dashboard</li>
+              <li>• Tools library</li>
+              <li>• Basic insights</li>
             </ul>
-            <a href="#start" className="mt-6 inline-flex items-center rounded-lg bg-teal-400 text-slate-950 px-4 py-2 text-sm font-semibold hover:bg-teal-300">Start Free</a>
+            <a href="/signup" className="mt-6 inline-flex items-center rounded-lg border border-slate-700 text-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-800">Get Started</a>
+          </div>
+          <div className="rounded-2xl border-2 border-teal-400/60 bg-slate-900/95 p-6 relative">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <span className="inline-flex items-center rounded-full bg-teal-400 px-3 py-1 text-xs font-semibold text-slate-950">Popular</span>
+            </div>
+            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-teal-300">Pro</p>
+            <div className="mt-3 flex items-baseline gap-2">
+              <p className="text-2xl font-semibold text-slate-50">$25</p>
+              <span className="text-[0.75rem] text-slate-400">/month</span>
+            </div>
+            <p className="mt-2 text-sm text-slate-400">Everything in Basic, plus CEU support</p>
+            <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              <li>• Everything in Basic</li>
+              <li>• CEU alignment & tracking</li>
+              <li>• Automated CEU evidence collection</li>
+              <li>• AI coaching agent (Catalyst)</li>
+              <li>• Advanced analytics</li>
+              <li>• Priority support</li>
+              <li>• Early access to new features</li>
+            </ul>
+            <a href="/signup" className="mt-6 inline-flex items-center rounded-lg bg-teal-400 text-slate-950 px-4 py-2 text-sm font-semibold hover:bg-teal-300">Get Started</a>
           </div>
           <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-6">
             <p className="text-xs font-semibold tracking-[0.16em] uppercase text-slate-400">For Programs & Organizations</p>
-            <div className="mt-3 flex items-baseline gap-2">
-              <p className="text-2xl font-semibold text-slate-50">Starting at $499/mo</p>
+            <div className="mt-3">
+              <p className="text-2xl font-semibold text-slate-50">Contact Us</p>
+              <p className="text-sm text-slate-400 mt-1">Custom pricing for agencies, programs, and institutions</p>
             </div>
+            <p className="mt-4 text-sm text-slate-300">
+              We offer tailored solutions for organizations that want to support their interpreters with professional development infrastructure, wellness monitoring, and team coordination tools.
+            </p>
             <ul className="mt-4 space-y-2 text-sm text-slate-300">
-              <li>• Team analytics</li>
+              <li>• Team analytics and insights</li>
               <li>• Anonymous emotional load dashboards</li>
-              <li>• Supervisor insights</li>
-              <li>• CEU alignment</li>
-              <li>• Cohort reports</li>
+              <li>• Supervisor insights and support</li>
+              <li>• CEU alignment and tracking</li>
+              <li>• Cohort reports and trends</li>
             </ul>
-            <a href="#contact" className="mt-6 inline-flex items-center rounded-lg border border-teal-400 text-teal-300 px-4 py-2 text-sm font-semibold hover:bg-teal-500/10">Talk to Sales</a>
+            <a href="#contact" className="mt-6 inline-flex items-center rounded-lg border border-teal-400 text-teal-300 px-4 py-2 text-sm font-semibold hover:bg-teal-500/10">Contact Us to Learn More</a>
           </div>
         </div>
       </div>

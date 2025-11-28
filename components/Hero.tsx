@@ -15,11 +15,11 @@ type HeroProps = {
 
 export const Hero: React.FC<HeroProps> = ({
   headline = "InterpretReflect",
-  slogan = "The operating system for interpreters",
-  subhead = "A calm, science‑based OS that tracks your emotional load, builds core interpreting skills, and gives you a multi‑agent coaching team for every assignment.",
+  slogan = "The operating system for your interpreting career.",
+  subhead = "One place for prep, reflection, credentials, and growth. We handle the cognitive load so you can focus on what matters: doing exceptional work.",
   primary = { label: "Start Free", href: "/start" },
-  secondary = { label: "See How It Works", href: "#os-preview" },
-  microcopy = "Free during beta for individual interpreters. No credit card required.",
+  secondary = { label: "See How It Works", href: "#interpreter-os" },
+  microcopy = "Free during beta. No credit card required.",
   primaryHref,
   secondaryHref,
 }) => {
@@ -55,12 +55,16 @@ export const Hero: React.FC<HeroProps> = ({
 
           <div className="flex flex-wrap gap-4 text-xs text-slate-400">
             <div className="inline-flex items-center gap-2">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span>Designed with interpreters, not generic wellness.</span>
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-teal-400" />
+              <span>AI-powered assignment prep</span>
+            </div>
+            <div className="inline-flex items-center gap-2">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400" />
+              <span>Portable credential vault</span>
             </div>
             <div className="inline-flex items-center gap-2">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
-              <span>Tracks stress, domains, and recovery over time.</span>
+              <span>CEU-ready reflections</span>
             </div>
           </div>
         </div>
@@ -70,95 +74,107 @@ export const Hero: React.FC<HeroProps> = ({
             <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.25),_transparent_55%)] opacity-80 blur-3xl" />
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.8)]">
+              {/* Before: Assignment Prep */}
+              <div className="rounded-2xl border border-teal-500/30 bg-teal-500/5 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.8)]">
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">Performance & Load</p>
-                    <p className="mt-1 text-sm text-slate-200">Today · 3 assignments</p>
+                    <p className="text-[0.7rem] uppercase tracking-wide text-teal-400/80">Before</p>
+                    <p className="mt-1 text-sm text-slate-200">Assignment Prep</p>
                   </div>
-                  <div className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[0.65rem] text-emerald-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    Stable
-                  </div>
+                  <span className="text-lg">🎯</span>
                 </div>
 
-                <div className="mt-4 flex items-end gap-1.5 h-20">
-                  {[60, 75, 45, 90, 70, 50, 65].map((h, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 rounded-full bg-gradient-to-t from-slate-800 via-teal-500/40 to-teal-400/80"
-                      style={{ height: `${h}%` }}
-                    />
-                  ))}
-                </div>
-                <div className="mt-3 flex justify-between text-[0.7rem] text-slate-400">
-                  <span>Last 7 days</span>
-                  <span>Avg load: 71%</span>
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
+                    <span className="text-slate-300">Research participants</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
+                    <span className="text-slate-300">Build domain mental models</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
+                    <span className="text-slate-300">Generate vocab by field</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
+                    <span className="text-slate-300">Coordinate with team</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+              {/* After: Reflection */}
+              <div className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">Burnout Drift</p>
-                  <div className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-1 text-[0.65rem] text-amber-300">
+                  <div>
+                    <p className="text-[0.7rem] uppercase tracking-wide text-violet-400/80">After</p>
+                    <p className="mt-1 text-sm text-slate-200">Growth & Reflection</p>
+                  </div>
+                  <span className="text-lg">📈</span>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                    <span className="text-slate-300">Structured debriefs</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                    <span className="text-slate-300">Pattern recognition</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                    <span className="text-slate-300">CEU-ready evidence</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                    <span className="text-slate-300">Skill development path</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Always: Career Infrastructure */}
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[0.7rem] uppercase tracking-wide text-amber-400/80">Always</p>
+                    <p className="mt-1 text-sm text-slate-200">Career Infrastructure</p>
+                  </div>
+                  <span className="text-lg">🏗️</span>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    Watch · Slight increase
+                    <span className="text-slate-300">Portable credentials</span>
                   </div>
-                </div>
-
-                <div className="mt-4 h-20 rounded-xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 px-3 py-2">
-                  <div className="flex items-end gap-1.5 h-full">
-                    {[20, 25, 30, 35, 40, 48, 55].map((h, i) => (
-                      <div
-                        key={i}
-                        className="flex-1 rounded-full bg-gradient-to-t from-amber-900 via-amber-500/40 to-amber-300/80"
-                        style={{ height: `${h}%` }}
-                      />
-                    ))}
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    <span className="text-slate-300">Professional development</span>
                   </div>
-                </div>
-
-                <p className="mt-3 text-xs text-slate-400">Trend nudging up over the last 2 weeks. OS suggests shorter debriefs after medical assignments.</p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">Today\'s Debrief Saved</p>
-                  <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[0.65rem] text-slate-300">1 new</span>
-                </div>
-                <div className="mt-3 space-y-2 text-sm">
-                  <p className="text-slate-100">“Family conference, oncology clinic. Felt pulled between provider and patient.”</p>
-                  <div className="flex flex-wrap gap-2 text-[0.7rem] text-slate-300">
-                    <span className="rounded-full bg-slate-800 px-2 py-0.5">Medical · Inpatient</span>
-                    <span className="rounded-full bg-slate-800 px-2 py-0.5">Emotional intensity: High</span>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    <span className="text-slate-300">Burnout drift monitoring</span>
                   </div>
-                  <p className="text-[0.7rem] text-slate-400">OS flagged this for follow-up reflection and a brief grounding routine.</p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    <span className="text-slate-300">Support when needed</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 flex flex-col justify-between">
+              {/* The OS Benefit */}
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 flex flex-col justify-between">
                 <div>
-                  <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">Today\'s Support Stack</p>
-                  <p className="mt-1 text-sm text-slate-200">Micro-support woven into your day — not another task list.</p>
+                  <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">The Result</p>
+                  <p className="mt-1 text-sm font-medium text-slate-100">You focus on interpretation.</p>
+                  <p className="mt-1 text-sm text-slate-300">We handle everything else.</p>
                 </div>
-                <div className="mt-4 space-y-2 text-sm">
-                  <div className="flex items-start gap-2">
-                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-teal-400" />
-                    <div>
-                      <p className="text-slate-100">1-minute nervous system check</p>
-                      <p className="text-[0.7rem] text-slate-400">After your second assignment.</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-violet-400" />
-                    <div>
-                      <p className="text-slate-100">3-prompt debrief</p>
-                      <p className="text-[0.7rem] text-slate-400">Scheduled for this evening — auto-saved, CEU-ready.</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 rounded-xl bg-slate-950/80 px-3 py-2">
-                    <p className="text-[0.75rem] text-amber-100">“I can honor the emotional weight of this work without carrying it alone.”</p>
-                  </div>
+                <div className="mt-4 rounded-xl bg-slate-950/80 px-3 py-3">
+                  <p className="text-[0.75rem] text-slate-300">
+                    <span className="text-teal-300 font-medium">Less cognitive load.</span> More presence. Better outcomes for everyone you serve.
+                  </p>
                 </div>
               </div>
             </div>
