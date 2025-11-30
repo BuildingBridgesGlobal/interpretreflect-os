@@ -23,7 +23,14 @@
       "Bash(echo:*)",
       "Bash(npm install:*)",
       "Bash(~/scoop/shims/stripe products create --name=\"InterpretReflect Basic\" --description=\"Essential tools for interpreters\")",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(npx vercel --version)",
+      "Bash(npx vercel:*)",
+      "Bash(git remote:*)",
+      "Bash(curl:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(npm run check:*)"
     ],
     "deny": [],
     "ask": []

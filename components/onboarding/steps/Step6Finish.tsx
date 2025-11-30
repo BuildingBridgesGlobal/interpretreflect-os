@@ -81,7 +81,7 @@ export default function Step6Finish({
           primary_goal,
           current_practices,
           weekly_summary_opt_in,
-        })
+        } as any)
         .eq("id", session.user.id);
 
       if (profileError) {

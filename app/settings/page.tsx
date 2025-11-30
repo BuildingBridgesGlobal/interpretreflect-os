@@ -46,14 +46,15 @@ export default function SettingsPage() {
 
       // Populate form fields
       if (profile) {
-        setFullName(profile.full_name || "");
+        const profileData = profile as any;
+        setFullName(profileData.full_name || "");
         setEmail(session.user.email || "");
-        setBio(profile.bio || "");
-        setYearsExperience(profile.years_experience?.toString() || "");
-        setCertifications(profile.certifications || []);
-        setSpecialties(profile.specialties || []);
-        setLinkedinUrl(profile.linkedin_url || "");
-        setOpenToMentoring(profile.open_to_mentoring || false);
+        setBio(profileData.bio || "");
+        setYearsExperience(profileData.years_experience?.toString() || "");
+        setCertifications(profileData.certifications || []);
+        setSpecialties(profileData.specialties || []);
+        setLinkedinUrl(profileData.linkedin_url || "");
+        setOpenToMentoring(profileData.open_to_mentoring || false);
       }
 
       setLoading(false);
@@ -94,7 +95,7 @@ export default function SettingsPage() {
         weekly_reports: weeklyReports,
         community_updates: communityUpdates,
         training_reminders: trainingReminders
-      })
+      } as any)
       .eq("id", session.user.id);
 
     setSaving(false);

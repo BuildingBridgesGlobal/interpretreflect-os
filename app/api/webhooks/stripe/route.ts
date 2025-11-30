@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
         if (fetchError || !profile) {
           console.error(
             "Could not find user for subscription:",
-            invoice.subscription
+            subscriptionId
           );
           break;
         }

@@ -1,4 +1,4 @@
-// File: c:\Users\maddo\Desktop\ir_new\app\api\create-checkout\route.ts
+// File: C:\Users\maddo\Desktop\ir_new\app\api\create-checkout\route.ts
 import * as entry from '../../../../../app/api/create-checkout/route.js'
 import type { NextRequest } from 'next/server.js'
 

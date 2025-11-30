@@ -30,7 +30,7 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
 
       // Get the correct price from billing_prices table
       console.log("Querying billing_prices for:", { tier: selectedTier, cycle: selectedCycle });
-      const { data: prices, error: priceErr } = await supabase
+      const { data: prices, error: priceErr } = await (supabase as any)
         .from("billing_prices")
         .select("*")
         .eq("tier", selectedTier)
@@ -52,7 +52,7 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
         return;
       }
 
-      const priceInfo = prices[0];
+      const priceInfo = prices[0] as any;
 
       // Apply student discount if user checked the checkbox
       const applyStudentDiscount = isStudent;

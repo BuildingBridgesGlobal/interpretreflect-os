@@ -1,4 +1,4 @@
-// File: c:\Users\maddo\Desktop\ir_new\app\api\webhook\stripe\route.ts
+// File: C:\Users\maddo\Desktop\ir_new\app\api\webhook\stripe\route.ts
 import * as entry from '../../../../../../app/api/webhook/stripe/route.js'
 import type { NextRequest } from 'next/server.js'
 
