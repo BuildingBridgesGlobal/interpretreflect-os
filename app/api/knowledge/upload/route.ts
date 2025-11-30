@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
-import pdf from "pdf-parse";
+import * as pdfParse from "pdf-parse";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Extract text from PDF
-    const pdfData = await pdf(buffer);
+    const pdfData = await (pdfParse as any).default(buffer);
     const fullText = pdfData.text;
     const pageCount = pdfData.numpages;
 
