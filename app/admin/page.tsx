@@ -26,7 +26,7 @@ export default function AdminPage() {
         .single();
 
       // Check if user is admin
-      if (profile?.role !== "admin") {
+      if ((profile as any)?.role !== "admin") {
         router.push("/dashboard");
         return;
       }
