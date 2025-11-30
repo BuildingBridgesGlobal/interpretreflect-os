@@ -167,13 +167,17 @@ export async function POST(req: NextRequest) {
 
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
+        const invoiceData = invoice as any;
+        const subscriptionId = typeof invoiceData.subscription === 'string'
+          ? invoiceData.subscription
+          : invoiceData.subscription?.id;
 
-        if (!invoice.subscription) break;
+        if (!subscriptionId) break;
 
         const { data: profile, error: fetchError } = await supabase
           .from("profiles")
           .select("id")
-          .eq("stripe_subscription_id", invoice.subscription)
+          .eq("stripe_subscription_id", subscriptionId)
           .single();
 
         if (fetchError || !profile) {
