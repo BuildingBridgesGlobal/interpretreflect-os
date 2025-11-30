@@ -35,10 +35,10 @@ export const ValueStrip: React.FC<ValueStripProps> = ({
       <div className="container mx-auto max-w-6xl px-6 md:px-8 py-10 md:py-12">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="max-w-xl">
-            <p className="text-[0.75rem] font-medium uppercase tracking-[0.16em] text-teal-300/80">{eyebrow}</p>
-            <p className="mt-2 text-sm md:text-base text-slate-300">{title}</p>
+            <p className="text-sm font-medium uppercase tracking-[0.16em] text-teal-300/80">{eyebrow}</p>
+            <p className="mt-2 text-base md:text-lg text-slate-300">{title}</p>
           </div>
-          <p className="max-w-sm text-xs text-slate-500">
+          <p className="max-w-sm text-sm text-slate-500">
             InterpretReflect is a reliable operating system that respects the complexity of your work and helps you stay in it longer with less cost.
           </p>
         </div>
@@ -46,13 +46,13 @@ export const ValueStrip: React.FC<ValueStripProps> = ({
           {valueItems.map((item) => (
             <div key={item.label} className="group rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-4 shadow-[0_14px_40px_rgba(15,23,42,0.8)] hover:border-teal-400/60 hover:bg-slate-900 transition">
               <div className="flex items-baseline justify-between gap-2">
-                <p className="text-sm font-medium text-slate-50">{item.label}</p>
+                <p className="text-base font-medium text-slate-50">{item.label}</p>
                 <div className="text-right">
-                  <p className="text-xs font-semibold text-teal-300">{item.metric}</p>
-                  <p className="text-[0.65rem] text-slate-500">{item.metricHint}</p>
+                  <p className="text-sm font-semibold text-teal-300">{item.metric}</p>
+                  <p className="text-xs text-slate-500">{item.metricHint}</p>
                 </div>
               </div>
-              <p className="mt-2 text-[0.8rem] text-slate-300">{item.detail}</p>
+              <p className="mt-2 text-sm text-slate-300">{item.detail}</p>
             </div>
           ))}
         </div>

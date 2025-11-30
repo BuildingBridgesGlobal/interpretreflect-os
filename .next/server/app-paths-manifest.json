@@ -1,0 +1,8 @@
+{
+  "/dashboard/page": "app/dashboard/page.js",
+  "/community/page": "app/community/page.js",
+  "/wellness/page": "app/wellness/page.js",
+  "/history/page": "app/history/page.js",
+  "/signin/page": "app/signin/page.js",
+  "/_not-found/page": "app/_not-found/page.js"
+}

@@ -59,9 +59,9 @@ export const DayInLife: React.FC<DayInLifeProps> = ({
     <section id="day-in-life" className="border-t border-slate-900/80 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-950/95">
       <div className="container mx-auto max-w-6xl px-6 md:px-8 py-16 md:py-20">
         <div className="max-w-3xl">
-          <p className="text-[0.75rem] font-medium uppercase tracking-[0.16em] text-violet-300/80">How it actually feels in your day</p>
-          <h2 className="mt-2 text-3xl md:text-4xl font-semibold text-slate-50 tracking-tight">{title}</h2>
-          <p className="mt-3 text-base md:text-lg text-slate-300">{subhead}</p>
+          <p className="text-sm font-medium uppercase tracking-[0.16em] text-violet-300/80">How it actually feels in your day</p>
+          <h2 className="mt-2 text-4xl md:text-5xl font-semibold text-slate-50 tracking-tight">{title}</h2>
+          <p className="mt-3 text-lg md:text-xl text-slate-300">{subhead}</p>
         </div>
         <div className="mt-10 grid gap-10 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           <div className="relative">
@@ -76,16 +76,16 @@ export const DayInLife: React.FC<DayInLifeProps> = ({
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 md:px-5 md:py-4 shadow-[0_14px_40px_rgba(15,23,42,0.85)]">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-xs font-medium text-teal-300">{item.time}</p>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-950/90 px-2 py-0.5 text-[0.65rem] text-slate-300">
+                      <p className="text-sm font-medium text-teal-300">{item.time}</p>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-950/90 px-2 py-0.5 text-xs text-slate-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
                         {item.tag}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm font-medium text-slate-50">{item.label}</p>
-                    <p className="mt-1 text-[0.8rem] text-slate-300">{item.context}</p>
+                    <p className="mt-1 text-base font-medium text-slate-50">{item.label}</p>
+                    <p className="mt-1 text-sm text-slate-300">{item.context}</p>
                     <div className="mt-2 rounded-xl bg-slate-950/90 px-3 py-2">
-                      <p className="text-[0.75rem] text-slate-400"><span className="font-semibold text-teal-300">OS response:</span> {item.osAction}</p>
+                      <p className="text-sm text-slate-400"><span className="font-semibold text-teal-300">OS response:</span> {item.osAction}</p>
                     </div>
                   </div>
                   {index === timeline.length - 1 && <div className="h-2" aria-hidden="true" />}
@@ -95,39 +95,39 @@ export const DayInLife: React.FC<DayInLifeProps> = ({
           </div>
           <div className="space-y-4">
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-              <p className="text-[0.75rem] uppercase tracking-[0.16em] text-slate-400">Today · OS snapshot</p>
+              <p className="text-sm uppercase tracking-[0.16em] text-slate-400">Today · OS snapshot</p>
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-xl bg-slate-950/90 p-3 border border-slate-800/80">
-                  <p className="text-xs text-slate-400">Assignments</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-50">4</p>
-                  <p className="text-[0.7rem] text-slate-400">2 medical · 1 education · 1 VRI</p>
+                  <p className="text-sm text-slate-400">Assignments</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-50">4</p>
+                  <p className="text-sm text-slate-400">2 medical · 1 education · 1 VRI</p>
                 </div>
                 <div className="rounded-xl bg-slate-950/90 p-3 border border-slate-800/80">
-                  <p className="text-xs text-slate-400">Emotional intensity</p>
-                  <p className="mt-1 text-lg font-semibold text-amber-300">High</p>
-                  <p className="text-[0.7rem] text-slate-400">Family conference flagged as peak.</p>
+                  <p className="text-sm text-slate-400">Emotional intensity</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-300">High</p>
+                  <p className="text-sm text-slate-400">Family conference flagged as peak.</p>
                 </div>
                 <div className="rounded-xl bg-slate-950/90 p-3 border border-slate-800/80">
-                  <p className="text-xs text-slate-400">Recovery window</p>
-                  <p className="mt-1 text-lg font-semibold text-emerald-300">45 min</p>
-                  <p className="text-[0.7rem] text-slate-400">Spread across 3 micro-practices.</p>
+                  <p className="text-sm text-slate-400">Recovery window</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-300">45 min</p>
+                  <p className="text-sm text-slate-400">Spread across 3 micro-practices.</p>
                 </div>
                 <div className="rounded-xl bg-slate-950/90 p-3 border border-slate-800/80">
-                  <p className="text-xs text-slate-400">Burnout drift today</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-100">Stable</p>
-                  <p className="text-[0.7rem] text-slate-400">No acute red flags, but trend still watched.</p>
+                  <p className="text-sm text-slate-400">Burnout drift today</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-100">Stable</p>
+                  <p className="text-sm text-slate-400">No acute red flags, but trend still watched.</p>
                 </div>
               </div>
             </div>
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5">
-              <p className="text-[0.75rem] uppercase tracking-[0.16em] text-slate-400">What changes for you</p>
-              <ul className="mt-3 space-y-2 text-sm text-slate-300">
-                <li className="flex gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-teal-400" /><span>You stop relying on memory and “pushing through” to track what this work is doing to you.</span></li>
+              <p className="text-sm uppercase tracking-[0.16em] text-slate-400">What changes for you</p>
+              <ul className="mt-3 space-y-2 text-base text-slate-300">
+                <li className="flex gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-teal-400" /><span>You stop relying on memory and "pushing through" to track what this work is doing to you.</span></li>
                 <li className="flex gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-violet-400" /><span>You get small, well-timed supports instead of another overwhelming self-care list.</span></li>
                 <li className="flex gap-2"><span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-400" /><span>You can see patterns across weeks and advocate for changes with data, not just feelings.</span></li>
               </ul>
             </div>
-            <p className="text-[0.7rem] text-slate-500">The point is not to gamify your stress. It's to give you a reliable operating system that respects the complexity of your work and helps you stay in it longer, with less cost.</p>
+            <p className="text-sm text-slate-500">The point is not to gamify your stress. It's to give you a reliable operating system that respects the complexity of your work and helps you stay in it longer, with less cost.</p>
           </div>
         </div>
       </div>

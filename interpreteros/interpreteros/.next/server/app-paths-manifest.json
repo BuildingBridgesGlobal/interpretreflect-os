@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/dashboard/settings/page": "app/(dashboard)/dashboard/settings/page.js",
+  "/(dashboard)/dashboard/assignments/new/page": "app/(dashboard)/dashboard/assignments/new/page.js",
+  "/(dashboard)/dashboard/assignments/page": "app/(dashboard)/dashboard/assignments/page.js",
+  "/(dashboard)/dashboard/skills/page": "app/(dashboard)/dashboard/skills/page.js",
+  "/(dashboard)/dashboard/wellbeing/page": "app/(dashboard)/dashboard/wellbeing/page.js",
+  "/(dashboard)/dashboard/wellbeing/check-in/page": "app/(dashboard)/dashboard/wellbeing/check-in/page.js"
+}

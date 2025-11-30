@@ -17,9 +17,9 @@ export const Hero: React.FC<HeroProps> = ({
   headline = "InterpretReflect",
   slogan = "The operating system for your interpreting career.",
   subhead = "One place for prep, reflection, credentials, and growth. We handle the cognitive load so you can focus on what matters: doing exceptional work.",
-  primary = { label: "Start Free", href: "/start" },
+  primary = { label: "Try Free for 7 Days", href: "/start" },
   secondary = { label: "See How It Works", href: "#interpreter-os" },
-  microcopy = "Free during beta. No credit card required.",
+  microcopy = "7-day free trial. No credit card required.",
   primaryHref,
   secondaryHref,
 }) => {
@@ -27,14 +27,24 @@ export const Hero: React.FC<HeroProps> = ({
   const sHref = secondaryHref || secondary.href;
 
   return (
-    <section id="hero" className="container mx-auto max-w-6xl px-6 md:px-8 py-20 md:py-28">
+    <section id="hero" className="relative container mx-auto max-w-6xl px-6 md:px-8 py-20 md:py-28">
+      {/* AI Motif Background */}
+      <div className="absolute inset-0 -z-10 opacity-30">
+        <div className="absolute top-20 left-20 w-96 h-96 bg-teal-400/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-400/20 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-400/10 rounded-full blur-3xl" />
+      </div>
+
+      {/* Grid Pattern Overlay */}
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(rgba(6,182,212,0.12)_2px,transparent_2px),linear-gradient(90deg,rgba(6,182,212,0.12)_2px,transparent_2px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_90%)]" />
+
       <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-12 items-center">
         <div className="md:col-span-5 space-y-6">
-          <h1 className="text-slate-50 text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight">{headline}</h1>
+          <h1 className="text-slate-50 text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight">{headline}</h1>
 
-          <h2 className="text-slate-200 text-xl md:text-2xl font-medium">{slogan}</h2>
+          <h2 className="text-slate-200 text-2xl md:text-3xl font-medium">{slogan}</h2>
 
-          <p className="text-slate-300 text-lg md:text-xl leading-relaxed">{subhead}</p>
+          <p className="text-slate-300 text-xl md:text-2xl leading-relaxed">{subhead}</p>
 
           <div className="flex flex-wrap gap-4 pt-2">
             <a
@@ -51,9 +61,9 @@ export const Hero: React.FC<HeroProps> = ({
             </a>
           </div>
 
-          <p className="text-slate-400 text-sm">{microcopy}</p>
+          <p className="text-slate-400 text-base">{microcopy}</p>
 
-          <div className="flex flex-wrap gap-4 text-xs text-slate-400">
+          <div className="flex flex-wrap gap-4 text-sm text-slate-400">
             <div className="inline-flex items-center gap-2">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-teal-400" />
               <span>AI-powered assignment prep</span>
@@ -76,12 +86,9 @@ export const Hero: React.FC<HeroProps> = ({
             <div className="grid gap-4 md:grid-cols-2">
               {/* Before: Assignment Prep */}
               <div className="rounded-2xl border border-teal-500/30 bg-teal-500/5 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.8)]">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[0.7rem] uppercase tracking-wide text-teal-400/80">Before</p>
-                    <p className="mt-1 text-sm text-slate-200">Assignment Prep</p>
-                  </div>
-                  <span className="text-lg">🎯</span>
+                <div>
+                  <p className="text-[0.7rem] uppercase tracking-wide text-teal-400/80">Before</p>
+                  <p className="mt-1 text-sm text-slate-200">Assignment Prep</p>
                 </div>
 
                 <div className="mt-4 space-y-2">
@@ -106,12 +113,9 @@ export const Hero: React.FC<HeroProps> = ({
 
               {/* After: Reflection */}
               <div className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[0.7rem] uppercase tracking-wide text-violet-400/80">After</p>
-                    <p className="mt-1 text-sm text-slate-200">Growth & Reflection</p>
-                  </div>
-                  <span className="text-lg">📈</span>
+                <div>
+                  <p className="text-[0.7rem] uppercase tracking-wide text-violet-400/80">After</p>
+                  <p className="mt-1 text-sm text-slate-200">Growth & Reflection</p>
                 </div>
 
                 <div className="mt-4 space-y-2">
@@ -136,12 +140,9 @@ export const Hero: React.FC<HeroProps> = ({
 
               {/* Always: Career Infrastructure */}
               <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[0.7rem] uppercase tracking-wide text-amber-400/80">Always</p>
-                    <p className="mt-1 text-sm text-slate-200">Career Infrastructure</p>
-                  </div>
-                  <span className="text-lg">🏗️</span>
+                <div>
+                  <p className="text-[0.7rem] uppercase tracking-wide text-amber-400/80">Always</p>
+                  <p className="mt-1 text-sm text-slate-200">Career Infrastructure</p>
                 </div>
 
                 <div className="mt-4 space-y-2">

@@ -43,19 +43,8 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 relative overflow-hidden flex items-center justify-center">
-      {/* AI Motif Background */}
-      <div className="absolute inset-0 opacity-30">
-        <div className="absolute top-20 left-20 w-96 h-96 bg-teal-400/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-400/20 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-400/10 rounded-full blur-3xl" />
-      </div>
-
-      {/* Grid Pattern Overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.12)_2px,transparent_2px),linear-gradient(90deg,rgba(6,182,212,0.12)_2px,transparent_2px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_90%)]" />
-
-      {/* Content */}
-      <div className="relative z-10 w-full max-w-md px-6">
+    <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center">
+      <div className="w-full max-w-md px-6">
         {/* Logo */}
         <div className="text-center mb-8">
           <a href="/" className="inline-flex items-center gap-2 mb-4">
@@ -72,7 +61,7 @@ export default function SignInPage() {
         </div>
 
         {/* Sign In Form */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
           <form onSubmit={handleSignIn} className="space-y-5">
             {/* Email Field */}
             <div>

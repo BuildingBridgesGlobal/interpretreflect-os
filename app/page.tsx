@@ -39,7 +39,7 @@ export default function Page() {
         {/* Day in Life */}
         <DayInLife
           title="A Day with Your Interpreter OS"
-          subhead="Same schedule. Same assignments. The difference is you have a system handling the cognitive load — so you can be fully present for the work itself."
+          subhead="Same schedule. Same assignments. The difference is you have a system handling the cognitive load so you can be fully present for the work itself."
         />
 
         {/* Features */}

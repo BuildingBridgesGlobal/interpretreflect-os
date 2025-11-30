@@ -1,64 +1,215 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
-import TodaySnapshot from "@/components/dashboard/TodaySnapshot";
-import QuadrantPerformance from "@/components/dashboard/QuadrantPerformance";
-import QuadrantBurnout from "@/components/dashboard/QuadrantBurnout";
-import QuadrantDomains from "@/components/dashboard/QuadrantDomains";
-import QuadrantSupportStack from "@/components/dashboard/QuadrantSupportStack";
-import FirstActionsStrip from "@/components/dashboard/FirstActionsStrip";
+import ElyaInterface from "@/components/dashboard/ElyaInterface";
+import UpgradeModal from "@/components/UpgradeModal";
 
 export default function DashboardPage() {
-  // Mock data for now - will be replaced with real data from Supabase
-  const mockUserData = {
-    role: "Medical Interpreter",
-    years_experience: "5",
-    settings: ["Medical · Inpatient", "Education · K-12"],
-    week_load_score: 7,
-    primary_goal: "burnout" as const,
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState<any>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [elyaPreFillMessage, setElyaPreFillMessage] = useState<string>("");
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.push("/signin");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .single();
+
+      setUserData(profile);
+      setLoading(false);
+    };
+
+    loadUserData();
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-slate-400">Loading...</div>
+      </div>
+    );
+  }
+
+  // Mock data - will be replaced with real queries
+  const nextAssignment = {
+    title: "Medical Oncology Consult",
+    type: "Medical",
+    date: "Tuesday, 2:00 PM",
+    prepStatus: "not_started" // "not_started", "in_progress", "completed"
   };
 
+  const recentAssignments = [
+    { title: "Legal Deposition", type: "Legal", date: "Jan 25", debriefed: true },
+    { title: "Medical Cardiology", type: "Medical", date: "Jan 22", debriefed: false },
+    { title: "Educational IEP", type: "Educational", date: "Jan 18", debriefed: true },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
-      {/* AI Motif Background */}
-      <div className="fixed inset-0 opacity-25 pointer-events-none z-0">
-        <div className="absolute top-20 left-20 w-96 h-96 bg-teal-400/30 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-400/30 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-400/20 rounded-full blur-3xl" />
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <NavBar />
 
-      {/* Grid Pattern Overlay */}
-      <div className="fixed inset-0 bg-[linear-gradient(rgba(6,182,212,0.15)_2px,transparent_2px),linear-gradient(90deg,rgba(6,182,212,0.15)_2px,transparent_2px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_90%)] pointer-events-none z-0" />
+      {/* Trial Banner - Sticky at top */}
+      {userData?.subscription_tier === "trial" && (
+        <div className="sticky top-0 z-10 bg-gradient-to-r from-teal-500/10 via-blue-500/10 to-purple-500/10 border-b border-teal-500/30 backdrop-blur-lg">
+          <div className="container mx-auto max-w-7xl px-4 md:px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-teal-300 font-semibold">FREE TRIAL</span>
+                <span className="text-xs text-slate-400">
+                  {userData?.trial_ends_at
+                    ? `Ends ${new Date(userData.trial_ends_at).toLocaleDateString()}`
+                    : "All features unlocked"}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowUpgrade(true)}
+                className="px-4 py-1.5 bg-teal-400 hover:bg-teal-300 text-slate-950 text-sm font-semibold rounded-lg transition-all"
+              >
+                Upgrade
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Content */}
-      <div className="relative z-10">
-        <NavBar />
-        <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8">
-          {/* Header */}
-          <div className="mb-6 md:mb-8">
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-50 tracking-tight">
-              Your Interpreter OS
-            </h1>
-            <p className="mt-1 text-sm md:text-base text-slate-400">
-              Well-being + skills in one view
-            </p>
+      {/* Main Layout: Chat-First with Sidebar */}
+      <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6">
+        <div className="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-180px)]">
+
+          {/* MAIN AREA: ELYA CHAT (70-80% width on desktop) */}
+          <div className="flex-1 lg:w-[70%] flex flex-col">
+            {/* Welcome Header - Compact */}
+            <div className="mb-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-400 via-purple-500 to-violet-600 flex items-center justify-center shadow-xl shadow-violet-500/30 animate-pulse">
+                  <span className="text-2xl font-bold text-white">E</span>
+                </div>
+                <div>
+                  <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-purple-400">
+                    Hi{userData?.full_name ? `, ${userData.full_name.split(' ')[0]}` : ''}!
+                  </h1>
+                  <p className="text-sm text-slate-400">I'm Elya, ready to help you prep, debrief, or practice</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Elya Chat Interface - Takes full remaining height */}
+            <div className="flex-1">
+              <ElyaInterface
+                userData={userData}
+                preFillMessage={elyaPreFillMessage}
+                onMessageSent={() => setElyaPreFillMessage("")}
+              />
+            </div>
           </div>
 
-          {/* Today Snapshot */}
-          <TodaySnapshot data={mockUserData} />
+          {/* SIDEBAR: Context & Quick Actions (20-30% width on desktop) */}
+          <div className="lg:w-[30%] flex flex-col gap-4">
 
-          {/* Main Dashboard Grid */}
-          <div className="mt-6 md:mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <QuadrantPerformance seed={mockUserData.week_load_score} />
-            <QuadrantBurnout redFlag="no" />
-            <QuadrantDomains domains={mockUserData.settings} />
-            <QuadrantSupportStack />
+            {/* Next Assignment - Compact Card */}
+            {nextAssignment && (
+              <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-transparent p-4 shadow-lg">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="text-xs font-semibold text-violet-300 mb-1">UP NEXT</p>
+                    <p className="text-xs text-slate-400">{nextAssignment.date}</p>
+                  </div>
+                  <span className="px-2 py-1 rounded-md bg-violet-500/20 text-violet-300 text-xs font-semibold border border-violet-500/30">
+                    {nextAssignment.type}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-slate-50 mb-3">{nextAssignment.title}</h3>
+                <button
+                  onClick={() => setElyaPreFillMessage(`Help me prep for ${nextAssignment.title}`)}
+                  className="w-full px-4 py-2.5 rounded-lg bg-violet-500 hover:bg-violet-400 text-white text-sm font-semibold transition-all shadow-lg shadow-violet-500/20"
+                >
+                  Start Prep
+                </button>
+              </div>
+            )}
+
+            {/* Recent Sessions - Compact List */}
+            <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+              <h3 className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">Recent Sessions</h3>
+              <div className="space-y-2">
+                {recentAssignments.slice(0, 3).map((assignment, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-start justify-between gap-2 p-2 rounded-lg hover:bg-slate-700/30 transition-all group"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-slate-100 truncate">{assignment.title}</h4>
+                      <p className="text-xs text-slate-500">{assignment.date}</p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      {assignment.debriefed ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-500/20 text-emerald-400 text-xs border border-emerald-500/30">
+                          ✓
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setElyaPreFillMessage(`Help me debrief my ${assignment.title} assignment`)}
+                          className="px-2 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs border border-amber-500/30 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          Debrief
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+              <h3 className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">Quick Actions</h3>
+              <div className="space-y-2">
+                <button
+                  onClick={() => setElyaPreFillMessage("I want to practice interpreting")}
+                  className="w-full px-3 py-2 rounded-lg border border-teal-500/30 bg-teal-500/10 text-teal-300 text-xs hover:bg-teal-500/20 transition-all text-left"
+                >
+                  🎯 Practice Mode
+                </button>
+                <button
+                  onClick={() => setElyaPreFillMessage("What patterns do you see in my performance?")}
+                  className="w-full px-3 py-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-300 text-xs hover:bg-blue-500/20 transition-all text-left"
+                >
+                  📊 Analyze Patterns
+                </button>
+                <button
+                  onClick={() => window.location.href = '/skills'}
+                  className="w-full px-3 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs hover:bg-purple-500/20 transition-all text-left"
+                >
+                  💪 Skills Training
+                </button>
+                <button
+                  onClick={() => window.location.href = '/history'}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-600/30 bg-slate-700/10 text-slate-300 text-xs hover:bg-slate-700/20 transition-all text-left"
+                >
+                  📈 View Stats & History
+                </button>
+              </div>
+            </div>
+
           </div>
-
-          {/* First Actions Strip */}
-          <FirstActionsStrip />
         </div>
       </div>
+
+      <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
     </div>
   );
 }

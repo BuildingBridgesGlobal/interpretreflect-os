@@ -26,13 +26,7 @@ export const SocialProof: React.FC<SocialProofProps> = ({
     },
     {
       quote:
-        "After 10 years of interpreting, this is the first OS that treats our emotional labor as data.",
-      author: "Legal Interpreter",
-      role: "Court & Depositions",
-    },
-    {
-      quote:
-        "It’s the only platform that truly respects the cognitive and ethical demands of this profession.",
+        "It's the only platform that truly respects the cognitive and ethical demands of this profession.",
       author: "Education Interpreter",
       role: "K–12 & Postsecondary",
     },
@@ -42,10 +36,10 @@ export const SocialProof: React.FC<SocialProofProps> = ({
   return (
     <section id="testimonials" className="border-y border-slate-800 bg-slate-950/95 py-14 text-slate-50 sm:py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="grid gap-8 md:grid-cols-3">
+        <div className="grid gap-8 md:grid-cols-2 max-w-4xl mx-auto">
           {quotes.map((q, i) => (
             <figure key={i} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-              <blockquote className="text-balance text-lg leading-relaxed text-slate-200">“{q.quote}”</blockquote>
+              <blockquote className="text-balance text-lg leading-relaxed text-slate-200">"{q.quote}"</blockquote>
               {(q.author || q.role) && (
                 <figcaption className="mt-4 text-sm text-slate-400">
                   {q.author ? <span className="font-medium">{q.author}</span> : null}

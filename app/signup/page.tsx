@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 export default function SignUpPage() {
   const router = useRouter();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,6 +21,11 @@ export default function SignUpPage() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!fullName.trim()) {
+      setError("Please enter your full name");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
@@ -40,9 +46,14 @@ export default function SignUpPage() {
     }
 
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
       });
 
       if (signUpError) {
@@ -51,8 +62,16 @@ export default function SignUpPage() {
         return;
       }
 
-      // Redirect to onboarding after successful signup
-      router.push("/onboarding");
+      // Update profile table with full name
+      if (data.user) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: fullName })
+          .eq("id", data.user.id);
+      }
+
+      // Redirect to dashboard after successful signup
+      router.push("/dashboard");
     } catch (err: any) {
       setError("Failed to create account. Please try again.");
       setLoading(false);
@@ -60,23 +79,8 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 relative overflow-hidden flex items-center justify-center" suppressHydrationWarning>
-      {/* AI Motif Background */}
-      {mounted && (
-        <>
-          <div className="absolute inset-0 opacity-30">
-            <div className="absolute top-20 left-20 w-96 h-96 bg-teal-400/20 rounded-full blur-3xl animate-pulse" />
-            <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-400/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-400/10 rounded-full blur-3xl" />
-          </div>
-
-          {/* Grid Pattern Overlay */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.12)_2px,transparent_2px),linear-gradient(90deg,rgba(6,182,212,0.12)_2px,transparent_2px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_90%)]" />
-        </>
-      )}
-
-      {/* Content */}
-      <div className="relative z-10 w-full max-w-md px-6">
+    <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center">
+      <div className="w-full max-w-md px-6">
         {/* Logo */}
         <div className="text-center mb-8">
           <a href="/" className="inline-flex items-center gap-2 mb-4">
@@ -88,13 +92,29 @@ export default function SignUpPage() {
             Create your account
           </h1>
           <p className="text-slate-400 text-sm">
-            Start your journey to becoming a better interpreter
+            Sign up to get started
           </p>
         </div>
 
         {/* Sign Up Form */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
           <form onSubmit={handleSignUp} className="space-y-5">
+            {/* Full Name Field */}
+            <div>
+              <label htmlFor="fullName" className="block text-sm font-medium text-slate-300 mb-2">
+                Full Name
+              </label>
+              <input
+                id="fullName"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-950/50 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent transition-all"
+                placeholder="John Smith"
+              />
+            </div>
+
             {/* Email Field */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">

@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root { color-scheme: dark; }
+html { scroll-behavior: smooth; }
 body { background-color: rgb(2, 6, 23); }
 .ai-motif { transition: opacity 300ms ease; }
 @media (prefers-reduced-motion: reduce) { .ai-motif { opacity: 0 !important; } }

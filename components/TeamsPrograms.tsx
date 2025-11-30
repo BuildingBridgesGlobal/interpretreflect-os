@@ -6,8 +6,8 @@ export const TeamsPrograms: React.FC = () => {
       <div className="container mx-auto max-w-6xl px-6 md:px-8 py-16 md:py-20">
         <div className="max-w-3xl">
           <p className="text-[0.75rem] font-medium uppercase tracking-[0.16em] text-teal-300/80">For programs, cohorts, and agencies</p>
-          <h2 className="mt-2 text-3xl md:text-4xl font-semibold text-slate-50 tracking-tight">Give interpreters a real support OS — and leadership clear, ethical signals.</h2>
-          <p className="mt-3 text-base text-slate-300">The same OS that supports individual interpreters can run across cohorts, teams, and whole programs — without turning human experience into surveillance.</p>
+          <h2 className="mt-2 text-3xl md:text-4xl font-semibold text-slate-50 tracking-tight">Give interpreters a real support OS and leadership clear, ethical signals.</h2>
+          <p className="mt-3 text-base text-slate-300">The same OS that supports individual interpreters can run across cohorts, teams, and whole programs without turning human experience into surveillance.</p>
         </div>
         <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6 text-sm">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-5">
@@ -38,7 +38,7 @@ export const TeamsPrograms: React.FC = () => {
             </ul>
           </div>
         </div>
-        <p className="mt-8 text-[0.75rem] text-slate-500">Organizations see patterns — never personal data.</p>
+        <p className="mt-8 text-[0.75rem] text-slate-500">Organizations see patterns, never personal data.</p>
       </div>
     </section>
   );

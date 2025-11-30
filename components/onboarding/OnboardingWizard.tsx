@@ -5,36 +5,40 @@ import Step1GroundRules from "./steps/Step1GroundRules";
 import Step2Context from "./steps/Step2Context";
 import Step3WeekState from "./steps/Step3WeekState";
 import Step4Goals from "./steps/Step4Goals";
-import Step5Account from "./steps/Step5Account";
+import Step5SkillsPractices from "./steps/Step5SkillsPractices";
+import Step6Finish from "./steps/Step6Finish";
 
 type Data = {
   acknowledge_not_clinical: boolean;
-  role?: string;
+  roles: string[];
+  role_other?: string;
   years_experience?: string;
   settings: string[];
-  week_load_score?: number;
-  week_recovery_score?: number;
-  week_red_flag?: "no" | "maybe" | "yes";
+  settings_other?: string;
+  typical_workload?: string;
+  current_challenges?: string[];
+  challenges_other?: string;
+  what_brought_you?: string;
+  what_brought_you_other?: string;
   primary_goal?: "burnout" | "recovery" | "growth" | "season";
   selected_skill_ids?: number[];
-  skill_levels_by_id?: Record<number, number>;
-  email?: string;
-  password?: string;
+  current_practices?: string[];
   weekly_summary_opt_in?: boolean;
 };
 
 const steps = [
   { key: "ground", title: "Ground rules & safety" },
   { key: "context", title: "Your interpreting world" },
-  { key: "week", title: "Your last 7 days" },
-  { key: "goal", title: "Focus area" },
-  { key: "account", title: "Create account" },
+  { key: "week", title: "Tell us about you" },
+  { key: "goal", title: "Your primary goal" },
+  { key: "skills", title: "Your growth focus" },
+  { key: "finish", title: "All set!" },
 ];
 
 export default function OnboardingWizard() {
   const router = useRouter();
   const [index, setIndex] = useState(0);
-  const [data, setData] = useState<Data>({ acknowledge_not_clinical: false, settings: [] });
+  const [data, setData] = useState<Data>({ acknowledge_not_clinical: false, roles: [], settings: [] });
 
   const pct = useMemo(() => Math.round(((index + 1) / steps.length) * 100), [index]);
 
@@ -44,11 +48,6 @@ export default function OnboardingWizard() {
   const saveExit = () => {
     localStorage.setItem("ir_onboarding", JSON.stringify(data));
     router.push("/");
-  };
-
-  const finish = () => {
-    localStorage.setItem("ir_onboarding", JSON.stringify(data));
-    router.push("/app?firstRun=1");
   };
 
   return (
@@ -72,17 +71,21 @@ export default function OnboardingWizard() {
         )}
         {index === 1 && (
           <Step2Context
-            role={data.role}
+            roles={data.roles}
+            role_other={data.role_other}
             years_experience={data.years_experience}
             settings={data.settings}
+            settings_other={data.settings_other}
             onChange={(partial) => setData({ ...data, ...partial })}
           />
         )}
         {index === 2 && (
           <Step3WeekState
-            week_load_score={data.week_load_score}
-            week_recovery_score={data.week_recovery_score}
-            week_red_flag={data.week_red_flag}
+            typical_workload={data.typical_workload}
+            current_challenges={data.current_challenges}
+            challenges_other={data.challenges_other}
+            what_brought_you={data.what_brought_you}
+            what_brought_you_other={data.what_brought_you_other}
             onChange={(partial) => setData({ ...data, ...partial })}
           />
         )}
@@ -93,15 +96,29 @@ export default function OnboardingWizard() {
           />
         )}
         {index === 4 && (
-          <Step5Account
-            email={data.email}
-            password={data.password}
+          <Step5SkillsPractices
+            selected_skill_ids={data.selected_skill_ids}
+            current_practices={data.current_practices}
+            onChange={(partial) => setData({ ...data, ...partial })}
+          />
+        )}
+        {index === 5 && (
+          <Step6Finish
             weekly_summary_opt_in={data.weekly_summary_opt_in}
+            roles={data.roles}
+            role_other={data.role_other}
+            years_experience={data.years_experience}
+            settings={data.settings}
+            settings_other={data.settings_other}
+            typical_workload={data.typical_workload}
+            current_challenges={data.current_challenges}
+            challenges_other={data.challenges_other}
+            what_brought_you={data.what_brought_you}
+            what_brought_you_other={data.what_brought_you_other}
             primary_goal={data.primary_goal}
             selected_skill_ids={data.selected_skill_ids}
-            skill_levels_by_id={data.skill_levels_by_id}
+            current_practices={data.current_practices}
             onChange={(partial) => setData({ ...data, ...partial })}
-            onSubmit={finish}
           />
         )}
       </div>
@@ -111,7 +128,7 @@ export default function OnboardingWizard() {
           Back
         </button>
         <div className="flex items-center gap-3">
-          <button onClick={saveExit} className="text-[0.8rem] text-slate-400">Save & exit</button>
+          {index < steps.length - 1 && <button onClick={saveExit} className="text-[0.8rem] text-slate-400">Save & exit</button>}
           {index < steps.length - 1 && (
             <button onClick={next} className="inline-flex items-center rounded-lg bg-teal-400 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-teal-300">
               Next

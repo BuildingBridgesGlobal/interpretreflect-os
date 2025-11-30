@@ -73,7 +73,7 @@ export const PracticeQueue: React.FC<Props> = ({ userId, items, onSessionLogged 
       <p className="mt-1 text-sm text-slate-300">A prioritized list of what to practice next, based on your goals and recent work.</p>
       {error && <p className="mt-3 text-xs text-rose-400">{error}</p>}
       {items.length === 0 ? (
-        <p className="mt-4 text-sm text-slate-400">Once you set a skill goal and complete a few sessions, Catalyst will suggest targeted practice here.</p>
+        <p className="mt-4 text-sm text-slate-400">Once you set a skill goal and complete a few sessions, Elya will suggest targeted practice here.</p>
       ) : (
         <div className="mt-4 space-y-3">
           {items.map((item) => (

@@ -25,36 +25,47 @@ export const OSPreview: React.FC<OSPreviewProps> = ({
   return (
     <section id="os-preview" className="container mx-auto max-w-6xl px-6 md:px-8 py-16 md:py-20 border-t border-slate-900/70">
       <div className="max-w-3xl">
-        <h2 className="text-3xl md:text-4xl font-semibold text-slate-50 tracking-tight">{title}</h2>
-        <p className="mt-3 text-slate-300 text-base md:text-lg">{subhead}</p>
+        <h2 className="text-4xl md:text-5xl font-semibold text-slate-50 tracking-tight">{title}</h2>
+        <p className="mt-3 text-slate-300 text-lg md:text-xl">{subhead}</p>
       </div>
 
-      <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">Performance & Load</p>
               <p className="mt-1 text-sm text-slate-200">Weekly rhythm overview</p>
             </div>
-            <div className="text-right text-[0.7rem] text-slate-400">
-              <p>Assignments this week: 11</p>
-              <p>High-intensity: 4</p>
+            <div className="text-right text-[0.7rem] text-slate-400 flex-shrink-0">
+              <p>Assignments: <span className="text-slate-200">11</span></p>
+              <p>High-intensity: <span className="text-amber-300">4</span></p>
             </div>
           </div>
-          <div className="mt-4 h-28 rounded-xl bg-slate-950/90 px-3 py-2 flex items-end gap-1.5">
+          <div className="mt-4 h-28 rounded-xl bg-slate-950/90 px-3 py-2 relative flex items-end gap-1.5">
+            <div className="absolute inset-x-3 top-[25%] bottom-[35%] bg-teal-500/5 border-y border-teal-500/20 rounded" />
             {[40, 55, 80, 70, 65, 50, 30].map((h, i) => (
-              <div key={i} className="flex-1 flex flex-col justify-end gap-1">
+              <div key={i} className="flex-1 flex flex-col justify-end gap-1 relative z-10" style={{ minWidth: '12px' }}>
                 <div
-                  className="w-full rounded-full bg-gradient-to-t from-teal-700 via-teal-400/70 to-teal-300"
-                  style={{ height: `${h}%` }}
+                  className="w-full rounded-full min-h-[8px]"
+                  style={{
+                    height: `${h}%`,
+                    backgroundColor: h > 75 ? '#f59e0b' : '#14b8a6',
+                    minHeight: '8px'
+                  }}
                 />
                 <span className="text-[0.6rem] text-center text-slate-500">{["M", "T", "W", "T", "F", "S", "S"][i]}</span>
               </div>
             ))}
           </div>
-          <div className="mt-3 flex items-center justify-between text-[0.7rem] text-slate-400">
-            <span>Target load: 65–75%</span>
-            <span>OS notes: Thursday spike after double medical block.</span>
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="h-1 w-8 rounded-full bg-teal-400" />
+              <p className="text-[0.7rem] text-slate-400">Target load: <span className="text-teal-300">65–75%</span></p>
+            </div>
+            <div className="rounded-lg bg-slate-950/70 border border-slate-800/70 px-3 py-2">
+              <p className="text-[0.7rem] text-slate-300"><span className="text-amber-300">Wed spike:</span> Double medical block pushed you to 80%</p>
+              <p className="text-[0.65rem] text-slate-400 mt-0.5">Consider adding recovery time after back-to-back high-stakes assignments</p>
+            </div>
           </div>
         </div>
 
@@ -63,7 +74,7 @@ export const OSPreview: React.FC<OSPreviewProps> = ({
             <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">Domains</p>
             <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[0.65rem] text-slate-300">Top 3 this month</span>
           </div>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div className="mt-4 space-y-3">
             {[
               {
                 label: "Medical · Inpatient",
@@ -87,52 +98,53 @@ export const OSPreview: React.FC<OSPreviewProps> = ({
                 badgeColor: "bg-sky-500/10 text-sky-300 border-sky-500/40",
               },
             ].map((domain) => (
-              <div key={domain.label} className="rounded-xl bg-slate-950/70 p-3 border border-slate-800/70 flex flex-col justify-between">
-                <p className="text-[0.8rem] font-medium text-slate-100">{domain.label}</p>
-                <p className="mt-1 text-[0.7rem] text-slate-300">{domain.load}</p>
-                <p className="text-[0.7rem] text-slate-400">{domain.intensity}</p>
-                <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] ${domain.badgeColor}`}>
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                  {domain.badge}
-                </span>
+              <div key={domain.label} className="rounded-xl bg-slate-950/70 p-3 border border-slate-800/70">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-100">{domain.label}</p>
+                    <p className="mt-0.5 text-[0.7rem] text-slate-300">{domain.load}</p>
+                    <p className="text-[0.7rem] text-slate-400">{domain.intensity}</p>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.65rem] flex-shrink-0 ${domain.badgeColor}`}>
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    {domain.badge}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[0.7rem] text-slate-400">Domains with repeated high emotional intensity are automatically flagged for additional support and reflection prompts.</p>
+          <p className="mt-4 text-[0.7rem] text-slate-400">High emotional intensity domains are automatically flagged for additional support.</p>
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
           <div className="flex items-center justify-between">
-            <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">Burnout Drift · 6-week view</p>
+            <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">Burnout Drift</p>
             <div className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[0.65rem] text-amber-200">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
               Slight upward trend
             </div>
           </div>
-          <div className="mt-4 h-28 rounded-xl bg-slate-950/90 px-3 py-2 flex items-center justify-between gap-2">
-            <div className="flex-1">
-              <div className="flex items-end gap-1.5 h-20">
-                {[15, 18, 20, 26, 31, 35].map((h, i) => (
-                  <div key={i} className="flex-1 rounded-full bg-gradient-to-t from-amber-900 via-amber-500/40 to-amber-300/80" style={{ height: `${h}%` }} />
-                ))}
-              </div>
-              <div className="mt-2 flex justify-between text-[0.6rem] text-slate-500">
-                <span>Week 1</span>
-                <span>Week 6</span>
-              </div>
+          <div className="mt-4 rounded-xl bg-slate-950/90 px-3 py-3">
+            <div className="flex items-end gap-1.5 h-20">
+              {[15, 18, 20, 26, 31, 35].map((h, i) => (
+                <div key={i} className="flex-1 rounded-full bg-gradient-to-t from-amber-900 via-amber-500/40 to-amber-300/80" style={{ height: `${h}%` }} />
+              ))}
             </div>
-            <div className="w-px h-20 bg-slate-800/80 mx-3" />
-            <div className="w-32 text-[0.7rem] text-slate-300 space-y-1">
-              <p className="font-medium text-slate-100">OS Suggestion</p>
-              <p>Add one 5-minute decompression ritual after high-stakes medical assignments this week.</p>
-              <p className="text-slate-400">Auto-scheduled into your Support Stack.</p>
+            <div className="mt-2 flex justify-between text-[0.6rem] text-slate-500">
+              <span>Week 1</span>
+              <span>Week 6</span>
             </div>
+          </div>
+          <div className="mt-4 rounded-xl bg-violet-500/10 border border-violet-500/30 p-3">
+            <p className="text-[0.7rem] font-medium text-violet-200">OS Suggestion</p>
+            <p className="mt-1 text-[0.7rem] text-slate-300">Add one 5-minute decompression ritual after high-stakes medical assignments this week.</p>
+            <p className="mt-1 text-[0.65rem] text-slate-400">Auto-scheduled to Support Stack</p>
           </div>
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[0.7rem] uppercase tracking-wide text-amber-300">Today\'s Support Stack</p>
+            <p className="text-[0.7rem] uppercase tracking-wide text-amber-300">Today's Support Stack</p>
             <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[0.65rem] text-slate-300">3 active · 1 completed</span>
           </div>
           <div className="space-y-3 text-sm">
@@ -167,13 +179,48 @@ export const OSPreview: React.FC<OSPreviewProps> = ({
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <p className="text-xs font-medium uppercase tracking-wide text-teal-300">Competency Radar</p>
           <p className="mt-1 text-sm text-slate-300">See strengths and gaps across language, cognitive, relational, and ethical skills.</p>
-          <div className="mt-4 h-32 rounded-xl bg-slate-950/80" />
+          <div className="mt-5 space-y-3">
+            {[
+              { skill: "Language precision", level: 85, color: "teal" },
+              { skill: "Cognitive load management", level: 70, color: "violet" },
+              { skill: "Relational boundaries", level: 90, color: "emerald" },
+              { skill: "Ethical decision-making", level: 75, color: "amber" },
+            ].map((item) => (
+              <div key={item.skill}>
+                <div className="flex items-center justify-between text-[0.7rem] mb-1">
+                  <span className="text-slate-300">{item.skill}</span>
+                  <span className="text-slate-400">{item.level}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-slate-950/80">
+                  <div
+                    className={`h-full rounded-full bg-gradient-to-r from-${item.color}-600 to-${item.color}-400`}
+                    style={{ width: `${item.level}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <p className="text-xs font-medium uppercase tracking-wide text-teal-300">Growth Timeline</p>
-          <p className="mt-1 text-sm text-slate-300">Make improvement visible week by week, not just \"I hope I\'m better.\"</p>
-          <div className="mt-4 h-32 rounded-xl bg-slate-950/80" />
+          <p className="mt-1 text-sm text-slate-300">Make improvement visible week by week, not just "I hope I'm better."</p>
+          <div className="mt-5 space-y-3">
+            <div className="flex items-start gap-3 rounded-xl bg-slate-950/70 p-3 border border-slate-800/70">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
+              <div className="text-[0.7rem]">
+                <p className="text-slate-200 font-medium">Week 4: Medical vocabulary retention up 22%</p>
+                <p className="text-slate-400 mt-0.5">Cardiology terms, oncology concepts</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 rounded-xl bg-slate-950/70 p-3 border border-slate-800/70">
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-400 mt-1.5 flex-shrink-0" />
+              <div className="text-[0.7rem]">
+                <p className="text-slate-200 font-medium">Week 2: Boundary-setting in family conferences</p>
+                <p className="text-slate-400 mt-0.5">More consistent role clarification</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

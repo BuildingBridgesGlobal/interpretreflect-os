@@ -8,9 +8,9 @@ type FinalCTAProps = {
 };
 
 export const FinalCTA: React.FC<FinalCTAProps> = ({
-  primaryHref = "#start",
-  secondaryHref = "#os-demo",
-  primaryLabel = "Start Free",
+  primaryHref = "/start",
+  secondaryHref = "#os-preview",
+  primaryLabel = "Try Free for 7 Days",
   secondaryLabel = "Explore the OS Demo",
 }) => {
   return (

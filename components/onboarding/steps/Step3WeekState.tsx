@@ -1,26 +1,162 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 
-export default function Step3WeekState({ week_load_score, week_recovery_score, week_red_flag, onChange }: { week_load_score?: number; week_recovery_score?: number; week_red_flag?: "no" | "maybe" | "yes"; onChange: (partial: { week_load_score?: number; week_recovery_score?: number; week_red_flag?: "no" | "maybe" | "yes" }) => void }) {
+const workloadOptions = [
+  "1–5 assignments/week",
+  "6–10 assignments/week",
+  "11–20 assignments/week",
+  "20+ assignments/week",
+  "Varies widely",
+];
+
+const challengeOptions = [
+  "Specialized vocabulary gaps",
+  "Fast-paced or dense content",
+  "Ethical decision-making",
+  "Team coordination issues",
+  "Sustaining peak performance",
+  "Processing high-stakes content",
+  "Managing workload volume",
+  "Performance consistency",
+  "Other",
+];
+
+const whatBroughtYouOptions = [
+  "Want to level up my performance",
+  "Track my skill development",
+  "Starting a new role",
+  "In a training program",
+  "Need better prep systems",
+  "Curious about the platform",
+  "Other",
+];
+
+type Step3WeekStateProps = {
+  typical_workload?: string;
+  current_challenges?: string[];
+  challenges_other?: string;
+  what_brought_you?: string;
+  what_brought_you_other?: string;
+  onChange: (partial: {
+    typical_workload?: string;
+    current_challenges?: string[];
+    challenges_other?: string;
+    what_brought_you?: string;
+    what_brought_you_other?: string;
+  }) => void;
+};
+
+export default function Step3WeekState({
+  typical_workload,
+  current_challenges,
+  challenges_other,
+  what_brought_you,
+  what_brought_you_other,
+  onChange
+}: Step3WeekStateProps) {
+  const [selectedChallenges, setSelectedChallenges] = useState<string[]>(current_challenges || []);
+  const [challengesOtherText, setChallengesOtherText] = useState(challenges_other || "");
+  const [broughtYouOtherText, setBroughtYouOtherText] = useState(what_brought_you_other || "");
+
+  const toggleChallenge = (c: string) => {
+    const next = selectedChallenges.includes(c)
+      ? selectedChallenges.filter((x) => x !== c)
+      : [...selectedChallenges, c];
+    setSelectedChallenges(next);
+    onChange({ current_challenges: next });
+  };
+
+  const handleChallengesOtherChange = (value: string) => {
+    setChallengesOtherText(value);
+    onChange({ challenges_other: value });
+  };
+
+  const handleBroughtYouOtherChange = (value: string) => {
+    setBroughtYouOtherText(value);
+    onChange({ what_brought_you_other: value });
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm text-slate-200">How heavy has interpreting felt overall this past week?</p>
-        <input type="range" min={0} max={10} value={week_load_score ?? 5} onChange={(e) => onChange({ week_load_score: Number(e.target.value) })} className="w-full" />
-        <div className="mt-1 flex justify-between text-[0.75rem] text-slate-400"><span>Light</span><span>Full but manageable</span><span>Barely keeping up</span></div>
-      </div>
-      <div>
-        <p className="text-sm text-slate-200">How well have you been able to come back down between assignments?</p>
-        <input type="range" min={0} max={10} value={week_recovery_score ?? 5} onChange={(e) => onChange({ week_recovery_score: Number(e.target.value) })} className="w-full" />
-        <div className="mt-1 flex justify-between text-[0.75rem] text-slate-400"><span>Not at all</span><span>Sometimes</span><span>Consistently</span></div>
-      </div>
-      <div>
-        <p className="text-sm text-slate-200">In the last 7 days, have you thought “I can’t keep doing this like this”?</p>
-        <div className="mt-2 flex gap-2">
-          {["no", "maybe", "yes"].map((opt) => (
-            <button key={opt} onClick={() => onChange({ week_red_flag: opt as any })} className={`rounded-lg border px-3 py-2 text-sm ${week_red_flag === opt ? "border-amber-400 text-amber-300" : "border-slate-700 text-slate-300"}`}>{opt[0].toUpperCase() + opt.slice(1)}</button>
+      <div className="space-y-2">
+        <p className="text-sm text-slate-200">What brought you here today?</p>
+        <div className="grid grid-cols-1 gap-2">
+          {whatBroughtYouOptions.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => onChange({ what_brought_you: opt })}
+              className={`rounded-lg border px-3 py-2.5 text-sm text-left ${
+                what_brought_you === opt
+                  ? "border-teal-400 text-teal-300 bg-teal-400/5"
+                  : "border-slate-700 text-slate-300"
+              }`}
+            >
+              {opt}
+            </button>
           ))}
         </div>
+        {what_brought_you === "Other" && (
+          <input
+            type="text"
+            value={broughtYouOtherText}
+            onChange={(e) => handleBroughtYouOtherChange(e.target.value)}
+            placeholder="Tell us more..."
+            className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-teal-400 focus:outline-none"
+          />
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm text-slate-200">Typical workload</p>
+        <div className="grid grid-cols-1 gap-2">
+          {workloadOptions.map((opt) => (
+            <button
+              key={opt}
+              onClick={() => onChange({ typical_workload: opt })}
+              className={`rounded-lg border px-3 py-2 text-sm ${
+                typical_workload === opt
+                  ? "border-teal-400 text-teal-300"
+                  : "border-slate-700 text-slate-300"
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm text-slate-200">Biggest challenges right now (select all that apply)</p>
+        <div className="grid grid-cols-2 gap-2">
+          {challengeOptions.map((c) => (
+            <button
+              key={c}
+              onClick={() => toggleChallenge(c)}
+              className={`rounded-lg border px-3 py-2 text-sm ${
+                selectedChallenges.includes(c)
+                  ? "border-teal-400 text-teal-300"
+                  : "border-slate-700 text-slate-300"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        {selectedChallenges.includes("Other") && (
+          <input
+            type="text"
+            value={challengesOtherText}
+            onChange={(e) => handleChallengesOtherChange(e.target.value)}
+            placeholder="Please specify your challenges..."
+            className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-teal-400 focus:outline-none"
+          />
+        )}
+      </div>
+
+      <div className="rounded-lg border border-violet-400/30 bg-violet-400/5 p-4">
+        <p className="text-[0.8rem] text-violet-200">
+          💡 Based on your answers, we'll personalize your dashboard with resources, reflection prompts, and skill-building exercises tailored to your needs.
+        </p>
       </div>
     </div>
   );
