@@ -118,7 +118,7 @@ export default function DashboardPage() {
           </div>
 
           {/* SIDEBAR: Context & Quick Actions (20-30% width on desktop) */}
-          <div className="lg:w-[30%] flex flex-col gap-4">
+          <div className="lg:w-[30%] flex flex-col gap-4 lg:mt-[88px]">
 
             {/* Next Assignment - Compact Card */}
             {nextAssignment && (
@@ -171,37 +171,6 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
-              <h3 className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">Quick Actions</h3>
-              <div className="space-y-2">
-                <button
-                  onClick={() => setElyaPreFillMessage("I want to practice interpreting")}
-                  className="w-full px-3 py-2 rounded-lg border border-teal-500/30 bg-teal-500/10 text-teal-300 text-xs hover:bg-teal-500/20 transition-all text-left"
-                >
-                  🎯 Practice Mode
-                </button>
-                <button
-                  onClick={() => setElyaPreFillMessage("What patterns do you see in my performance?")}
-                  className="w-full px-3 py-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-300 text-xs hover:bg-blue-500/20 transition-all text-left"
-                >
-                  📊 Analyze Patterns
-                </button>
-                <button
-                  onClick={() => window.location.href = '/skills'}
-                  className="w-full px-3 py-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-300 text-xs hover:bg-purple-500/20 transition-all text-left"
-                >
-                  💪 Skills Training
-                </button>
-                <button
-                  onClick={() => window.location.href = '/history'}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-600/30 bg-slate-700/10 text-slate-300 text-xs hover:bg-slate-700/20 transition-all text-left"
-                >
-                  📈 View Stats & History
-                </button>
               </div>
             </div>
 
