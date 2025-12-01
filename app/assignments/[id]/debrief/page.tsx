@@ -77,7 +77,7 @@ export default function TeamDebriefPage() {
     }
 
     // Load or create debrief
-    let { data: debriefData } = await supabase
+    let { data: debriefData } = await (supabase as any)
       .from("assignment_debriefs")
       .select("*")
       .eq("assignment_id", assignmentId)
@@ -85,7 +85,7 @@ export default function TeamDebriefPage() {
 
     if (!debriefData) {
       // Create debrief if it doesn't exist
-      const { data: newDebrief } = await supabase
+      const { data: newDebrief } = await (supabase as any)
         .from("assignment_debriefs")
         .insert({
           assignment_id: assignmentId,
@@ -103,7 +103,7 @@ export default function TeamDebriefPage() {
     }
 
     // Load team members
-    const { data: membersData } = await supabase
+    const { data: membersData } = await (supabase as any)
       .from("assignment_team_members")
       .select("*")
       .eq("assignment_id", assignmentId)
@@ -129,7 +129,7 @@ export default function TeamDebriefPage() {
 
   const loadReflections = async (debriefId: string, userId: string) => {
     // Load my reflections
-    const { data: myReflectionsData } = await supabase
+    const { data: myReflectionsData } = await (supabase as any)
       .from("debrief_reflections")
       .select("*")
       .eq("debrief_id", debriefId)
@@ -140,7 +140,7 @@ export default function TeamDebriefPage() {
     }
 
     // Load team reflections (only those shared with team)
-    const { data: teamReflectionsData } = await supabase
+    const { data: teamReflectionsData } = await (supabase as any)
       .from("debrief_reflections")
       .select("*")
       .eq("debrief_id", debriefId)
@@ -155,7 +155,7 @@ export default function TeamDebriefPage() {
   const saveSelfAssessment = async () => {
     if (!debrief) return;
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("debrief_reflections")
       .insert({
         debrief_id: debrief.id,
@@ -179,7 +179,7 @@ export default function TeamDebriefPage() {
   const savePeerFeedback = async () => {
     if (!debrief || !selectedPeer) return;
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("debrief_reflections")
       .insert({
         debrief_id: debrief.id,
