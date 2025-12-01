@@ -70,7 +70,7 @@ export default function TeamPrepPage() {
     }
 
     // Load prep room
-    const { data: roomData } = await supabase
+    const { data: roomData } = await (supabase as any)
       .from("team_prep_rooms")
       .select("*")
       .eq("assignment_id", assignmentId)
@@ -82,7 +82,7 @@ export default function TeamPrepPage() {
     }
 
     // Load team members
-    const { data: membersData } = await supabase
+    const { data: membersData } = await (supabase as any)
       .from("assignment_team_members")
       .select("*")
       .eq("assignment_id", assignmentId)
@@ -108,7 +108,7 @@ export default function TeamPrepPage() {
   };
 
   const loadMessages = async (roomId: string) => {
-    const { data: messagesData } = await supabase
+    const { data: messagesData } = await (supabase as any)
       .from("team_prep_messages")
       .select("*")
       .eq("prep_room_id", roomId)
@@ -144,7 +144,7 @@ export default function TeamPrepPage() {
     setSending(true);
 
     // Save user message
-    const { error: userMsgError } = await supabase
+    const { error: userMsgError } = await (supabase as any)
       .from("team_prep_messages")
       .insert({
         prep_room_id: prepRoom.id,
@@ -190,7 +190,7 @@ export default function TeamPrepPage() {
 
       if (data.response) {
         // Save Elya's response
-        await supabase
+        await (supabase as any)
           .from("team_prep_messages")
           .insert({
             prep_room_id: prepRoom.id,

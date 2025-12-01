@@ -31,6 +31,11 @@ export default function AssignmentsPage() {
   const [selectedTab, setSelectedTab] = useState<"upcoming" | "past">("upcoming");
   const [showNewAssignmentModal, setShowNewAssignmentModal] = useState(false);
   const [creatingAssignment, setCreatingAssignment] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
 
   // Form state
   const [formData, setFormData] = useState({
@@ -79,10 +84,67 @@ export default function AssignmentsPage() {
       .order("date", { ascending: true });
 
     if (!error && assignmentsData) {
-      setAssignments(assignmentsData);
+      setAssignments(assignmentsData as any);
+    }
+
+    // Load templates
+    const templatesResponse = await fetch(`/api/assignments/templates?user_id=${session.user.id}`);
+    if (templatesResponse.ok) {
+      const templatesData = await templatesResponse.json();
+      setTemplates(templatesData.templates || []);
     }
 
     setLoading(false);
+  };
+
+  const handleUseTemplate = async (template: any) => {
+    // Pre-fill form with template data
+    setFormData({
+      ...formData,
+      title: template.default_title || "",
+      assignment_type: template.assignment_type,
+      setting: template.setting || "",
+      location_type: template.location_type,
+      location_details: template.location_details || "",
+      duration_minutes: template.duration_minutes,
+    });
+    setShowTemplates(false);
+  };
+
+  const handleSaveAsTemplate = async () => {
+    if (!templateName.trim()) {
+      alert("Please enter a template name");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/assignments/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          template_name: templateName,
+          assignment_type: formData.assignment_type,
+          setting: formData.setting,
+          location_type: formData.location_type,
+          location_details: formData.location_details,
+          duration_minutes: formData.duration_minutes,
+          default_title: formData.title,
+        }),
+      });
+
+      if (response.ok) {
+        alert("Template saved successfully!");
+        setTemplateName("");
+        setShowSaveTemplate(false);
+        await loadData(); // Reload templates
+      } else {
+        alert("Failed to save template");
+      }
+    } catch (error) {
+      console.error("Error saving template:", error);
+      alert("Error saving template");
+    }
   };
 
   const getUpcomingAssignments = () => {
@@ -151,7 +213,7 @@ export default function AssignmentsPage() {
 
     try {
       // Create the assignment
-      const { data: newAssignment, error: assignmentError } = await supabase
+      const { data: newAssignment, error: assignmentError } = await (supabase as any)
         .from("assignments")
         .insert({
           user_id: user.id,
@@ -205,7 +267,7 @@ export default function AssignmentsPage() {
               can_invite_others: false
             }));
 
-            await supabase
+            await (supabase as any)
               .from("assignment_team_members")
               .insert(teamMembersToAdd);
           }
@@ -229,6 +291,7 @@ export default function AssignmentsPage() {
       });
       setTeamEmails([""]);
       setTeamRoles(["team"]);
+      setShowMoreDetails(false);
       setShowNewAssignmentModal(false);
 
       // Reload assignments
@@ -264,12 +327,22 @@ export default function AssignmentsPage() {
             <h1 className="text-2xl font-semibold text-slate-50">Assignments</h1>
             <p className="mt-1 text-sm text-slate-400">Manage your interpreting assignments and team collaborations</p>
           </div>
-          <button
-            onClick={() => setShowNewAssignmentModal(true)}
-            className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors"
-          >
-            + New Assignment
-          </button>
+          <div className="flex gap-3">
+            {templates.length > 0 && (
+              <button
+                onClick={() => setShowTemplates(true)}
+                className="px-4 py-2 rounded-lg border border-teal-500 text-teal-400 font-medium hover:bg-teal-500/10 transition-colors flex items-center gap-2"
+              >
+                📋 Use Template
+              </button>
+            )}
+            <button
+              onClick={() => setShowNewAssignmentModal(true)}
+              className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors"
+            >
+              + New Assignment
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -426,6 +499,68 @@ export default function AssignmentsPage() {
           })}
         </div>
 
+        {/* Template Picker Modal */}
+        {showTemplates && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-900 rounded-xl border border-slate-700 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+              <div className="sticky top-0 bg-slate-900 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-slate-100">Use a Template</h2>
+                <button
+                  onClick={() => setShowTemplates(false)}
+                  className="text-slate-400 hover:text-slate-300"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-6 space-y-3">
+                {templates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="p-4 rounded-lg border border-slate-700 bg-slate-900/50 hover:bg-slate-800 transition-colors cursor-pointer"
+                    onClick={() => {
+                      handleUseTemplate(template);
+                      setShowNewAssignmentModal(true);
+                    }}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-slate-100">{template.template_name}</h3>
+                        <div className="mt-2 flex items-center gap-3 text-sm text-slate-400">
+                          <span className="px-2 py-1 rounded-md bg-slate-800 text-slate-300">
+                            {getTypeIcon(template.assignment_type)} {template.assignment_type}
+                          </span>
+                          {template.is_recurring && (
+                            <span className="px-2 py-1 rounded-md bg-violet-500/20 border border-violet-500/30 text-violet-400">
+                              🔄 {template.recurrence_pattern}
+                            </span>
+                          )}
+                          <span className="text-slate-500">
+                            {template.duration_minutes} min
+                          </span>
+                        </div>
+                        {template.description && (
+                          <p className="mt-2 text-sm text-slate-400">{template.description}</p>
+                        )}
+                        <p className="mt-2 text-xs text-slate-500">
+                          Used {template.times_used} {template.times_used === 1 ? 'time' : 'times'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {templates.length === 0 && (
+                  <div className="text-center py-8 text-slate-400">
+                    <p>No templates yet</p>
+                    <p className="text-sm mt-2">Create an assignment and save it as a template!</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* New Assignment Modal */}
         {showNewAssignmentModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -440,60 +575,43 @@ export default function AssignmentsPage() {
                 </button>
               </div>
 
-              <div className="p-6 space-y-6">
-                {/* Basic Details */}
+              <div className="p-6 space-y-5">
+                {/* Essential Fields Only */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-slate-200">Basic Details</h3>
-
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Title <span className="text-red-400">*</span>
+                      Assignment Title <span className="text-red-400">*</span>
                     </label>
                     <input
                       type="text"
                       value={formData.title}
                       onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                       placeholder="e.g., Pediatric Cardiology Consultation"
-                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-2">
-                        Assignment Type
+                        Type <span className="text-red-400">*</span>
                       </label>
                       <select
                         value={formData.assignment_type}
                         onChange={(e) => setFormData({ ...formData, assignment_type: e.target.value })}
-                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                       >
-                        <option value="Medical">Medical</option>
-                        <option value="Legal">Legal</option>
-                        <option value="Educational">Educational</option>
-                        <option value="VRS">VRS</option>
-                        <option value="VRI">VRI</option>
-                        <option value="Community">Community</option>
-                        <option value="Mental Health">Mental Health</option>
-                        <option value="Conference">Conference</option>
+                        <option value="Medical">🏥 Medical</option>
+                        <option value="Legal">⚖️ Legal</option>
+                        <option value="Educational">🎓 Educational</option>
+                        <option value="VRS">📞 VRS</option>
+                        <option value="VRI">💻 VRI</option>
+                        <option value="Community">🏘️ Community</option>
+                        <option value="Mental Health">🧠 Mental Health</option>
+                        <option value="Conference">🎤 Conference</option>
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">
-                        Setting
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.setting}
-                        onChange={(e) => setFormData({ ...formData, setting: e.target.value })}
-                        placeholder="e.g., Hospital, Clinic, Court"
-                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-2">
                         Date <span className="text-red-400">*</span>
@@ -502,10 +620,12 @@ export default function AssignmentsPage() {
                         type="date"
                         value={formData.date}
                         onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                       />
                     </div>
+                  </div>
 
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-2">
                         Time
@@ -514,159 +634,259 @@ export default function AssignmentsPage() {
                         type="time"
                         value={formData.time}
                         onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-2">
-                        Duration (minutes)
+                        Duration (min)
                       </label>
                       <input
                         type="number"
                         value={formData.duration_minutes}
                         onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
-                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Location */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-slate-200">Location</h3>
+                {/* More Details Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowMoreDetails(!showMoreDetails)}
+                  className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-slate-700 bg-slate-900/50 text-slate-300 hover:bg-slate-800 transition-colors"
+                >
+                  <span className="text-sm font-medium">
+                    {showMoreDetails ? "Hide" : "Add"} Optional Details
+                  </span>
+                  <span className="text-slate-500">
+                    {showMoreDetails ? "▼" : "▶"}
+                  </span>
+                </button>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Location Type
-                    </label>
-                    <select
-                      value={formData.location_type}
-                      onChange={(e) => setFormData({ ...formData, location_type: e.target.value })}
-                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                    >
-                      <option value="in_person">In Person</option>
-                      <option value="virtual">Virtual</option>
-                      <option value="hybrid">Hybrid</option>
-                    </select>
-                  </div>
+                {/* Collapsible Optional Fields */}
+                {showMoreDetails && (
+                  <div className="space-y-5 pt-2">
+                    {/* Location */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">Location</h3>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Location Details
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.location_details}
-                      onChange={(e) => setFormData({ ...formData, location_details: e.target.value })}
-                      placeholder="e.g., Room 304, Zoom link, Hybrid setup"
-                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                    />
-                  </div>
-                </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-400 mb-2">
+                            Location Type
+                          </label>
+                          <select
+                            value={formData.location_type}
+                            onChange={(e) => setFormData({ ...formData, location_type: e.target.value })}
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                          >
+                            <option value="in_person">📍 In Person</option>
+                            <option value="virtual">💻 Virtual</option>
+                            <option value="hybrid">🔄 Hybrid</option>
+                          </select>
+                        </div>
 
-                {/* Description */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-slate-200">Additional Information</h3>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                      Description
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Any special requirements, context, or notes..."
-                      rows={4}
-                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                    />
-                  </div>
-                </div>
-
-                {/* Team Assignment */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="is_team"
-                      checked={formData.is_team_assignment}
-                      onChange={(e) => setFormData({ ...formData, is_team_assignment: e.target.checked })}
-                      className="w-4 h-4 rounded border-slate-600 text-teal-400 focus:ring-teal-400"
-                    />
-                    <label htmlFor="is_team" className="text-sm font-medium text-slate-300">
-                      This is a team assignment
-                    </label>
-                  </div>
-
-                  {formData.is_team_assignment && (
-                    <div className="space-y-4 pl-7">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-medium text-slate-300">Team Members</h4>
-                        <button
-                          onClick={addTeamMemberField}
-                          className="text-sm text-teal-400 hover:text-teal-300 font-medium"
-                        >
-                          + Add Member
-                        </button>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-400 mb-2">
+                            Setting
+                          </label>
+                          <input
+                            type="text"
+                            value={formData.setting}
+                            onChange={(e) => setFormData({ ...formData, setting: e.target.value })}
+                            placeholder="Hospital, Court, etc."
+                            className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                          />
+                        </div>
                       </div>
 
-                      <div className="space-y-3">
-                        {teamEmails.map((email, index) => (
-                          <div key={index} className="flex gap-2">
-                            <input
-                              type="email"
-                              value={email}
-                              onChange={(e) => updateTeamEmail(index, e.target.value)}
-                              placeholder="team.member@example.com"
-                              className="flex-1 px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                            />
-                            <select
-                              value={teamRoles[index]}
-                              onChange={(e) => updateTeamRole(index, e.target.value)}
-                              className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                            >
-                              <option value="team">Team</option>
-                              <option value="lead">Lead</option>
-                              <option value="support">Support</option>
-                              <option value="feed">Feed</option>
-                              <option value="shadow">Shadow</option>
-                              <option value="mentor">Mentor</option>
-                            </select>
-                            {index > 0 && (
-                              <button
-                                onClick={() => removeTeamMemberField(index)}
-                                className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 transition-colors"
-                              >
-                                ✕
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                      <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                          Location Details
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.location_details}
+                          onChange={(e) => setFormData({ ...formData, location_details: e.target.value })}
+                          placeholder="Room 304, Zoom link, etc."
+                          className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        />
                       </div>
-
-                      <p className="text-xs text-slate-500">
-                        Note: Team members must have InterpretReflect accounts with these email addresses.
-                      </p>
                     </div>
-                  )}
-                </div>
+
+                    {/* Description */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">Notes</h3>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                          Description
+                        </label>
+                        <textarea
+                          value={formData.description}
+                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                          placeholder="Any special requirements, context, or notes..."
+                          rows={3}
+                          className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Team Assignment */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">Team</h3>
+
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="is_team"
+                          checked={formData.is_team_assignment}
+                          onChange={(e) => setFormData({ ...formData, is_team_assignment: e.target.checked })}
+                          className="w-4 h-4 rounded border-slate-600 text-teal-400 focus:ring-teal-400"
+                        />
+                        <label htmlFor="is_team" className="text-sm font-medium text-slate-300">
+                          This is a team assignment
+                        </label>
+                      </div>
+
+                      {formData.is_team_assignment && (
+                        <div className="space-y-3 pl-7">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-medium text-slate-400">Team Members</h4>
+                            <button
+                              type="button"
+                              onClick={addTeamMemberField}
+                              className="text-sm text-teal-400 hover:text-teal-300 font-medium"
+                            >
+                              + Add Member
+                            </button>
+                          </div>
+
+                          <div className="space-y-2">
+                            {teamEmails.map((email, index) => (
+                              <div key={index} className="flex gap-2">
+                                <input
+                                  type="email"
+                                  value={email}
+                                  onChange={(e) => updateTeamEmail(index, e.target.value)}
+                                  placeholder="team.member@example.com"
+                                  className="flex-1 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                />
+                                <select
+                                  value={teamRoles[index]}
+                                  onChange={(e) => updateTeamRole(index, e.target.value)}
+                                  className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                >
+                                  <option value="team">Team</option>
+                                  <option value="lead">Lead</option>
+                                  <option value="support">Support</option>
+                                  <option value="feed">Feed</option>
+                                  <option value="shadow">Shadow</option>
+                                  <option value="mentor">Mentor</option>
+                                </select>
+                                {index > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeTeamMemberField(index)}
+                                    className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 transition-colors"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          <p className="text-xs text-slate-500">
+                            Team members must have InterpretReflect accounts
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer Actions */}
-              <div className="sticky bottom-0 bg-slate-900 border-t border-slate-700 px-6 py-4 flex items-center justify-end gap-3">
+              <div className="sticky bottom-0 bg-slate-900 border-t border-slate-700 px-6 py-4 flex items-center justify-between gap-3">
                 <button
-                  onClick={() => setShowNewAssignmentModal(false)}
-                  disabled={creatingAssignment}
-                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50"
+                  onClick={() => setShowSaveTemplate(true)}
+                  disabled={!formData.assignment_type}
+                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  💾 Save as Template
+                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowNewAssignmentModal(false)}
+                    disabled={creatingAssignment}
+                    className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateAssignment}
+                    disabled={creatingAssignment || !formData.title || !formData.date}
+                    className="px-6 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {creatingAssignment ? "Creating..." : "Create Assignment"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Save as Template Dialog */}
+        {showSaveTemplate && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
+            <div className="bg-slate-900 rounded-xl border border-slate-700 max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-4">Save as Template</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Template Name
+                  </label>
+                  <input
+                    type="text"
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="e.g., Weekly VRS Shift, Medical Consults"
+                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="pt-2 text-sm text-slate-400">
+                  <p className="font-medium text-slate-300 mb-1">Template will save:</p>
+                  <ul className="list-disc list-inside space-y-1 text-xs">
+                    <li>Assignment type: {formData.assignment_type}</li>
+                    {formData.setting && <li>Setting: {formData.setting}</li>}
+                    <li>Duration: {formData.duration_minutes} minutes</li>
+                    <li>Location type: {formData.location_type}</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowSaveTemplate(false);
+                    setTemplateName("");
+                  }}
+                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleCreateAssignment}
-                  disabled={creatingAssignment || !formData.title || !formData.date}
-                  className="px-6 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleSaveAsTemplate}
+                  disabled={!templateName.trim()}
+                  className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {creatingAssignment ? "Creating..." : "Create Assignment"}
+                  Save Template
                 </button>
               </div>
             </div>
