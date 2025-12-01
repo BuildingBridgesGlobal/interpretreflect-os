@@ -106,13 +106,13 @@ export const InterpreterOS: React.FC<InterpreterOSProps> = ({
             <div>
               <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-400">Think of it like this</p>
               <h3 className="mt-2 text-2xl md:text-3xl font-semibold text-slate-50">
-                Microsoft Copilot for frontline employees.
+                Your AI-powered career assistant.
               </h3>
               <p className="mt-3 text-base text-slate-300">
-                Copilot doesn't replace workers or compete with employers. It removes friction so people can focus on their actual job.
+                InterpretReflect doesn't replace you or compete with your employers. It removes friction so you can focus on what you do best: interpreting.
               </p>
               <p className="mt-3 text-base text-slate-300">
-                <span className="text-slate-100 font-medium">InterpretReflect does the same for interpreters.</span> We handle the cognitive overhead of preparation, coordination, credentials, and professional growth so you can focus entirely on the interpretation itself.
+                <span className="text-slate-100 font-medium">We handle the cognitive overhead</span> of preparation, coordination, credentials, and professional growth so you can focus entirely on the interpretation itself.
               </p>
             </div>
             <div className="space-y-3">
