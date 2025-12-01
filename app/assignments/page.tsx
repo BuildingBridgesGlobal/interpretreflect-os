@@ -30,6 +30,26 @@ export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedTab, setSelectedTab] = useState<"upcoming" | "past">("upcoming");
   const [showNewAssignmentModal, setShowNewAssignmentModal] = useState(false);
+  const [creatingAssignment, setCreatingAssignment] = useState(false);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    title: "",
+    assignment_type: "Medical",
+    setting: "",
+    date: "",
+    time: "",
+    location_type: "in_person",
+    location_details: "",
+    duration_minutes: 60,
+    description: "",
+    is_team_assignment: false,
+    team_size: 1,
+    timezone: "America/New_York"
+  });
+
+  const [teamEmails, setTeamEmails] = useState<string[]>([""]);
+  const [teamRoles, setTeamRoles] = useState<string[]>(["team"]);
 
   useEffect(() => {
     loadData();
@@ -97,6 +117,131 @@ export default function AssignmentsPage() {
       "cancelled": { bg: "bg-red-500/10", border: "border-red-500/30", text: "text-red-400" }
     };
     return colors[status] || colors["upcoming"];
+  };
+
+  const addTeamMemberField = () => {
+    setTeamEmails([...teamEmails, ""]);
+    setTeamRoles([...teamRoles, "team"]);
+  };
+
+  const removeTeamMemberField = (index: number) => {
+    setTeamEmails(teamEmails.filter((_, i) => i !== index));
+    setTeamRoles(teamRoles.filter((_, i) => i !== index));
+  };
+
+  const updateTeamEmail = (index: number, email: string) => {
+    const newEmails = [...teamEmails];
+    newEmails[index] = email;
+    setTeamEmails(newEmails);
+  };
+
+  const updateTeamRole = (index: number, role: string) => {
+    const newRoles = [...teamRoles];
+    newRoles[index] = role;
+    setTeamRoles(newRoles);
+  };
+
+  const handleCreateAssignment = async () => {
+    if (!formData.title || !formData.date) {
+      alert("Please fill in the required fields: Title and Date");
+      return;
+    }
+
+    setCreatingAssignment(true);
+
+    try {
+      // Create the assignment
+      const { data: newAssignment, error: assignmentError } = await supabase
+        .from("assignments")
+        .insert({
+          user_id: user.id,
+          title: formData.title,
+          assignment_type: formData.assignment_type,
+          setting: formData.setting,
+          date: formData.date,
+          time: formData.time,
+          location_type: formData.location_type,
+          location_details: formData.location_details,
+          duration_minutes: formData.duration_minutes,
+          description: formData.description,
+          is_team_assignment: formData.is_team_assignment,
+          team_size: formData.is_team_assignment ? formData.team_size : 1,
+          timezone: formData.timezone,
+          status: "upcoming",
+          prep_status: "pending",
+          completed: false
+        })
+        .select()
+        .single();
+
+      if (assignmentError) {
+        console.error("Error creating assignment:", assignmentError);
+        alert("Failed to create assignment. Please try again.");
+        setCreatingAssignment(false);
+        return;
+      }
+
+      // If team assignment, add team members
+      if (formData.is_team_assignment && newAssignment) {
+        const validEmails = teamEmails.filter(email => email.trim() !== "");
+
+        if (validEmails.length > 0) {
+          // For MVP: look up users by email and add them as confirmed team members
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, email")
+            .in("email", validEmails);
+
+          if (profiles && profiles.length > 0) {
+            const teamMembersToAdd = profiles.map((profile, index) => ({
+              assignment_id: newAssignment.id,
+              user_id: profile.id,
+              role: teamRoles[teamEmails.indexOf(profile.email || "")] || "team",
+              status: "confirmed", // MVP: auto-confirm
+              invited_by: user.id,
+              invited_at: new Date().toISOString(),
+              confirmed_at: new Date().toISOString(),
+              can_edit_assignment: false,
+              can_invite_others: false
+            }));
+
+            await supabase
+              .from("assignment_team_members")
+              .insert(teamMembersToAdd);
+          }
+        }
+      }
+
+      // Reset form and close modal
+      setFormData({
+        title: "",
+        assignment_type: "Medical",
+        setting: "",
+        date: "",
+        time: "",
+        location_type: "in_person",
+        location_details: "",
+        duration_minutes: 60,
+        description: "",
+        is_team_assignment: false,
+        team_size: 1,
+        timezone: "America/New_York"
+      });
+      setTeamEmails([""]);
+      setTeamRoles(["team"]);
+      setShowNewAssignmentModal(false);
+
+      // Reload assignments
+      await loadData();
+
+      // Navigate to the new assignment
+      router.push(`/assignments/${newAssignment.id}`);
+    } catch (error) {
+      console.error("Error creating assignment:", error);
+      alert("An error occurred. Please try again.");
+    }
+
+    setCreatingAssignment(false);
   };
 
   if (loading) {
@@ -281,11 +426,11 @@ export default function AssignmentsPage() {
           })}
         </div>
 
-        {/* New Assignment Modal - Simplified for now */}
+        {/* New Assignment Modal */}
         {showNewAssignmentModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-900 rounded-xl border border-slate-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-              <div className="flex items-center justify-between mb-6">
+            <div className="bg-slate-900 rounded-xl border border-slate-700 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-slate-900 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-slate-100">Create New Assignment</h2>
                 <button
                   onClick={() => setShowNewAssignmentModal(false)}
@@ -295,22 +440,233 @@ export default function AssignmentsPage() {
                 </button>
               </div>
 
-              <div className="text-center py-8">
-                <p className="text-slate-300 mb-4">
-                  Assignment creation form coming soon! This will include:
-                </p>
-                <ul className="text-left max-w-md mx-auto space-y-2 text-sm text-slate-400">
-                  <li>📋 Assignment details (type, date, time, location)</li>
-                  <li>👥 Team member invitations</li>
-                  <li>📝 Description and special requirements</li>
-                  <li>🔗 Automatic prep room creation</li>
-                  <li>📚 Resource recommendations from toolkit</li>
-                </ul>
+              <div className="p-6 space-y-6">
+                {/* Basic Details */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-slate-200">Basic Details</h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Title <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.title}
+                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      placeholder="e.g., Pediatric Cardiology Consultation"
+                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Assignment Type
+                      </label>
+                      <select
+                        value={formData.assignment_type}
+                        onChange={(e) => setFormData({ ...formData, assignment_type: e.target.value })}
+                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      >
+                        <option value="Medical">Medical</option>
+                        <option value="Legal">Legal</option>
+                        <option value="Educational">Educational</option>
+                        <option value="VRS">VRS</option>
+                        <option value="VRI">VRI</option>
+                        <option value="Community">Community</option>
+                        <option value="Mental Health">Mental Health</option>
+                        <option value="Conference">Conference</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Setting
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.setting}
+                        onChange={(e) => setFormData({ ...formData, setting: e.target.value })}
+                        placeholder="e.g., Hospital, Clinic, Court"
+                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Date <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Time
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.time}
+                        onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Duration (minutes)
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.duration_minutes}
+                        onChange={(e) => setFormData({ ...formData, duration_minutes: parseInt(e.target.value) || 60 })}
+                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-slate-200">Location</h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Location Type
+                    </label>
+                    <select
+                      value={formData.location_type}
+                      onChange={(e) => setFormData({ ...formData, location_type: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    >
+                      <option value="in_person">In Person</option>
+                      <option value="virtual">Virtual</option>
+                      <option value="hybrid">Hybrid</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Location Details
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.location_details}
+                      onChange={(e) => setFormData({ ...formData, location_details: e.target.value })}
+                      placeholder="e.g., Room 304, Zoom link, Hybrid setup"
+                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-slate-200">Additional Information</h3>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Any special requirements, context, or notes..."
+                      rows={4}
+                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Team Assignment */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="is_team"
+                      checked={formData.is_team_assignment}
+                      onChange={(e) => setFormData({ ...formData, is_team_assignment: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-600 text-teal-400 focus:ring-teal-400"
+                    />
+                    <label htmlFor="is_team" className="text-sm font-medium text-slate-300">
+                      This is a team assignment
+                    </label>
+                  </div>
+
+                  {formData.is_team_assignment && (
+                    <div className="space-y-4 pl-7">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-medium text-slate-300">Team Members</h4>
+                        <button
+                          onClick={addTeamMemberField}
+                          className="text-sm text-teal-400 hover:text-teal-300 font-medium"
+                        >
+                          + Add Member
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {teamEmails.map((email, index) => (
+                          <div key={index} className="flex gap-2">
+                            <input
+                              type="email"
+                              value={email}
+                              onChange={(e) => updateTeamEmail(index, e.target.value)}
+                              placeholder="team.member@example.com"
+                              className="flex-1 px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                            />
+                            <select
+                              value={teamRoles[index]}
+                              onChange={(e) => updateTeamRole(index, e.target.value)}
+                              className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                            >
+                              <option value="team">Team</option>
+                              <option value="lead">Lead</option>
+                              <option value="support">Support</option>
+                              <option value="feed">Feed</option>
+                              <option value="shadow">Shadow</option>
+                              <option value="mentor">Mentor</option>
+                            </select>
+                            {index > 0 && (
+                              <button
+                                onClick={() => removeTeamMemberField(index)}
+                                className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 transition-colors"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <p className="text-xs text-slate-500">
+                        Note: Team members must have InterpretReflect accounts with these email addresses.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="sticky bottom-0 bg-slate-900 border-t border-slate-700 px-6 py-4 flex items-center justify-end gap-3">
                 <button
                   onClick={() => setShowNewAssignmentModal(false)}
-                  className="mt-6 px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
+                  disabled={creatingAssignment}
+                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50"
                 >
-                  Got it
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateAssignment}
+                  disabled={creatingAssignment || !formData.title || !formData.date}
+                  className="px-6 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingAssignment ? "Creating..." : "Create Assignment"}
                 </button>
               </div>
             </div>
