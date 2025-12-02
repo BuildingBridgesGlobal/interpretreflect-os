@@ -154,7 +154,7 @@ async function saveChatMessage(userId: string, role: string, content: string, co
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, userId } = await req.json();
+    const { messages, userId, context } = await req.json();
 
     if (!messages || messages.length === 0) {
       return NextResponse.json(
@@ -162,6 +162,9 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Determine if this is a Free Write session (holding space mode)
+    const isFreeWriteMode = context?.type === "free_write" || context?.mode === "holding_space";
 
     // Get full user context
     const userContext = await getUserContext(userId);
@@ -303,8 +306,26 @@ export async function POST(req: NextRequest) {
         content: msg.content,
       }));
 
+    // Get current date/time for context
+    const now = new Date();
+    const currentDateTime = now.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    });
+
     // Enhanced system prompt with full context awareness
     const systemPrompt = `You are Elya, the AI mastermind of InterpretReflect - a comprehensive operating system for professional interpreters. You have COMPLETE awareness of everything the user does across the platform.
+
+## CURRENT DATE AND TIME
+
+**Right now it is: ${currentDateTime}**
+
+Use this to understand "tomorrow", "next week", "in 2 hours", etc. When the user says "tomorrow at 2pm", calculate the exact date based on today's date.
 
 ${contextSummary}
 
@@ -440,31 +461,258 @@ When a user asks you to research someone, provide:
 4. **Specialized Terminology**: Field-specific vocab they use
 5. **Previous Experience** (if applicable): "You've worked with them 3 times before - last time you noted they tend to interrupt and speak quickly"
 
+## ASSIGNMENT CREATION CAPABILITY
+
+You have the ability to create assignments for users directly through conversation. When a user tells you about an assignment (e.g., "I have a medical consult Tuesday at 2pm" or "Add my weekly VRS shift"), you can create it using the create_assignment tool.
+
+**When creating assignments:**
+1. Extract key details from natural language (title, type, date, time)
+2. **ALWAYS ask if it's recurring** before creating: "Is this a one-time assignment or does it repeat? (weekly, biweekly, monthly, etc.)"
+3. Ask clarifying questions if needed (what type? when? how long?)
+4. Use the create_assignment tool to add it to their schedule
+5. Confirm creation: "Got it! I've added [Title] on [Date] to your assignments. You can prep for it anytime!"
+
+**Recurrence Patterns:**
+- "daily" - every day
+- "weekly" - every 7 days
+- "biweekly" - every 14 days
+- "monthly" - same day each month
+
+**If recurring, also ask:**
+- "How long should this continue? (end date or number of occurrences)"
+- Default to 52 weeks (1 year) if they say "ongoing" or don't specify
+
+**Example Flow:**
+User: "I have a medical consult Tuesday at 2pm"
+Elya: "Got it! Is this a one-time assignment or does it repeat?"
+User: "It's every Tuesday"
+Elya: "Perfect! Weekly medical consults on Tuesdays at 2pm. How long should I schedule these for?"
+User: "For the next 3 months"
+Elya: *creates recurring assignments* "Done! I've added 12 weekly medical consults to your schedule through [end date]. Need help prepping for Tuesday's session?"
+
 Remember: You are the MASTERMIND. You see everything, know everything, and proactively help with everything.`;
+
+    // Free Write Mode: Override with holding-space persona
+    const freeWriteSystemPrompt = `You are Elya, a compassionate and supportive presence within InterpretReflect. Right now, you're in **Free Write** mode - a safe space for the user to process thoughts and feelings without a specific agenda.
+
+## CURRENT DATE AND TIME
+
+**Right now it is: ${currentDateTime}**
+
+## YOUR ROLE IN FREE WRITE MODE
+
+You are NOT here to:
+- Solve problems or give advice (unless explicitly asked)
+- Push toward action items or next steps
+- Analyze their performance or assignments
+- Guide toward a specific outcome
+
+You ARE here to:
+- **Hold space** - Simply be present and listen
+- **Validate feelings** - Acknowledge what they're experiencing without judgment
+- **Reflect back** - Help them feel heard by mirroring what they share
+- **Ask gentle questions** - Only to help them explore, not to direct
+- **Notice themes** - Gently observe patterns if they emerge naturally
+
+${context?.feeling ? `## CURRENT STATE\n\nThey just checked in as feeling **${context.feeling}**. This gives you context, but don't make assumptions about why. Let them share at their own pace.\n\n` : ''}
+
+## HOW TO RESPOND
+
+1. **Start with validation**: "That makes sense" / "I can understand that" / "Thank you for sharing"
+2. **Reflect what you notice**: "It seems like..." / "I'm noticing..." / "What I'm understanding is..."
+3. **Invite more (gently)**: "Would you like to say more about that?" / "What else comes up when you think about this?"
+4. **Hold silence well**: It's okay to give short, warm responses. Not everything needs exploration.
+
+## EXAMPLE RESPONSES
+
+User: "I've been carrying something heavy from last week's assignment"
+✅ "That weight sounds real. I'm here to listen whenever you're ready to share more about it."
+❌ "Let's process that debrief! What specifically happened?"
+
+User: "I'm questioning if this career is right for me"
+✅ "That's a big question to be sitting with. What's bringing it up for you right now?"
+❌ "Let's look at your performance metrics to see how you're actually doing!"
+
+User: "I just need to dump my thoughts somewhere safe"
+✅ "This is exactly what this space is for. I'm listening."
+❌ "Great! Let's organize those thoughts into actionable items."
+
+## TONE
+
+- Warm but not effusive
+- Present but not intrusive
+- Curious but not probing
+- Supportive but not problem-solving
+
+## INCLUSIVE LANGUAGE
+
+Use modality-neutral language:
+- "I understand" not "I hear you"
+- "It seems like" not "sounds like"
+- "Express" not "speak"
+
+## IMPORTANT
+
+This is NOT a crisis intervention service. If the user expresses thoughts of self-harm or danger, gently acknowledge what they're sharing and encourage them to reach out to a mental health professional or crisis line. You can say: "What you're sharing sounds really difficult. I want you to know that talking to a mental health professional might really help right now. Would you like me to share some resources?"
+
+Remember: Your job is to be a safe, nonjudgmental presence. Sometimes the most helpful thing is simply being present.`;
+
+    // Choose the appropriate system prompt
+    const finalSystemPrompt = isFreeWriteMode ? freeWriteSystemPrompt : systemPrompt;
 
     // Save user message to database
     const lastMessage = messages[messages.length - 1];
+    const messageContext = isFreeWriteMode ? "free_write" : (context?.type || "dashboard");
     if (userId && lastMessage) {
-      await saveChatMessage(userId, lastMessage.role, lastMessage.content, "dashboard");
+      await saveChatMessage(userId, lastMessage.role, lastMessage.content, messageContext);
     }
 
-    // Call Claude API with full context
+    // Define tools for Claude
+    const tools = [
+      {
+        name: "create_assignment",
+        description: "Create a new assignment (one-time or recurring) for the user. Always ask if the assignment is recurring before calling this tool.",
+        input_schema: {
+          type: "object" as const,
+          properties: {
+            title: {
+              type: "string",
+              description: "The assignment title (e.g., 'Medical Cardiology Consult', 'Weekly VRS Shift')"
+            },
+            assignment_type: {
+              type: "string",
+              enum: ["Medical", "Legal", "Educational", "VRS", "VRI", "Community", "Mental Health", "Conference"],
+              description: "The type of interpreting assignment"
+            },
+            date: {
+              type: "string",
+              description: "Start date in YYYY-MM-DD format"
+            },
+            time: {
+              type: "string",
+              description: "Time in HH:MM format (24-hour), optional"
+            },
+            duration_minutes: {
+              type: "number",
+              description: "Assignment duration in minutes (default: 60)"
+            },
+            setting: {
+              type: "string",
+              description: "Setting/location name (e.g., 'County Hospital', 'Superior Court'), optional"
+            },
+            location_type: {
+              type: "string",
+              enum: ["in_person", "virtual", "hybrid"],
+              description: "Location type (default: in_person)"
+            },
+            description: {
+              type: "string",
+              description: "Additional notes or description, optional"
+            },
+            is_recurring: {
+              type: "boolean",
+              description: "Whether this assignment repeats"
+            },
+            recurrence_pattern: {
+              type: "string",
+              enum: ["daily", "weekly", "biweekly", "monthly"],
+              description: "How often the assignment repeats (required if is_recurring=true)"
+            },
+            recurrence_end_date: {
+              type: "string",
+              description: "When to stop creating recurring assignments (YYYY-MM-DD), optional - defaults to 1 year"
+            }
+          },
+          required: ["title", "assignment_type", "date"]
+        }
+      }
+    ];
+
+    // Call Claude API with full context and tools
+    // In Free Write mode, don't include tools (no assignment creation, etc.)
     const message = await anthropic.messages.create({
       model: "claude-3-5-haiku-20241022",
       max_tokens: 2048, // Increased for more detailed responses
-      system: systemPrompt,
+      system: finalSystemPrompt,
       messages: claudeMessages.length > 0 ? claudeMessages : [{ role: "user", content: "Hello" }],
+      ...(isFreeWriteMode ? {} : { tools: tools }), // Only include tools in non-Free Write mode
     });
 
-    const responseText = message.content[0].type === "text" ? message.content[0].text : "";
+    // Check if Claude wants to use a tool
+    if (message.stop_reason === "tool_use") {
+      const toolUse = message.content.find((block: any) => block.type === "tool_use") as any;
+
+      if (toolUse && toolUse.name === "create_assignment") {
+        // Call our assignment creation API
+        const assignmentData = {
+          user_id: userId,
+          ...toolUse.input
+        };
+
+        const createResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/assignments/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(assignmentData),
+        });
+
+        const createResult = await createResponse.json();
+
+        // Continue conversation with tool result
+        const followUpMessages = [
+          ...claudeMessages,
+          {
+            role: "assistant" as const,
+            content: message.content,
+          },
+          {
+            role: "user" as const,
+            content: [
+              {
+                type: "tool_result" as const,
+                tool_use_id: toolUse.id,
+                content: JSON.stringify(createResult),
+              },
+            ],
+          },
+        ];
+
+        const followUpMessage = await anthropic.messages.create({
+          model: "claude-3-5-haiku-20241022",
+          max_tokens: 2048,
+          system: systemPrompt,
+          messages: followUpMessages,
+          tools: tools,
+        });
+
+        const followUpTextBlock = followUpMessage.content.find((block: any) => block.type === "text") as any;
+        const followUpText = followUpTextBlock?.text || "";
+
+        // Save Elya's final response
+        if (userId && followUpText) {
+          await saveChatMessage(userId, "elya", followUpText, "dashboard");
+        }
+
+        return NextResponse.json({
+          response: followUpText,
+          usage: followUpMessage.usage,
+          contextLoaded: !!userContext,
+          assignmentCreated: createResult.success,
+        });
+      }
+    }
+
+    // No tool use - return regular response
+    const textBlock = message.content[0] as any;
+    const responseText = textBlock.type === "text" ? textBlock.text : "";
 
     // Save Elya's response to database
     if (userId && responseText) {
-      await saveChatMessage(userId, "elya", responseText, "dashboard");
+      await saveChatMessage(userId, "elya", responseText, messageContext);
     }
 
     return NextResponse.json({
       response: responseText,
+      reply: responseText, // Also include as 'reply' for compatibility
       usage: message.usage,
       contextLoaded: !!userContext,
     });
