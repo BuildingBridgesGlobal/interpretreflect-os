@@ -35,16 +35,18 @@ export default function ForAgenciesPage() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
-                href="/signup/agency"
+                href="https://lunacal.ai/interpretreflect/agency-discovery-call-interpretreflect"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-8 py-4 text-base font-semibold shadow-lg shadow-teal-400/30 hover:bg-teal-300 transition"
               >
-                Start Free Trial
+                Schedule Discovery Call
               </a>
               <a
-                href="#demo"
+                href="#features"
                 className="inline-flex items-center justify-center rounded-lg border-2 border-slate-600 text-slate-200 px-8 py-4 text-base font-semibold hover:bg-slate-800 transition"
               >
-                Schedule Demo
+                Learn More
               </a>
             </div>
 
@@ -289,21 +291,23 @@ export default function ForAgenciesPage() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
-                href="/signup/agency"
+                href="https://lunacal.ai/interpretreflect/agency-discovery-call-interpretreflect"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-8 py-4 text-lg font-semibold shadow-lg shadow-teal-400/30 hover:bg-teal-300 transition"
               >
-                Start Free Trial
+                Schedule Discovery Call
               </a>
               <a
-                href="mailto:info@interpretreflect.com?subject=Agency Demo Request"
+                href="mailto:info@interpretreflect.com?subject=Agency Inquiry"
                 className="inline-flex items-center justify-center rounded-lg border-2 border-slate-600 text-slate-200 px-8 py-4 text-lg font-semibold hover:bg-slate-800 transition"
               >
-                Schedule Demo
+                Email Us
               </a>
             </div>
 
             <p className="text-sm text-slate-500 mt-6">
-              Or email us at info@interpretreflect.com
+              Questions? Email us at info@interpretreflect.com
             </p>
           </div>
         </section>
