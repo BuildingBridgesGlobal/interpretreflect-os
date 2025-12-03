@@ -41,7 +41,7 @@ export default function NavBar() {
   }, []);
 
   const checkAgencyAdmin = async (userId: string) => {
-    const { data: membership } = await supabase
+    const { data: membership } = await (supabase as any)
       .from("organization_members")
       .select("role")
       .eq("user_id", userId)

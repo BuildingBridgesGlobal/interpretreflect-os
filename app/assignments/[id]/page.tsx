@@ -38,10 +38,9 @@ type CommunityMember = {
   id: string;
   user_id: string;
   display_name: string;
-  years_experience: string;
-  settings_work_in: string[];
-  is_deaf_interpreter: boolean;
-  open_to_mentoring: boolean;
+  years_experience: number | string | null;
+  specialties: string[] | null;
+  open_to_mentoring: boolean | null;
 };
 
 export default function AssignmentDetailPage() {
@@ -171,10 +170,9 @@ export default function AssignmentDetailPage() {
         id: m.id,
         user_id: m.user_id,
         display_name: m.display_name || "Anonymous",
-        years_experience: m.years_experience || "Unknown",
-        settings_work_in: m.settings_work_in || [],
-        is_deaf_interpreter: m.is_deaf_interpreter || false,
-        open_to_mentoring: m.open_to_mentoring || false
+        years_experience: m.years_experience,
+        specialties: m.specialties,
+        open_to_mentoring: m.open_to_mentoring
       })));
     }
 
@@ -244,7 +242,7 @@ export default function AssignmentDetailPage() {
   // Filter community members by search query
   const filteredCommunityMembers = communityMembers.filter(member =>
     member.display_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    member.settings_work_in.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
+    (member.specialties || []).some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleStatusUpdate = async (newStatus: string) => {
@@ -673,13 +671,10 @@ export default function AssignmentDetailPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-100 truncate">
                         {member.display_name}
-                        {member.is_deaf_interpreter && (
-                          <span className="ml-2 text-xs text-teal-400">DI</span>
-                        )}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {member.years_experience}
-                        {member.settings_work_in.length > 0 && ` • ${member.settings_work_in.slice(0, 2).join(", ")}`}
+                        {member.years_experience ? `${member.years_experience} years` : ""}
+                        {(member.specialties || []).length > 0 && ` • ${(member.specialties || []).slice(0, 2).join(", ")}`}
                       </p>
                     </div>
                     <button

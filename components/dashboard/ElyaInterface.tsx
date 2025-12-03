@@ -41,6 +41,7 @@ const modeConfig: Record<ElyaMode, {
   placeholder: string;
   placeholderWithAssignment: string;
   description: string;
+  tooltip: string;
   showAssignmentSelector: boolean;
   icon: JSX.Element;
 }> = {
@@ -55,6 +56,7 @@ const modeConfig: Record<ElyaMode, {
     placeholder: "Ask me anything about interpreting, your career, or how I can help...",
     placeholderWithAssignment: "Ask me anything...",
     description: "General conversation",
+    tooltip: "Ask questions about interpreting, get career advice, or just chat",
     showAssignmentSelector: false,
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
   },
@@ -69,6 +71,7 @@ const modeConfig: Record<ElyaMode, {
     placeholder: "Select an assignment above, or describe what you're preparing for...",
     placeholderWithAssignment: "What do you want to focus on for this assignment?",
     description: "Prepare for assignments",
+    tooltip: "Get ready for upcoming assignments with context, terminology, and strategies",
     showAssignmentSelector: true,
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
   },
@@ -83,6 +86,7 @@ const modeConfig: Record<ElyaMode, {
     placeholder: "Select an assignment above, or tell me about a recent session...",
     placeholderWithAssignment: "How did it go? What stood out to you?",
     description: "Reflect on sessions",
+    tooltip: "Reflect on completed assignments to identify what went well and areas to grow",
     showAssignmentSelector: true,
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
   },
@@ -97,6 +101,7 @@ const modeConfig: Record<ElyaMode, {
     placeholder: "What terminology, domain, or topic do you want to explore?",
     placeholderWithAssignment: "What vocabulary or context do you need for this assignment?",
     description: "Vocab & terminology",
+    tooltip: "Research terminology, domain-specific vocabulary, and background context",
     showAssignmentSelector: true,
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
   },
@@ -111,6 +116,7 @@ const modeConfig: Record<ElyaMode, {
     placeholder: "Ask about trends in your work, recurring challenges, or growth areas...",
     placeholderWithAssignment: "What patterns do you notice in assignments like this?",
     description: "Analyze your growth",
+    tooltip: "Discover trends in your work, recurring challenges, and track your growth over time",
     showAssignmentSelector: true,
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
   },
@@ -125,12 +131,22 @@ const modeConfig: Record<ElyaMode, {
     placeholder: "This is your space. Write whatever you need to process...",
     placeholderWithAssignment: "Process your thoughts about this assignment...",
     description: "Emotional processing",
+    tooltip: "A safe space to process emotions, vent, or write freely without judgment",
     showAssignmentSelector: true,
     icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
   }
 };
 
-const OPENING_MESSAGE = "Hi! I'm Elya, your AI interpreter co-pilot. I'm here to help you prep, debrief, research, analyze patterns, or just talk through whatever's on your mind. What would you like to work on?";
+const OPENING_MESSAGE = "Hi! I'm Elya, your AI interpreter co-pilot. I'm here to help you prep, debrief, research, analyze patterns, or just talk through whatever's on your mind. You can also tell me about an upcoming assignment and I'll automatically add it to your calendar. What would you like to work on?";
+
+// Post-debrief feeling options (matches wellness check-in options)
+const postDebriefFeelings = [
+  { id: "energized", label: "Energized", emoji: "⚡", color: "emerald", description: "Feeling great" },
+  { id: "calm", label: "Calm", emoji: "🌊", color: "teal", description: "At peace" },
+  { id: "okay", label: "Okay", emoji: "🌤️", color: "amber", description: "Neutral" },
+  { id: "overwhelmed", label: "Overwhelmed", emoji: "🌀", color: "orange", description: "Stressed" },
+  { id: "drained", label: "Drained", emoji: "🔋", color: "rose", description: "Tired" },
+] as const;
 
 export default function ElyaInterface({ userData, preFillMessage, onMessageSent, recentAssignments = [], initialMode = "chat" }: ElyaInterfaceProps) {
   const [input, setInput] = useState("");
@@ -143,6 +159,10 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [showWellnessPrompt, setShowWellnessPrompt] = useState(false);
+  const [wellnessSubmitted, setWellnessSubmitted] = useState(false);
+  const [submittingWellness, setSubmittingWellness] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -178,10 +198,11 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
 
       if (existingConvo) {
         setConversationId(existingConvo.id);
-        setMode(existingConvo.mode || "chat");
+        setMode((existingConvo.mode as ElyaMode) || "chat");
         setSelectedAssignment(existingConvo.assignment_id || null);
-        if (existingConvo.messages && existingConvo.messages.length > 0) {
-          setMessages(existingConvo.messages.map((msg: any) => ({
+        const messages = existingConvo.messages as any[] | null;
+        if (messages && messages.length > 0) {
+          setMessages(messages.map((msg: any) => ({
             ...msg,
             timestamp: new Date(msg.timestamp)
           })));
@@ -254,6 +275,55 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Show wellness prompt after meaningful debrief/free-write conversation
+  useEffect(() => {
+    // Only show for debrief or free-write mode with an assignment selected
+    if ((mode === "debrief" || mode === "free-write") && selectedAssignment && !wellnessSubmitted && !showWellnessPrompt) {
+      // Count user messages (excluding opening message and loading states)
+      const userMessageCount = messages.filter(m => m.role === "user").length;
+      // Show after 3+ user messages (indicates a meaningful conversation)
+      if (userMessageCount >= 3) {
+        setShowWellnessPrompt(true);
+      }
+    }
+  }, [messages, mode, selectedAssignment, wellnessSubmitted, showWellnessPrompt]);
+
+  // Submit post-debrief wellness check-in
+  const submitWellnessCheckin = async (feeling: string) => {
+    if (!userData?.id || !selectedAssignment) return;
+
+    setSubmittingWellness(true);
+    try {
+      const response = await fetch("/api/wellness", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userData.id,
+          feeling,
+          assignment_id: selectedAssignment,
+          assignment_type: selectedAssignmentData?.assignment_type || null,
+          is_post_debrief: true,
+        }),
+      });
+
+      if (response.ok) {
+        setWellnessSubmitted(true);
+        setShowWellnessPrompt(false);
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => setWellnessSubmitted(false), 5000);
+      } else {
+        // If API fails, just hide the prompt silently
+        console.warn("Wellness check-in failed, hiding prompt");
+        setShowWellnessPrompt(false);
+      }
+    } catch (error) {
+      console.error("Error submitting wellness check-in:", error);
+      // Hide prompt on error to prevent stuck UI
+      setShowWellnessPrompt(false);
+    }
+    setSubmittingWellness(false);
+  };
 
   // Initialize speech recognition
   useEffect(() => {
@@ -392,8 +462,12 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
     }
   };
 
-  const startNewConversation = async () => {
-    if (!confirm("Start a new conversation? Your current chat will be saved.")) return;
+  const startNewConversation = () => {
+    setShowNewChatModal(true);
+  };
+
+  const confirmNewConversation = async () => {
+    setShowNewChatModal(false);
 
     // Mark current conversation as inactive
     if (conversationId) {
@@ -407,6 +481,9 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
     setConversationId(null);
     setSelectedAssignment(null);
     setMessages([{ role: "elya", content: OPENING_MESSAGE, timestamp: new Date() }]);
+    // Reset wellness prompt state
+    setShowWellnessPrompt(false);
+    setWellnessSubmitted(false);
   };
 
   const modes: ElyaMode[] = ["chat", "prep", "debrief", "research", "patterns", "free-write"];
@@ -546,33 +623,123 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
         {/* Mode Buttons + Input Area */}
         <div className="px-4 py-4 bg-slate-950/50 border-t border-slate-800 flex-shrink-0 space-y-3">
 
+          {/* Post-Debrief Wellness Prompt */}
+          <AnimatePresence>
+            {showWellnessPrompt && !wellnessSubmitted && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="rounded-xl border border-violet-500/30 bg-gradient-to-r from-violet-500/10 to-purple-500/10 p-4 mb-3">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">💜</span>
+                      <div>
+                        <p className="text-sm font-medium text-slate-200">How are you feeling after this session?</p>
+                        <p className="text-xs text-slate-400">Optional - helps track how different assignments affect you</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowWellnessPrompt(false)}
+                      className="text-slate-500 hover:text-slate-300 transition-colors p-1"
+                      title="Dismiss"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {postDebriefFeelings.map((feeling) => {
+                      const colorClasses: Record<string, string> = {
+                        emerald: "bg-emerald-500/20 border-emerald-500/40 hover:bg-emerald-500/30 text-emerald-300",
+                        teal: "bg-teal-500/20 border-teal-500/40 hover:bg-teal-500/30 text-teal-300",
+                        amber: "bg-amber-500/20 border-amber-500/40 hover:bg-amber-500/30 text-amber-300",
+                        rose: "bg-rose-500/20 border-rose-500/40 hover:bg-rose-500/30 text-rose-300",
+                        orange: "bg-orange-500/20 border-orange-500/40 hover:bg-orange-500/30 text-orange-300",
+                      };
+                      return (
+                        <motion.button
+                          key={feeling.id}
+                          onClick={() => submitWellnessCheckin(feeling.id)}
+                          disabled={submittingWellness}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${colorClasses[feeling.color]}`}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <span>{feeling.emoji}</span>
+                          <span>{feeling.label}</span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Wellness Submitted Confirmation */}
+          <AnimatePresence>
+            {wellnessSubmitted && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 mb-2"
+              >
+                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm text-emerald-300">Feeling logged - see trends on the Wellness page</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Mode Selection Buttons */}
           <div className="flex flex-wrap gap-2">
-            {modes.map((m) => {
+            {modes.map((m, index) => {
               const config = modeConfig[m];
               const isActive = mode === m;
+              // Position tooltip to the right for first 2 buttons to prevent off-screen
+              const isLeftEdge = index < 2;
               return (
-                <motion.button
-                  key={m}
-                  onClick={() => {
-                    setMode(m);
-                    // Clear assignment selection when switching modes
-                    if (!config.showAssignmentSelector) {
-                      setSelectedAssignment(null);
-                    }
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-200 ${
-                    isActive
-                      ? `bg-gradient-to-r ${config.bgGradient} text-white shadow-lg`
-                      : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-300 border border-slate-700"
-                  }`}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  layout
-                >
-                  {config.icon}
-                  {config.label}
-                </motion.button>
+                <div key={m} className="relative group">
+                  <motion.button
+                    onClick={() => {
+                      setMode(m);
+                      // Clear assignment selection when switching modes
+                      if (!config.showAssignmentSelector) {
+                        setSelectedAssignment(null);
+                      }
+                      // Hide wellness prompt when switching away from debrief/free-write
+                      if (m !== "debrief" && m !== "free-write") {
+                        setShowWellnessPrompt(false);
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-200 ${
+                      isActive
+                        ? `bg-gradient-to-r ${config.bgGradient} text-white shadow-lg`
+                        : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-300 border border-slate-700"
+                    }`}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    layout
+                  >
+                    {config.icon}
+                    {config.label}
+                  </motion.button>
+                  {/* Tooltip with 800ms delay */}
+                  <div className={`absolute bottom-full mb-2 w-44 px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-200 text-center leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-[800ms] pointer-events-none z-50 shadow-xl ${
+                    isLeftEdge ? 'left-0' : 'left-1/2 -translate-x-1/2'
+                  }`}>
+                    {config.tooltip}
+                    <div className={`absolute top-full border-4 border-transparent border-t-slate-800 ${
+                      isLeftEdge ? 'left-4' : 'left-1/2 -translate-x-1/2'
+                    }`}></div>
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -627,6 +794,39 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
           </div>
         </div>
       </div>
+
+      {/* New Chat Confirmation Modal */}
+      {showNewChatModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl border border-slate-700 max-w-sm w-full p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-slate-100">Start New Chat?</h3>
+            </div>
+            <p className="text-sm text-slate-300 mb-6">
+              Your current conversation will be saved and you can start fresh with Elya.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowNewChatModal(false)}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmNewConversation}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-violet-500 hover:bg-violet-400 text-white font-medium text-sm transition-colors"
+              >
+                Start New Chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

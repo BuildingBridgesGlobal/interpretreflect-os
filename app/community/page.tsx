@@ -11,10 +11,9 @@ interface CommunityMember {
   user_id: string;
   display_name: string;
   bio: string | null;
-  years_experience: string;
-  settings_work_in: string[];
-  is_deaf_interpreter: boolean;
-  open_to_mentoring: boolean;
+  years_experience: number | string | null;
+  specialties: string[] | null;
+  open_to_mentoring: boolean | null;
   avatar: string;
 }
 
@@ -22,18 +21,18 @@ interface Conversation {
   id: string;
   name: string | null;
   is_group: boolean;
-  created_at: string;
-  participants: { user_id: string; display_name: string; avatar: string }[];
-  last_message?: { content: string; created_at: string; sender_name: string };
+  created_at: string | null;
+  participants: { user_id: string | null; display_name: string; avatar: string }[];
+  last_message?: { content: string; created_at: string | null; sender_name: string };
   unread_count: number;
 }
 
 interface Message {
   id: string;
   content: string;
-  sender_id: string;
+  sender_id: string | null;
   sender_name: string;
-  created_at: string;
+  created_at: string | null;
 }
 
 export default function CommunityPage() {
@@ -86,10 +85,9 @@ export default function CommunityPage() {
         user_id: m.user_id,
         display_name: m.display_name || "Anonymous",
         bio: m.bio,
-        years_experience: m.years_experience || "Unknown",
-        settings_work_in: m.settings_work_in || [],
-        is_deaf_interpreter: m.is_deaf_interpreter || false,
-        open_to_mentoring: m.open_to_mentoring || false,
+        years_experience: m.years_experience,
+        specialties: m.specialties,
+        open_to_mentoring: m.open_to_mentoring,
         avatar: (m.display_name || "A").split(" ").map((n: string) => n[0]).join("").substring(0, 2).toUpperCase()
       })));
     }
@@ -128,10 +126,10 @@ export default function CommunityPage() {
         .eq("conversation_id", conv.id);
 
       // Get display names for participants
-      const participantList: { user_id: string; display_name: string; avatar: string }[] = [];
+      const participantList: { user_id: string | null; display_name: string; avatar: string }[] = [];
       if (participants) {
         for (const part of participants) {
-          if (part.user_id === userId) continue;
+          if (!part.user_id || part.user_id === userId) continue;
           const { data: profile } = await supabase
             .from("community_profiles")
             .select("display_name")
@@ -193,7 +191,7 @@ export default function CommunityPage() {
           const { data: profile } = await supabase
             .from("community_profiles")
             .select("display_name")
-            .eq("user_id", m.sender_id)
+            .eq("user_id", m.sender_id || "")
             .single();
           senderName = profile?.display_name || "Unknown";
         }
@@ -539,7 +537,7 @@ export default function CommunityPage() {
                           </div>
                           <div className="text-left">
                             <p className="text-sm text-slate-100">{member.display_name}</p>
-                            <p className="text-xs text-slate-500">{member.settings_work_in.join(", ") || "No specialties listed"}</p>
+                            <p className="text-xs text-slate-500">{(member.specialties || []).join(", ") || "No specialties listed"}</p>
                           </div>
                         </button>
                       ))}
@@ -735,11 +733,6 @@ export default function CommunityPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <h4 className="font-semibold text-slate-100">{member.display_name}</h4>
-                            {member.is_deaf_interpreter && (
-                              <span className="px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-400 text-xs">
-                                DI
-                              </span>
-                            )}
                             {member.open_to_mentoring && (
                               <span className="px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-400 text-xs">
                                 Mentor
@@ -747,7 +740,7 @@ export default function CommunityPage() {
                             )}
                           </div>
                           <p className="text-sm text-slate-400 mb-2">
-                            {member.years_experience} · {member.settings_work_in.join(", ") || "No specialties listed"}
+                            {member.years_experience} · {(member.specialties || []).join(", ") || "No specialties listed"}
                           </p>
                           {member.bio && (
                             <p className="text-sm text-slate-300 mb-3">{member.bio}</p>
@@ -805,7 +798,7 @@ export default function CommunityPage() {
                               <h4 className="font-semibold text-slate-100">{member.display_name}</h4>
                             </div>
                             <p className="text-sm text-slate-400 mb-2">
-                              {member.years_experience} · {member.settings_work_in.join(", ") || "No specialties listed"}
+                              {member.years_experience} · {(member.specialties || []).join(", ") || "No specialties listed"}
                             </p>
                             {member.bio && (
                               <p className="text-sm text-slate-300 mb-3">{member.bio}</p>
@@ -909,7 +902,7 @@ export default function CommunityPage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-slate-100">{member.display_name}</p>
-                                <p className="text-xs text-slate-500 truncate">{member.settings_work_in.join(", ") || member.years_experience}</p>
+                                <p className="text-xs text-slate-500 truncate">{(member.specialties || []).join(", ") || member.years_experience}</p>
                               </div>
                               <button
                                 onClick={() => {
@@ -1107,7 +1100,7 @@ export default function CommunityPage() {
                           <div className="flex items-center justify-between mb-1">
                             <span className="font-medium text-slate-100 truncate">{getConversationName(conv)}</span>
                             {conv.last_message && (
-                              <span className="text-xs text-slate-500">{formatTime(conv.last_message.created_at)}</span>
+                              <span className="text-xs text-slate-500">{formatTime(conv.last_message.created_at || "")}</span>
                             )}
                           </div>
                           {conv.last_message ? (
@@ -1162,7 +1155,7 @@ export default function CommunityPage() {
                           }`}>
                             <p className="text-sm">{msg.content}</p>
                             <p className={`text-xs mt-1 ${msg.sender_name === "You" ? "text-teal-800" : "text-slate-500"}`}>
-                              {formatTime(msg.created_at)}
+                              {formatTime(msg.created_at || "")}
                             </p>
                           </div>
                         </div>
@@ -1422,7 +1415,7 @@ export default function CommunityPage() {
                           <p className={`font-medium ${isSelected ? "text-teal-400" : "text-slate-100"}`}>
                             {member.display_name}
                           </p>
-                          <p className="text-xs text-slate-500">{member.settings_work_in.join(", ") || member.years_experience}</p>
+                          <p className="text-xs text-slate-500">{(member.specialties || []).join(", ") || member.years_experience}</p>
                         </div>
                         {isSelected && (
                           <div className="w-6 h-6 rounded-full bg-teal-500 flex items-center justify-center">

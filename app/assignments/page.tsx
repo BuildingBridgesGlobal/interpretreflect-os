@@ -28,8 +28,10 @@ type Assignment = {
 
 type FreeWriteSession = {
   id: string;
-  created_at: string;
-  messages: { role: string; content: string; timestamp: string }[];
+  created_at: string | null;
+  summary?: string | null;
+  detected_themes?: any;
+  messages?: { role: string; content: string; timestamp: string }[];
 };
 
 export default function AssignmentsPage() {
@@ -126,7 +128,7 @@ export default function AssignmentsPage() {
     if (!error && assignmentsWithFreeWrites) {
       setAssignments(assignmentsWithFreeWrites as any);
     }
-    setFreeWriteSessions(unlinkedSessions);
+    setFreeWriteSessions(unlinkedSessions as any);
 
     // Load templates
     const templatesResponse = await fetch(`/api/assignments/templates?user_id=${session.user.id}`);
@@ -708,7 +710,7 @@ export default function AssignmentsPage() {
                         >
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs text-slate-400">
-                              {formatDateTime(session.created_at)}
+                              {formatDateTime(session.created_at || "")}
                             </span>
                             <button
                               onClick={(e) => {
@@ -724,7 +726,7 @@ export default function AssignmentsPage() {
                           </div>
                           {expandedFreeWrite === session.id ? (
                             <div className="space-y-2 mt-3">
-                              {session.messages.filter(m => m.role === "user").map((msg, idx) => (
+                              {(session.messages || []).filter(m => m.role === "user").map((msg, idx) => (
                                 <p key={idx} className="text-sm text-slate-200 whitespace-pre-wrap">
                                   {msg.content}
                                 </p>
@@ -732,7 +734,7 @@ export default function AssignmentsPage() {
                             </div>
                           ) : (
                             <p className="text-sm text-slate-300 truncate">
-                              {session.messages.find(m => m.role === "user")?.content || "No content"}
+                              {(session.messages || []).find(m => m.role === "user")?.content || "No content"}
                             </p>
                           )}
                         </div>
@@ -759,7 +761,7 @@ export default function AssignmentsPage() {
                       <span className="text-sm font-medium text-purple-300">Free Write</span>
                     </div>
                     <span className="text-xs text-slate-400">
-                      {formatDateTime(session.created_at)}
+                      {formatDateTime(session.created_at || "")}
                     </span>
                   </div>
                   <button
@@ -770,7 +772,7 @@ export default function AssignmentsPage() {
                   >
                     {expandedFreeWrite === session.id ? (
                       <div className="space-y-2 mt-2">
-                        {session.messages.filter(m => m.role === "user").map((msg, idx) => (
+                        {(session.messages || []).filter(m => m.role === "user").map((msg, idx) => (
                           <p key={idx} className="text-sm text-slate-200 whitespace-pre-wrap">
                             {msg.content}
                           </p>
@@ -780,7 +782,7 @@ export default function AssignmentsPage() {
                     ) : (
                       <>
                         <p className="text-sm text-slate-300 truncate">
-                          {session.messages.find(m => m.role === "user")?.content || "No content"}
+                          {(session.messages || []).find(m => m.role === "user")?.content || "No content"}
                         </p>
                         <p className="text-xs text-purple-300 mt-1">Click to expand</p>
                       </>

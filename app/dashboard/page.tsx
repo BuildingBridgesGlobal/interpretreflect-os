@@ -13,12 +13,12 @@ import { FadeIn, ListItem } from "@/components/ui/motion";
 type Assignment = {
   id: string;
   title: string;
-  assignment_type: string;
-  date: string;
+  assignment_type: string | null;
+  date: string | null;
   time: string | null;
-  completed: boolean;
-  debriefed: boolean;
-  prep_status: string;
+  completed: boolean | null;
+  debriefed: boolean | null;
+  prep_status: string | null;
 };
 
 export default function DashboardPage() {
@@ -65,6 +65,7 @@ export default function DashboardPage() {
 
       if (pastAssignments && pastAssignments.length > 0) {
         const toComplete = pastAssignments.filter(a => {
+          if (!a.date) return false;
           // If date is in the past, mark complete
           if (a.date < today) return true;
           // If date is today and time has passed, mark complete
@@ -210,7 +211,7 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
           >
-            {/* Welcome Header - Compact */}
+            {/* Welcome Header with Elya Introduction */}
             <div className="mb-4">
               <motion.h1
                 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-purple-400"
@@ -220,6 +221,14 @@ export default function DashboardPage() {
               >
                 Hi{userData?.full_name ? `, ${userData.full_name.split(' ')[0]}` : ''}!
               </motion.h1>
+              <motion.p
+                className="text-sm text-slate-400 mt-1"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                I'm <span className="text-violet-400 font-medium">Elya</span>, your AI companion for interpreting work. I can help you prep for assignments, debrief after tough sessions, or just process your thoughts through free writing.
+              </motion.p>
             </div>
 
             {/* Elya Chat Interface - Takes full remaining height */}
@@ -233,16 +242,16 @@ export default function DashboardPage() {
                   ...(nextAssignment ? [{
                     id: nextAssignment.id,
                     title: nextAssignment.title,
-                    assignment_type: nextAssignment.assignment_type,
-                    date: formatShortDate(nextAssignment.date),
-                    completed: nextAssignment.completed
+                    assignment_type: nextAssignment.assignment_type || "general",
+                    date: formatShortDate(nextAssignment.date || ""),
+                    completed: nextAssignment.completed || false
                   }] : []),
                   ...recentAssignments.map(a => ({
                     id: a.id,
                     title: a.title,
-                    assignment_type: a.assignment_type,
-                    date: formatShortDate(a.date),
-                    completed: a.completed
+                    assignment_type: a.assignment_type || "general",
+                    date: formatShortDate(a.date || ""),
+                    completed: a.completed || false
                   }))
                 ]}
               />
@@ -267,7 +276,7 @@ export default function DashboardPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <p className="text-xs font-semibold text-violet-300 mb-1">UP NEXT</p>
-                    <p className="text-xs text-slate-400">{formatDate(nextAssignment.date, nextAssignment.time)}</p>
+                    <p className="text-xs text-slate-400">{formatDate(nextAssignment.date || "", nextAssignment.time)}</p>
                   </div>
                   <span className="px-2 py-1 rounded-md bg-violet-500/20 text-violet-300 text-xs font-semibold border border-violet-500/30">
                     {nextAssignment.assignment_type || 'Assignment'}
@@ -335,7 +344,7 @@ export default function DashboardPage() {
                   >
                     <div className="flex-1 min-w-0">
                       <h4 className="text-sm font-semibold text-slate-100 truncate">{assignment.title}</h4>
-                      <p className="text-xs text-slate-500">{formatShortDate(assignment.date)}</p>
+                      <p className="text-xs text-slate-500">{formatShortDate(assignment.date || "")}</p>
                     </div>
                     <div className="flex-shrink-0">
                       {assignment.debriefed ? (

@@ -174,7 +174,7 @@ export async function GET(req: NextRequest) {
       `)
       .eq("is_group", true);
 
-    let matchingConversation = null;
+    let matchingConversation: any = null;
 
     if (conversations) {
       for (const conv of conversations) {
