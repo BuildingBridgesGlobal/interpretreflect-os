@@ -57,7 +57,7 @@ export default function AdminOnboardingPage() {
       }
 
       // Update user's profile with organization_id and set role to admin
-      const { error: profileError } = await supabase
+      const { error: profileError } = await (supabase as any)
         .from("profiles")
         .update({
           organization_id: org.id,
