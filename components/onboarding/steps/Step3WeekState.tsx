@@ -155,7 +155,7 @@ export default function Step3WeekState({
 
       <div className="rounded-lg border border-violet-400/30 bg-violet-400/5 p-4">
         <p className="text-[0.8rem] text-violet-200">
-          💡 Based on your answers, we'll personalize your dashboard with resources, reflection prompts, and skill-building exercises tailored to your needs.
+          Based on your answers, we'll personalize your dashboard with resources, reflection prompts, and skill-building exercises tailored to your needs.
         </p>
       </div>
     </div>

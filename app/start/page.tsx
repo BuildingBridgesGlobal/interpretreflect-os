@@ -1,19 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function StartPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const organizationId = searchParams.get("org");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [organizationName, setOrganizationName] = useState<string | null>(null);
 
-  // Check if user is already signed in
+  // Check if user is already signed in AND load organization name if invite link
   useEffect(() => {
     const checkUser = async () => {
       if (!supabase) return;
@@ -24,6 +28,22 @@ export default function StartPage() {
       }
     };
     checkUser();
+
+    // Load organization name if org ID is present
+    const loadOrganization = async () => {
+      if (organizationId && supabase) {
+        const { data } = await supabase
+          .from("organizations")
+          .select("name")
+          .eq("id", organizationId)
+          .single();
+
+        if (data) {
+          setOrganizationName(data.name);
+        }
+      }
+    };
+    loadOrganization();
 
     // Listen for auth state changes (like email confirmation)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -67,6 +87,14 @@ export default function StartPage() {
         setError(signUpError.message);
         setLoading(false);
         return;
+      }
+
+      // If user was invited via organization link, link them to the organization
+      if (data?.user && organizationId) {
+        await supabase
+          .from("profiles")
+          .update({ organization_id: organizationId })
+          .eq("id", data.user.id);
       }
 
       // Check if email confirmation is required
@@ -216,6 +244,25 @@ export default function StartPage() {
             No credit card required • Cancel anytime
           </p>
         </div>
+
+        {/* Organization Invite Banner */}
+        {organizationName && (
+          <div className="mb-6 rounded-xl border border-violet-500/50 bg-violet-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-violet-300 mb-1">
+                  You've been invited to join
+                </p>
+                <p className="text-base font-bold text-slate-100">{organizationName}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Sign Up Form */}
         <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 shadow-2xl">

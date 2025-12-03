@@ -288,7 +288,11 @@ export default function TeamPrepPage() {
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {messages.length === 0 && (
                   <div className="text-center py-8">
-                    <div className="text-4xl mb-2">💬</div>
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-br from-teal-400/20 to-violet-500/20 border border-teal-500/30 flex items-center justify-center">
+                      <svg className="w-6 h-6 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
                     <p className="text-slate-400 text-sm">
                       Start the conversation! Ask Elya for help preparing, or coordinate with your team.
                     </p>
@@ -415,13 +419,13 @@ export default function TeamPrepPage() {
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Resources</h3>
               <div className="space-y-2">
                 <button className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm">
-                  📋 Team Interpreting Checklist
+                  Team Interpreting Checklist
                 </button>
                 <button className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm">
-                  💻 Technical Troubleshooting
+                  Technical Troubleshooting
                 </button>
                 <button className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm">
-                  🌍 Multicultural Teaming Guide
+                  Multicultural Teaming Guide
                 </button>
               </div>
             </div>

@@ -16,7 +16,7 @@ type HeroProps = {
 export const Hero: React.FC<HeroProps> = ({
   headline = "InterpretReflect",
   slogan = "The operating system for your interpreting career.",
-  subhead = "One place for prep, reflection, credentials, and growth. We handle the cognitive load so you can focus on what matters: doing exceptional work.",
+  subhead = "AI-powered prep and debriefs. RAG knowledge base with interpreter-specific resources. Team collaboration built in. Track credentials, build skills, prevent burnout—all in one place.",
   primary = { label: "Try Free for 7 Days", href: "/start" },
   secondary = { label: "See How It Works", href: "#interpreter-os" },
   microcopy = "7-day free trial. No credit card required.",
@@ -38,143 +38,143 @@ export const Hero: React.FC<HeroProps> = ({
       {/* Grid Pattern Overlay */}
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(rgba(6,182,212,0.12)_2px,transparent_2px),linear-gradient(90deg,rgba(6,182,212,0.12)_2px,transparent_2px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_90%)]" />
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-10 md:gap-12 items-center">
-        <div className="md:col-span-5 space-y-6">
-          <h1 className="text-slate-50 text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight">{headline}</h1>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+        <div className="space-y-8">
+          <div className="space-y-4">
+            <h1 className="text-slate-50 text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">{headline}</h1>
 
-          <h2 className="text-slate-200 text-2xl md:text-3xl font-medium">{slogan}</h2>
+            <h2 className="text-slate-300 text-xl md:text-2xl font-medium">{slogan}</h2>
 
-          <p className="text-slate-300 text-xl md:text-2xl leading-relaxed">{subhead}</p>
+            <p className="text-slate-400 text-base md:text-lg leading-relaxed max-w-xl">{subhead}</p>
+          </div>
 
-          <div className="flex flex-wrap gap-4 pt-2">
+          <div className="flex flex-col sm:flex-row gap-4">
             <a
               href={pHref}
-              className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-6 py-3 text-sm md:text-base font-semibold shadow-lg shadow-teal-400/30 hover:bg-teal-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 transition"
+              className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-8 py-4 text-base font-semibold shadow-lg shadow-teal-400/30 hover:bg-teal-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 transition"
             >
               {primary.label}
             </a>
             <a
               href={sHref}
-              className="inline-flex items-center justify-center rounded-lg border border-violet-400/80 text-violet-200 px-6 py-3 text-sm md:text-base font-semibold hover:bg-violet-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 transition"
+              className="inline-flex items-center justify-center rounded-lg border-2 border-slate-600 text-slate-200 px-8 py-4 text-base font-semibold hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 transition"
             >
               {secondary.label}
             </a>
           </div>
 
-          <p className="text-slate-400 text-base">{microcopy}</p>
-
-          <div className="flex flex-wrap gap-4 text-sm text-slate-400">
-            <div className="inline-flex items-center gap-2">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-teal-400" />
-              <span>AI-powered assignment prep</span>
-            </div>
-            <div className="inline-flex items-center gap-2">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400" />
-              <span>Portable credential vault</span>
-            </div>
-            <div className="inline-flex items-center gap-2">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
-              <span>CEU-ready reflections</span>
+          <div className="space-y-3">
+            <p className="text-slate-500 text-sm">{microcopy}</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-400">
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-teal-400" />
+                <span>AI + RAG Knowledge Base</span>
+              </div>
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400" />
+                <span>Team Collaboration</span>
+              </div>
+              <div className="inline-flex items-center gap-2">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                <span>Professional Credentials Tracking</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="md:col-span-7">
+        <div>
           <div className="relative">
             <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.25),_transparent_55%)] opacity-80 blur-3xl" />
 
-            <div className="grid gap-4 md:grid-cols-2">
-              {/* Before: Assignment Prep */}
-              <div className="rounded-2xl border border-teal-500/30 bg-teal-500/5 p-4 shadow-[0_18px_60px_rgba(15,23,42,0.8)]">
-                <div>
-                  <p className="text-[0.7rem] uppercase tracking-wide text-teal-400/80">Before</p>
-                  <p className="mt-1 text-sm text-slate-200">Assignment Prep</p>
+            <div className="grid gap-4 grid-cols-2">
+              {/* Before */}
+              <div className="rounded-xl border border-teal-500/30 bg-gradient-to-br from-teal-500/5 to-transparent p-5">
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-teal-400 mb-1">Before</p>
+                  <p className="text-base font-semibold text-slate-100">Assignment Prep</p>
                 </div>
-
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
-                    <span className="text-slate-300">Research participants</span>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
+                    <span>Research participants</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
-                    <span className="text-slate-300">Build domain mental models</span>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
+                    <span>Build mental models</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
-                    <span className="text-slate-300">Generate vocab by field</span>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
+                    <span>Generate vocab</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
-                    <span className="text-slate-300">Coordinate with team</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* After: Reflection */}
-              <div className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-4">
-                <div>
-                  <p className="text-[0.7rem] uppercase tracking-wide text-violet-400/80">After</p>
-                  <p className="mt-1 text-sm text-slate-200">Growth & Reflection</p>
-                </div>
-
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                    <span className="text-slate-300">Structured debriefs</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                    <span className="text-slate-300">Pattern recognition</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                    <span className="text-slate-300">CEU-ready evidence</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                    <span className="text-slate-300">Skill development path</span>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
+                    <span>Team coordination</span>
                   </div>
                 </div>
               </div>
 
-              {/* Always: Career Infrastructure */}
-              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
-                <div>
-                  <p className="text-[0.7rem] uppercase tracking-wide text-amber-400/80">Always</p>
-                  <p className="mt-1 text-sm text-slate-200">Career Infrastructure</p>
+              {/* After */}
+              <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/5 to-transparent p-5">
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-violet-400 mb-1">After</p>
+                  <p className="text-base font-semibold text-slate-100">Growth & Reflection</p>
                 </div>
-
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    <span className="text-slate-300">Portable credentials</span>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
+                    <span>Structured debriefs</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    <span className="text-slate-300">Professional development</span>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
+                    <span>Pattern recognition</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    <span className="text-slate-300">Burnout drift monitoring</span>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
+                    <span>CEU evidence</span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    <span className="text-slate-300">Support when needed</span>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
+                    <span>Skill development</span>
                   </div>
                 </div>
               </div>
 
-              {/* The OS Benefit */}
-              <div className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 flex flex-col justify-between">
-                <div>
-                  <p className="text-[0.7rem] uppercase tracking-wide text-slate-400">The Result</p>
-                  <p className="mt-1 text-sm font-medium text-slate-100">You focus on interpretation.</p>
-                  <p className="mt-1 text-sm text-slate-300">We handle everything else.</p>
+              {/* Always */}
+              <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent p-5">
+                <div className="mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-1">Always</p>
+                  <p className="text-base font-semibold text-slate-100">Career Infrastructure</p>
                 </div>
-                <div className="mt-4 rounded-xl bg-slate-950/80 px-3 py-3">
-                  <p className="text-[0.75rem] text-slate-300">
-                    <span className="text-teal-300 font-medium">Less cognitive load.</span> More presence. Better outcomes for everyone you serve.
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-amber-400 flex-shrink-0" />
+                    <span>RAG knowledge base</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-amber-400 flex-shrink-0" />
+                    <span>Team collaboration</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-amber-400 flex-shrink-0" />
+                    <span>Credentials tracking</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="h-1 w-1 rounded-full bg-amber-400 flex-shrink-0" />
+                    <span>Skills & wellness</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Result */}
+              <div className="rounded-xl border border-slate-600/50 bg-gradient-to-br from-slate-700/20 to-transparent p-5 flex flex-col justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">The Result</p>
+                  <p className="text-base font-semibold text-slate-100 mb-2">You focus on interpretation.</p>
+                  <p className="text-xs text-slate-400">We handle everything else.</p>
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-700">
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    <span className="text-teal-300 font-semibold">Less cognitive load.</span> More presence.
                   </p>
                 </div>
               </div>

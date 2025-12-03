@@ -10,8 +10,10 @@ export default function NavBar() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     // Check if user is logged in
     if (supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
@@ -50,7 +52,7 @@ export default function NavBar() {
           </Link>
 
           {/* Navigation Links - Only show if user is logged in */}
-          {user && (
+          {mounted && user && (
             <div className="hidden md:flex items-center gap-6">
               <Link
                 href="/dashboard"
@@ -102,22 +104,15 @@ export default function NavBar() {
               >
                 Wellness
               </Link>
-              <Link
-                href="/history"
-                className={`text-sm font-medium transition-colors ${
-                  isActive("/history")
-                    ? "text-teal-400"
-                    : "text-slate-300 hover:text-teal-300"
-                }`}
-              >
-                History
-              </Link>
             </div>
           )}
 
           {/* Auth Buttons */}
           <div className="flex items-center gap-3">
-            {user ? (
+            {!mounted ? (
+              // Placeholder to prevent hydration mismatch - shows nothing during SSR
+              <div className="h-10 w-24" />
+            ) : user ? (
               <>
                 <div className="relative">
                   <button

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 
@@ -20,11 +20,21 @@ type Assignment = {
   status: string;
   description: string;
   prep_status: string;
+  debriefed?: boolean;
+  completed?: boolean;
   team_members?: any[];
+  free_write_sessions?: FreeWriteSession[];
+};
+
+type FreeWriteSession = {
+  id: string;
+  created_at: string;
+  messages: { role: string; content: string; timestamp: string }[];
 };
 
 export default function AssignmentsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -36,6 +46,8 @@ export default function AssignmentsPage() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const [freeWriteSessions, setFreeWriteSessions] = useState<FreeWriteSession[]>([]);
+  const [expandedFreeWrite, setExpandedFreeWrite] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -57,8 +69,13 @@ export default function AssignmentsPage() {
   const [teamRoles, setTeamRoles] = useState<string[]>(["team"]);
 
   useEffect(() => {
+    // Check for tab parameter from URL (for redirects from /history)
+    const tab = searchParams.get('tab');
+    if (tab === 'past') {
+      setSelectedTab('past');
+    }
     loadData();
-  }, []);
+  }, [searchParams]);
 
   const loadData = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -83,9 +100,33 @@ export default function AssignmentsPage() {
       `)
       .order("date", { ascending: true });
 
-    if (!error && assignmentsData) {
-      setAssignments(assignmentsData as any);
+    // Load free write sessions
+    const { data: freeWriteData } = await supabase
+      .from("free_write_sessions")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false });
+
+    // Attach free write sessions to their assignments
+    const assignmentsWithFreeWrites = (assignmentsData || []).map((assignment: any) => {
+      const linkedSessions = (freeWriteData || []).filter(
+        (fw: any) => fw.assignment_id === assignment.id
+      );
+      return {
+        ...assignment,
+        free_write_sessions: linkedSessions
+      };
+    });
+
+    // Get unlinked free write sessions (not attached to any assignment)
+    const unlinkedSessions = (freeWriteData || []).filter(
+      (fw: any) => !fw.assignment_id
+    );
+
+    if (!error && assignmentsWithFreeWrites) {
+      setAssignments(assignmentsWithFreeWrites as any);
     }
+    setFreeWriteSessions(unlinkedSessions);
 
     // Load templates
     const templatesResponse = await fetch(`/api/assignments/templates?user_id=${session.user.id}`);
@@ -148,27 +189,58 @@ export default function AssignmentsPage() {
   };
 
   const getUpcomingAssignments = () => {
-    const today = new Date().toISOString().split('T')[0];
-    return assignments.filter(a => a.date >= today && a.status !== 'cancelled');
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+
+    return assignments.filter(a => {
+      if (a.status === 'cancelled') return false;
+      if (a.status === 'completed') return false;
+      // If date is in the future, it's upcoming
+      if (a.date > today) return true;
+      // If date is today, check if time has passed
+      if (a.date === today) {
+        // If no time set, consider it upcoming for today
+        if (!a.time) return true;
+        // If time hasn't passed yet, it's upcoming
+        return a.time > currentTime;
+      }
+      // Date is in the past
+      return false;
+    });
   };
 
   const getPastAssignments = () => {
-    const today = new Date().toISOString().split('T')[0];
-    return assignments.filter(a => a.date < today || a.status === 'completed');
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+
+    return assignments.filter(a => {
+      if (a.status === 'completed') return true;
+      // If date is in the past, it's past
+      if (a.date < today) return true;
+      // If date is today and time has passed, it's past
+      if (a.date === today && a.time && a.time <= currentTime) return true;
+      return false;
+    });
   };
 
   const getTypeIcon = (type: string) => {
-    const icons: any = {
-      "Medical": "🏥",
-      "Legal": "⚖️",
-      "Educational": "🎓",
-      "VRS": "📞",
-      "VRI": "💻",
-      "Community": "🏘️",
-      "Mental Health": "🧠",
-      "Conference": "🎤"
+    // Return a colored circle component for each type
+    const typeColors: any = {
+      "Medical": "bg-rose-500",
+      "Legal": "bg-amber-500",
+      "Educational": "bg-blue-500",
+      "VRS": "bg-violet-500",
+      "VRI": "bg-teal-500",
+      "Community": "bg-emerald-500",
+      "Mental Health": "bg-purple-500",
+      "Conference": "bg-indigo-500"
     };
-    return icons[type] || "📋";
+    const color = typeColors[type] || "bg-slate-500";
+    return (
+      <div className={`w-8 h-8 rounded-full ${color} flex-shrink-0`}></div>
+    );
   };
 
   const getStatusColor = (status: string) => {
@@ -307,9 +379,19 @@ export default function AssignmentsPage() {
     setCreatingAssignment(false);
   };
 
+  const formatDateTime = (dateTimeStr: string) => {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
         <div className="text-slate-400">Loading assignments...</div>
       </div>
     );
@@ -317,15 +399,31 @@ export default function AssignmentsPage() {
 
   const displayedAssignments = selectedTab === "upcoming" ? getUpcomingAssignments() : getPastAssignments();
 
+  // Stats for past tab
+  const pastAssignments = getPastAssignments();
+  const debriefedCount = pastAssignments.filter(a => a.debriefed).length;
+  const journaledCount = pastAssignments.filter(a => (a.free_write_sessions?.length || 0) > 0).length;
+  const totalFreeWrites = pastAssignments.reduce((acc, a) => acc + (a.free_write_sessions?.length || 0), 0) + freeWriteSessions.length;
+
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
+      {/* Hero-style Background Effects */}
+      <div className="absolute inset-0 -z-10 opacity-30">
+        <div className="absolute top-20 left-20 w-96 h-96 bg-teal-400/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-emerald-400/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-400/10 rounded-full blur-3xl" />
+      </div>
+
+      {/* Grid Pattern Overlay */}
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(rgba(6,182,212,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.08)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_90%)]" />
+
       <NavBar />
-      <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8">
+      <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8 relative">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-50">Assignments</h1>
-            <p className="mt-1 text-sm text-slate-400">Manage your interpreting assignments and team collaborations</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-400">Assignments</h1>
+            <p className="mt-1 text-sm text-slate-300">Manage your interpreting assignments and reflections</p>
           </div>
           <div className="flex gap-3">
             {templates.length > 0 && (
@@ -333,7 +431,7 @@ export default function AssignmentsPage() {
                 onClick={() => setShowTemplates(true)}
                 className="px-4 py-2 rounded-lg border border-teal-500 text-teal-400 font-medium hover:bg-teal-500/10 transition-colors flex items-center gap-2"
               >
-                📋 Use Template
+                Use Template
               </button>
             )}
             <button
@@ -365,25 +463,87 @@ export default function AssignmentsPage() {
           ))}
         </div>
 
+        {/* Summary Stats - Only show on Past tab when there are assignments */}
+        {selectedTab === "past" && pastAssignments.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
+              <p className="text-2xl font-bold text-slate-200">{pastAssignments.length}</p>
+              <p className="text-sm text-slate-400">Completed</p>
+            </div>
+            <div className="rounded-xl border border-teal-500/30 bg-teal-500/10 p-4">
+              <p className="text-2xl font-bold text-teal-300">{debriefedCount}</p>
+              <p className="text-sm text-teal-400">Debriefed</p>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
+              <p className="text-2xl font-bold text-slate-200">{journaledCount}</p>
+              <p className="text-sm text-slate-400">With reflections</p>
+            </div>
+            <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-4">
+              <p className="text-2xl font-bold text-purple-300">{totalFreeWrites}</p>
+              <p className="text-sm text-purple-400">Free writes</p>
+            </div>
+          </div>
+        )}
+
         {/* Empty State */}
         {displayedAssignments.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📋</div>
-            <h3 className="text-lg font-semibold text-slate-300 mb-2">
-              No {selectedTab} assignments
-            </h3>
-            <p className="text-sm text-slate-400 mb-4">
-              {selectedTab === "upcoming"
-                ? "Add your upcoming interpreting assignments to start preparing with Elya"
-                : "Your completed assignments will appear here"}
-            </p>
-            {selectedTab === "upcoming" && (
-              <button
-                onClick={() => setShowNewAssignmentModal(true)}
-                className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors"
-              >
-                Add Your First Assignment
-              </button>
+          <div className="text-center py-16">
+            {selectedTab === "upcoming" ? (
+              <>
+                {/* Animated calendar/radar design for upcoming */}
+                <div className="relative w-24 h-24 mx-auto mb-6">
+                  {/* Pulsing rings */}
+                  <div className="absolute inset-0 rounded-2xl border-2 border-teal-500/20 animate-[ping_3s_ease-in-out_infinite]" />
+                  <div className="absolute inset-2 rounded-xl border-2 border-teal-500/30 animate-[ping_3s_ease-in-out_infinite_0.5s]" />
+                  <div className="absolute inset-4 rounded-lg border-2 border-teal-500/40 animate-[ping_3s_ease-in-out_infinite_1s]" />
+                  {/* Center calendar icon */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-teal-500/30">
+                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                <h3 className="text-xl font-semibold text-slate-200 mb-2">
+                  No upcoming assignments
+                </h3>
+                <p className="text-sm text-slate-400 mb-6 max-w-md mx-auto">
+                  Add your interpreting assignments to prepare with Elya and track your growth
+                </p>
+                <button
+                  onClick={() => setShowNewAssignmentModal(true)}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-semibold hover:from-teal-400 hover:to-emerald-400 transition-all shadow-lg shadow-teal-500/20 hover:shadow-teal-500/40"
+                >
+                  + Add Your First Assignment
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Checkmark/history design for past */}
+                <div className="relative w-24 h-24 mx-auto mb-6">
+                  {/* Subtle glow */}
+                  <div className="absolute inset-0 rounded-full bg-slate-500/10 blur-xl" />
+                  {/* Concentric circles */}
+                  <div className="absolute inset-0 rounded-full border border-slate-700/50" />
+                  <div className="absolute inset-3 rounded-full border border-slate-700/40" />
+                  <div className="absolute inset-6 rounded-full border border-slate-700/30" />
+                  {/* Center icon */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+                <h3 className="text-xl font-semibold text-slate-300 mb-2">
+                  No completed assignments yet
+                </h3>
+                <p className="text-sm text-slate-500 max-w-md mx-auto">
+                  Your completed assignments will appear here for review and debriefing
+                </p>
+              </>
             )}
           </div>
         )}
@@ -394,6 +554,7 @@ export default function AssignmentsPage() {
             const statusColors = getStatusColor(assignment.status);
             const teamMembers = assignment.team_members || [];
             const confirmedMembers = teamMembers.filter((m: any) => m.status === 'confirmed');
+            const hasFreeWrites = assignment.free_write_sessions && assignment.free_write_sessions.length > 0;
 
             return (
               <div
@@ -404,7 +565,7 @@ export default function AssignmentsPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="text-3xl">{getTypeIcon(assignment.assignment_type)}</span>
+                      {getTypeIcon(assignment.assignment_type)}
                       <div>
                         <h3 className="text-lg font-semibold text-slate-100">{assignment.title}</h3>
                         <p className="text-sm text-slate-400">{assignment.setting}</p>
@@ -413,7 +574,7 @@ export default function AssignmentsPage() {
 
                     <div className="flex items-center gap-4 mt-3 text-sm text-slate-300">
                       <span className="flex items-center gap-1">
-                        📅 {new Date(assignment.date + 'T' + (assignment.time || '00:00')).toLocaleDateString('en-US', {
+                        {new Date(assignment.date + 'T' + (assignment.time || '00:00')).toLocaleDateString('en-US', {
                           weekday: 'short',
                           month: 'short',
                           day: 'numeric'
@@ -422,31 +583,30 @@ export default function AssignmentsPage() {
                       </span>
                       {assignment.duration_minutes && (
                         <span className="flex items-center gap-1">
-                          ⏱️ {assignment.duration_minutes} min
+                          {assignment.duration_minutes} min
                         </span>
                       )}
                       {assignment.location_type && (
                         <span className="flex items-center gap-1">
-                          {assignment.location_type === 'virtual' ? '💻' : assignment.location_type === 'in_person' ? '📍' : '🔄'}
-                          {assignment.location_type}
+                          {assignment.location_type.replace('_', ' ')}
                         </span>
                       )}
                     </div>
 
                     {assignment.description && (
-                      <p className="text-sm text-slate-400 mt-3 line-clamp-2">{assignment.description}</p>
+                      <p className="text-sm text-slate-300 mt-3 line-clamp-2">{assignment.description}</p>
                     )}
 
                     {/* Team Badge */}
                     {assignment.is_team_assignment && (
                       <div className="mt-3 flex items-center gap-2">
                         <span className="px-2 py-1 rounded-md bg-violet-500/20 border border-violet-500/30 text-violet-400 text-xs font-medium flex items-center gap-1">
-                          👥 Team Assignment ({confirmedMembers.length} {confirmedMembers.length === 1 ? 'member' : 'members'})
+                          Team Assignment ({confirmedMembers.length} {confirmedMembers.length === 1 ? 'member' : 'members'})
                         </span>
                       </div>
                     )}
 
-                    {/* Prep Status */}
+                    {/* Prep Status - Upcoming Tab */}
                     {selectedTab === "upcoming" && (
                       <div className="mt-3 flex items-center gap-2">
                         <span className={`px-2 py-1 rounded-md text-xs font-medium ${
@@ -456,10 +616,34 @@ export default function AssignmentsPage() {
                             ? 'bg-amber-500/20 border border-amber-500/30 text-amber-400'
                             : 'bg-slate-700/50 border border-slate-600 text-slate-400'
                         }`}>
-                          {assignment.prep_status === 'completed' ? '✓ Prep Complete' :
-                           assignment.prep_status === 'in_progress' ? '⚙️ Prep In Progress' :
-                           '📝 Prep Pending'}
+                          {assignment.prep_status === 'completed' ? 'Prep Complete' :
+                           assignment.prep_status === 'in_progress' ? 'Prep In Progress' :
+                           'Prep Pending'}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Status Badges - Past Tab */}
+                    {selectedTab === "past" && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        {assignment.prep_status === 'completed' && (
+                          <span className="px-2 py-1 rounded-md text-xs font-medium bg-emerald-500/20 border border-emerald-500/30 text-emerald-400">
+                            Prepped
+                          </span>
+                        )}
+                        {assignment.debriefed && (
+                          <span className="px-2 py-1 rounded-md text-xs font-medium bg-teal-500/20 border border-teal-500/30 text-teal-400 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Debriefed
+                          </span>
+                        )}
+                        {hasFreeWrites && (
+                          <span className="px-2 py-1 rounded-md text-xs font-medium bg-purple-500/20 border border-purple-500/30 text-purple-400">
+                            {assignment.free_write_sessions?.length} Free Write{assignment.free_write_sessions?.length !== 1 ? 's' : ''}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -481,11 +665,22 @@ export default function AssignmentsPage() {
                         {assignment.is_team_assignment ? 'Team Prep' : 'Start Prep'}
                       </button>
                     )}
-                    {assignment.status === 'completed' && (
+                    {selectedTab === "past" && !assignment.debriefed && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(`/assignments/${assignment.id}/debrief`);
+                          router.push(`/debrief/${assignment.id}`);
+                        }}
+                        className="px-4 py-2 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-sm font-semibold border border-teal-500/30 transition-all whitespace-nowrap"
+                      >
+                        Debrief
+                      </button>
+                    )}
+                    {selectedTab === "past" && assignment.debriefed && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/debrief/${assignment.id}`);
                         }}
                         className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors whitespace-nowrap text-sm"
                       >
@@ -494,10 +689,133 @@ export default function AssignmentsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Free Write Sessions - Past Tab only */}
+                {selectedTab === "past" && hasFreeWrites && (
+                  <div className="mt-4 pt-4 border-t border-slate-700/50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-4 h-4 rounded-full bg-gradient-to-r from-purple-400 to-rose-400"></div>
+                      <h4 className="text-sm font-semibold text-purple-300">
+                        Free Writes ({assignment.free_write_sessions?.length})
+                      </h4>
+                    </div>
+                    <div className="space-y-2">
+                      {assignment.free_write_sessions?.map((session) => (
+                        <div
+                          key={session.id}
+                          className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-slate-400">
+                              {formatDateTime(session.created_at)}
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedFreeWrite(
+                                  expandedFreeWrite === session.id ? null : session.id
+                                );
+                              }}
+                              className="text-xs text-purple-300 hover:text-purple-200"
+                            >
+                              {expandedFreeWrite === session.id ? "Collapse" : "Expand"}
+                            </button>
+                          </div>
+                          {expandedFreeWrite === session.id ? (
+                            <div className="space-y-2 mt-3">
+                              {session.messages.filter(m => m.role === "user").map((msg, idx) => (
+                                <p key={idx} className="text-sm text-slate-200 whitespace-pre-wrap">
+                                  {msg.content}
+                                </p>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-300 truncate">
+                              {session.messages.find(m => m.role === "user")?.content || "No content"}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+
+        {/* Unlinked Free Write Sessions - Past Tab only */}
+        {selectedTab === "past" && freeWriteSessions.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-xl font-bold text-slate-100 mb-4">General Reflections</h2>
+            <p className="text-sm text-slate-400 mb-4">Free writes not linked to a specific assignment</p>
+            <div className="space-y-3">
+              {freeWriteSessions.map((session) => (
+                <div key={session.id} className="rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-rose-500/10 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-gradient-to-r from-purple-400 to-rose-400"></div>
+                      <span className="text-sm font-medium text-purple-300">Free Write</span>
+                    </div>
+                    <span className="text-xs text-slate-400">
+                      {formatDateTime(session.created_at)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setExpandedFreeWrite(
+                      expandedFreeWrite === session.id ? null : session.id
+                    )}
+                    className="w-full text-left"
+                  >
+                    {expandedFreeWrite === session.id ? (
+                      <div className="space-y-2 mt-2">
+                        {session.messages.filter(m => m.role === "user").map((msg, idx) => (
+                          <p key={idx} className="text-sm text-slate-200 whitespace-pre-wrap">
+                            {msg.content}
+                          </p>
+                        ))}
+                        <p className="text-xs text-purple-300 mt-2">Click to collapse</p>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm text-slate-300 truncate">
+                          {session.messages.find(m => m.role === "user")?.content || "No content"}
+                        </p>
+                        <p className="text-xs text-purple-300 mt-1">Click to expand</p>
+                      </>
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Reflection Practice Prompt - Past Tab only */}
+        {selectedTab === "past" && pastAssignments.length > 0 && (
+          <div className="mt-6 rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-transparent p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">Build Your Reflection Practice</h3>
+                <p className="text-sm text-slate-300 mb-4">
+                  Regular debriefing and free writing helps you process assignments and grow as an interpreter.
+                  {journaledCount > 0 && ` You've reflected on ${journaledCount} of ${pastAssignments.length} assignments.`}
+                </p>
+                <div className="flex gap-4">
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 rounded-full bg-teal-400"></div>
+                    <span className="text-slate-300">Debrief = Skill analysis</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-400 to-rose-400"></div>
+                    <span className="text-slate-300">Free Write = Process emotions</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Template Picker Modal */}
         {showTemplates && (
@@ -507,9 +825,9 @@ export default function AssignmentsPage() {
                 <h2 className="text-xl font-semibold text-slate-100">Use a Template</h2>
                 <button
                   onClick={() => setShowTemplates(false)}
-                  className="text-slate-400 hover:text-slate-300"
+                  className="text-slate-400 hover:text-slate-300 text-2xl leading-none"
                 >
-                  ✕
+                  &times;
                 </button>
               </div>
 
@@ -527,12 +845,12 @@ export default function AssignmentsPage() {
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-slate-100">{template.template_name}</h3>
                         <div className="mt-2 flex items-center gap-3 text-sm text-slate-400">
-                          <span className="px-2 py-1 rounded-md bg-slate-800 text-slate-300">
+                          <span className="px-2 py-1 rounded-md bg-slate-800 text-slate-300 flex items-center gap-2">
                             {getTypeIcon(template.assignment_type)} {template.assignment_type}
                           </span>
                           {template.is_recurring && (
                             <span className="px-2 py-1 rounded-md bg-violet-500/20 border border-violet-500/30 text-violet-400">
-                              🔄 {template.recurrence_pattern}
+                              {template.recurrence_pattern}
                             </span>
                           )}
                           <span className="text-slate-500">
@@ -569,9 +887,9 @@ export default function AssignmentsPage() {
                 <h2 className="text-xl font-semibold text-slate-100">Create New Assignment</h2>
                 <button
                   onClick={() => setShowNewAssignmentModal(false)}
-                  className="text-slate-400 hover:text-slate-300"
+                  className="text-slate-400 hover:text-slate-300 text-2xl leading-none"
                 >
-                  ✕
+                  &times;
                 </button>
               </div>
 
@@ -601,14 +919,14 @@ export default function AssignmentsPage() {
                         onChange={(e) => setFormData({ ...formData, assignment_type: e.target.value })}
                         className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                       >
-                        <option value="Medical">🏥 Medical</option>
-                        <option value="Legal">⚖️ Legal</option>
-                        <option value="Educational">🎓 Educational</option>
-                        <option value="VRS">📞 VRS</option>
-                        <option value="VRI">💻 VRI</option>
-                        <option value="Community">🏘️ Community</option>
-                        <option value="Mental Health">🧠 Mental Health</option>
-                        <option value="Conference">🎤 Conference</option>
+                        <option value="Medical">Medical</option>
+                        <option value="Legal">Legal</option>
+                        <option value="Educational">Educational</option>
+                        <option value="VRS">VRS</option>
+                        <option value="VRI">VRI</option>
+                        <option value="Community">Community</option>
+                        <option value="Mental Health">Mental Health</option>
+                        <option value="Conference">Conference</option>
                       </select>
                     </div>
 
@@ -683,9 +1001,9 @@ export default function AssignmentsPage() {
                             onChange={(e) => setFormData({ ...formData, location_type: e.target.value })}
                             className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                           >
-                            <option value="in_person">📍 In Person</option>
-                            <option value="virtual">💻 Virtual</option>
-                            <option value="hybrid">🔄 Hybrid</option>
+                            <option value="in_person">In Person</option>
+                            <option value="virtual">Virtual</option>
+                            <option value="hybrid">Hybrid</option>
                           </select>
                         </div>
 
@@ -790,9 +1108,9 @@ export default function AssignmentsPage() {
                                   <button
                                     type="button"
                                     onClick={() => removeTeamMemberField(index)}
-                                    className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 transition-colors"
+                                    className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 transition-colors text-lg leading-none"
                                   >
-                                    ✕
+                                    &times;
                                   </button>
                                 )}
                               </div>
@@ -816,7 +1134,7 @@ export default function AssignmentsPage() {
                   disabled={!formData.assignment_type}
                   className="px-4 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
-                  💾 Save as Template
+                  Save as Template
                 </button>
                 <div className="flex gap-3">
                   <button

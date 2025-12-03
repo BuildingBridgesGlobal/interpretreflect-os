@@ -91,7 +91,7 @@ export default function SkillsOverview({ onSkillClick }: { onSkillClick: (skillI
     <div className="space-y-6">
       {/* Domain Overview */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
-        <h2 className="text-xl font-semibold text-slate-50 mb-4">ECCI Competency Domains</h2>
+        <h2 className="text-xl font-semibold text-slate-50 mb-4">Competency Domains</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {domainStats.map(({ domain, avgMastery, skillCount }) => (
             <button

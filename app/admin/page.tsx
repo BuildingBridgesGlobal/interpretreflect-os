@@ -9,7 +9,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<any>(null);
-  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance">("overview");
+  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials">("overview");
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -159,7 +159,8 @@ export default function AdminPage() {
             { key: "competency", label: "Competency Growth" },
             { key: "community", label: "Community Activity" },
             { key: "wellness", label: "Wellness Indicators" },
-            { key: "compliance", label: "Compliance & CEUs" }
+            { key: "compliance", label: "Compliance & CEUs" },
+            { key: "credentials", label: "Credentials" }
           ].map((tab) => (
             <button
               key={tab.key}
@@ -519,6 +520,212 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Credentials Tab */}
+        {selectedView === "credentials" && (
+          <div className="space-y-6">
+            {/* Header with Actions */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-100">Roster Credentials</h3>
+                <p className="text-sm text-slate-400 mt-1">View and track professional credentials across your team</p>
+              </div>
+              <div className="flex gap-3">
+                <button className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors text-sm">
+                  Filter
+                </button>
+                <button className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm">
+                  Export Report
+                </button>
+              </div>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+                <p className="text-3xl font-bold text-emerald-400">94</p>
+                <p className="text-sm text-slate-300 mt-1">Active Credentials</p>
+                <p className="text-xs text-slate-500 mt-1">All current & valid</p>
+              </div>
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
+                <p className="text-3xl font-bold text-amber-400">12</p>
+                <p className="text-sm text-slate-300 mt-1">Expiring Soon</p>
+                <p className="text-xs text-slate-500 mt-1">Within 90 days</p>
+              </div>
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-5">
+                <p className="text-3xl font-bold text-rose-400">3</p>
+                <p className="text-sm text-slate-300 mt-1">Expired</p>
+                <p className="text-xs text-slate-500 mt-1">Need renewal</p>
+              </div>
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-5">
+                <p className="text-3xl font-bold text-violet-400">127</p>
+                <p className="text-sm text-slate-300 mt-1">Total Interpreters</p>
+                <p className="text-xs text-slate-500 mt-1">On platform</p>
+              </div>
+            </div>
+
+            {/* Credentials Table */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+              <div className="p-6">
+                <h4 className="text-sm font-medium text-slate-300 mb-4">All Credentials</h4>
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-800">
+                        <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Interpreter</th>
+                        <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Credential Type</th>
+                        <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Issue Date</th>
+                        <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Expiration</th>
+                        <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Status</th>
+                        <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {/* Example Row 1 - Active */}
+                      <tr className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-4">
+                          <div>
+                            <p className="text-sm font-medium text-slate-100">Sarah Johnson</p>
+                            <p className="text-xs text-slate-500">sarah.johnson@example.com</p>
+                          </div>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">NIC Certification</p>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">Jan 2020</p>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">Jan 2026</p>
+                        </td>
+                        <td className="py-4">
+                          <span className="px-2 py-1 rounded-md bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
+                            Active
+                          </span>
+                        </td>
+                        <td className="py-4">
+                          <button className="text-xs text-teal-400 hover:text-teal-300">View</button>
+                        </td>
+                      </tr>
+
+                      {/* Example Row 2 - Expiring Soon */}
+                      <tr className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-4">
+                          <div>
+                            <p className="text-sm font-medium text-slate-100">Marcus Chen</p>
+                            <p className="text-xs text-slate-500">marcus.chen@example.com</p>
+                          </div>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">State License</p>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">March 2022</p>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-amber-400">March 2025</p>
+                        </td>
+                        <td className="py-4">
+                          <span className="px-2 py-1 rounded-md bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-medium">
+                            Expiring Soon (2 mo)
+                          </span>
+                        </td>
+                        <td className="py-4">
+                          <button className="text-xs text-teal-400 hover:text-teal-300">View</button>
+                        </td>
+                      </tr>
+
+                      {/* Example Row 3 - Expired */}
+                      <tr className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-4">
+                          <div>
+                            <p className="text-sm font-medium text-slate-100">Dr. Patricia Williams</p>
+                            <p className="text-xs text-slate-500">patricia.w@example.com</p>
+                          </div>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">CDI Certification</p>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">June 2019</p>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-rose-400">Dec 2024</p>
+                        </td>
+                        <td className="py-4">
+                          <span className="px-2 py-1 rounded-md bg-rose-500/20 border border-rose-500/30 text-rose-400 text-xs font-medium">
+                            Expired
+                          </span>
+                        </td>
+                        <td className="py-4">
+                          <button className="text-xs text-teal-400 hover:text-teal-300">View</button>
+                        </td>
+                      </tr>
+
+                      {/* Example Row 4 - Active */}
+                      <tr className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-4">
+                          <div>
+                            <p className="text-sm font-medium text-slate-100">Jennifer Martinez</p>
+                            <p className="text-xs text-slate-500">jmartinez@example.com</p>
+                          </div>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">BEI Certification</p>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">Sept 2021</p>
+                        </td>
+                        <td className="py-4">
+                          <p className="text-sm text-slate-300">Sept 2027</p>
+                        </td>
+                        <td className="py-4">
+                          <span className="px-2 py-1 rounded-md bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
+                            Active
+                          </span>
+                        </td>
+                        <td className="py-4">
+                          <button className="text-xs text-teal-400 hover:text-teal-300">View</button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Alert Card for Expiring/Expired */}
+            <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-amber-400 mb-2">Attention Required</h3>
+                  <p className="text-sm text-slate-300 mb-3">
+                    <strong>15 credentials</strong> require action: 12 expiring within 90 days, 3 already expired
+                  </p>
+                  <button className="px-4 py-2 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-400 hover:bg-amber-500/30 transition-colors text-sm font-medium">
+                    Send Reminder Emails
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Info Card */}
+            <div className="rounded-xl border border-blue-500/50 bg-blue-500/10 p-5">
+              <h3 className="text-sm font-semibold text-blue-400 mb-2">Credential Tracking</h3>
+              <p className="text-sm text-slate-300">
+                Interpreters upload their credentials via Settings → Credentials. You can view all roster credentials here,
+                export compliance reports, and send renewal reminders. All credential files are stored securely and encrypted.
+              </p>
             </div>
           </div>
         )}

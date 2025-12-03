@@ -145,9 +145,9 @@ export default function PerformanceTimeline({ userId, insights }: PerformanceTim
         <div className="space-y-3">
           {milestones.map((milestone, idx) => {
             const typeConfig = {
-              first: { icon: "🎯", color: "text-blue-400", bgColor: "bg-blue-500/10" },
-              achievement: { icon: "🏆", color: "text-amber-400", bgColor: "bg-amber-500/10" },
-              breakthrough: { icon: "⚡", color: "text-teal-400", bgColor: "bg-teal-500/10" }
+              first: { color: "text-blue-400", bgColor: "bg-blue-500/10", dotColor: "bg-blue-500" },
+              achievement: { color: "text-amber-400", bgColor: "bg-amber-500/10", dotColor: "bg-amber-500" },
+              breakthrough: { color: "text-teal-400", bgColor: "bg-teal-500/10", dotColor: "bg-teal-500" }
             };
             const config = typeConfig[milestone.type];
 
@@ -156,7 +156,23 @@ export default function PerformanceTimeline({ userId, insights }: PerformanceTim
                 key={idx}
                 className={`flex items-center gap-3 p-3 rounded-lg border border-slate-800 ${config.bgColor}`}
               >
-                <span className="text-2xl">{config.icon}</span>
+                <div className={`w-8 h-8 rounded-full ${config.dotColor} flex items-center justify-center`}>
+                  {milestone.type === "first" && (
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  {milestone.type === "achievement" && (
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                    </svg>
+                  )}
+                  {milestone.type === "breakthrough" && (
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  )}
+                </div>
                 <div className="flex-1">
                   <p className={`text-sm font-medium ${config.color}`}>{milestone.label}</p>
                   <p className="text-xs text-slate-500">{new Date(milestone.date).toLocaleDateString()}</p>

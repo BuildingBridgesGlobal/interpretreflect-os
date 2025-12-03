@@ -116,7 +116,7 @@ export const CompetencyRadar: React.FC = () => {
     return (
       <div className="h-full rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-teal-300">Competency Radar</p>
-        <p className="mt-1 text-sm text-slate-300">Loading your ECCI competency profile...</p>
+        <p className="mt-1 text-sm text-slate-300">Loading your competency profile...</p>
         <div className="mt-4 flex h-48 items-center justify-center rounded-xl bg-slate-950/80">
           <div className="text-slate-500">Loading...</div>
         </div>
@@ -131,7 +131,7 @@ export const CompetencyRadar: React.FC = () => {
       <p className="text-xs font-semibold uppercase tracking-wide text-teal-300">Competency Radar</p>
       <p className="mt-1 text-sm text-slate-300">
         {hasAnyScores
-          ? "Your growth across ECCI domains based on module completion"
+          ? "Your growth across competency domains based on module completion"
           : "Complete skill modules to build your competency profile"}
       </p>
 

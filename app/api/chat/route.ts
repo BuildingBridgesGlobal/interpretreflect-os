@@ -99,6 +99,55 @@ async function getUserContext(userId: string) {
     .order("times_worked_with", { ascending: false })
     .limit(20);
 
+  // Get wellness check-ins (last 10 for pattern detection)
+  const { data: wellnessCheckins } = await supabase
+    .from("wellness_checkins")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  // Get free write sessions (last 5 for theme detection)
+  const { data: freeWriteSessions } = await supabase
+    .from("free_write_sessions")
+    .select("*")
+    .eq("user_id", userId)
+    .order("session_date", { ascending: false })
+    .limit(5);
+
+  // Get skill module progress (for cross-feature awareness)
+  const { data: skillModuleProgress } = await supabase
+    .from("user_module_progress")
+    .select(`
+      *,
+      skill_module:skill_modules (
+        module_code,
+        title,
+        subtitle,
+        ecci_domain,
+        series:skill_series (title, series_code)
+      )
+    `)
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+
+  // Calculate hours worked this week from completed assignments
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
+  weekStart.setHours(0, 0, 0, 0);
+
+  const { data: weekAssignments } = await supabase
+    .from("assignments")
+    .select("duration_minutes")
+    .eq("user_id", userId)
+    .eq("completed", true)
+    .gte("date", weekStart.toISOString().split('T')[0]);
+
+  const hoursWorkedThisWeek = weekAssignments
+    ? Math.round(weekAssignments.reduce((sum: number, a: any) => sum + (a.duration_minutes || 60), 0) / 60)
+    : 0;
+
   return {
     profile,
     assignments,
@@ -108,6 +157,10 @@ async function getUserContext(userId: string) {
     chatHistory,
     milestones,
     participantLibrary,
+    wellnessCheckins,
+    freeWriteSessions,
+    skillModuleProgress,
+    hoursWorkedThisWeek,
   };
 }
 
@@ -165,6 +218,9 @@ export async function POST(req: NextRequest) {
 
     // Determine if this is a Free Write session (holding space mode)
     const isFreeWriteMode = context?.type === "free_write" || context?.mode === "holding_space";
+
+    // Determine if this is a Skill Reflection session
+    const isSkillReflectionMode = context?.type === "skill_reflection";
 
     // Get full user context
     const userContext = await getUserContext(userId);
@@ -296,6 +352,110 @@ export async function POST(req: NextRequest) {
         });
         contextSummary += `\n`;
       }
+
+      // Wellness & Workload (for proactive support)
+      if (userContext.hoursWorkedThisWeek !== undefined) {
+        contextSummary += `**Workload This Week**: ${userContext.hoursWorkedThisWeek} hours worked\n\n`;
+      }
+
+      if (userContext.wellnessCheckins && userContext.wellnessCheckins.length > 0) {
+        contextSummary += `**Wellness Check-ins** (Last ${userContext.wellnessCheckins.length}):\n`;
+
+        // Analyze feeling patterns
+        const feelingCounts: Record<string, number> = {};
+        const recentFeelings: string[] = [];
+
+        userContext.wellnessCheckins.forEach((w: any, idx: number) => {
+          feelingCounts[w.feeling] = (feelingCounts[w.feeling] || 0) + 1;
+          if (idx < 3) {
+            recentFeelings.push(w.feeling);
+            contextSummary += `- ${new Date(w.created_at).toLocaleDateString()}: ${w.feeling}${w.hours_worked_this_week ? ` (${w.hours_worked_this_week}h that week)` : ''}\n`;
+          }
+        });
+
+        // Show pattern summary
+        const mostCommon = Object.entries(feelingCounts).sort(([,a], [,b]) => (b as number) - (a as number));
+        contextSummary += `Pattern: ${mostCommon.map(([f, c]) => `${c}x ${f}`).join(', ')}\n`;
+
+        // Flag concerning patterns for Elya to notice
+        const drainedCount = (feelingCounts['drained'] || 0) + (feelingCounts['overwhelmed'] || 0);
+        if (drainedCount >= 2) {
+          contextSummary += `⚠️ NOTICE: User has checked in as 'drained' or 'overwhelmed' ${drainedCount} times recently. Consider gently acknowledging this and offering support.\n`;
+        }
+        contextSummary += `\n`;
+      }
+
+      // Free Write Themes (emotional processing patterns)
+      if (userContext.freeWriteSessions && userContext.freeWriteSessions.length > 0) {
+        contextSummary += `**Free Write Sessions** (${userContext.freeWriteSessions.length} recent):\n`;
+
+        const allThemes: string[] = [];
+        userContext.freeWriteSessions.forEach((s: any) => {
+          if (s.detected_themes && Array.isArray(s.detected_themes)) {
+            allThemes.push(...s.detected_themes);
+          }
+          contextSummary += `- ${new Date(s.session_date).toLocaleDateString()}: Started feeling "${s.initial_feeling || 'not recorded'}"`;
+          if (s.emotional_arc) contextSummary += `, arc: ${s.emotional_arc}`;
+          contextSummary += `\n`;
+        });
+
+        // Show theme patterns if any
+        if (allThemes.length > 0) {
+          const themeCounts: Record<string, number> = {};
+          allThemes.forEach(t => { themeCounts[t] = (themeCounts[t] || 0) + 1; });
+          const topThemes = Object.entries(themeCounts).sort(([,a], [,b]) => (b as number) - (a as number)).slice(0, 3);
+          contextSummary += `Recurring themes: ${topThemes.map(([t]) => t).join(', ')}\n`;
+        }
+        contextSummary += `\n`;
+      }
+
+      // Skill Module Progress (learning journey)
+      if (userContext.skillModuleProgress && userContext.skillModuleProgress.length > 0) {
+        const completed = userContext.skillModuleProgress.filter((p: any) => p.status === 'completed');
+        const inProgress = userContext.skillModuleProgress.filter((p: any) => p.status === 'in_progress');
+
+        contextSummary += `**Skills Training Progress**:\n`;
+
+        if (completed.length > 0) {
+          contextSummary += `Completed modules (${completed.length}):\n`;
+          completed.slice(0, 5).forEach((p: any) => {
+            if (p.skill_module) {
+              contextSummary += `- ✓ ${p.skill_module.title} (${p.skill_module.series?.title || 'Unknown Series'})\n`;
+              contextSummary += `  Focus area: ${p.skill_module.ecci_domain}\n`;
+              if (p.completed_at) {
+                contextSummary += `  Completed: ${new Date(p.completed_at).toLocaleDateString()}\n`;
+              }
+            }
+          });
+        }
+
+        if (inProgress.length > 0) {
+          contextSummary += `In progress (${inProgress.length}):\n`;
+          inProgress.slice(0, 3).forEach((p: any) => {
+            if (p.skill_module) {
+              const sectionsComplete = [
+                p.concept_completed ? 'Learn' : null,
+                p.practice_completed ? 'Try It' : null,
+                p.reflection_completed ? 'Reflect' : null,
+                p.application_completed ? 'Apply' : null
+              ].filter(Boolean);
+              contextSummary += `- 🔄 ${p.skill_module.title}: ${sectionsComplete.length}/4 sections done\n`;
+            }
+          });
+        }
+
+        // Key skills they've been developing
+        const skillDomains: Record<string, number> = {};
+        completed.forEach((p: any) => {
+          if (p.skill_module?.ecci_domain) {
+            skillDomains[p.skill_module.ecci_domain] = (skillDomains[p.skill_module.ecci_domain] || 0) + 1;
+          }
+        });
+        if (Object.keys(skillDomains).length > 0) {
+          contextSummary += `Focus areas: ${Object.entries(skillDomains).map(([d, c]) => `${d} (${c})`).join(', ')}\n`;
+        }
+        contextSummary += `\n`;
+      }
     }
 
     // Convert messages to Claude format
@@ -341,6 +501,8 @@ You are not just answering questions - you are the central intelligence that:
    - Training completed and in progress
    - Chat history across sessions
    - Milestones and breakthroughs
+   - **Wellness check-ins and workload patterns** - You can see how they've been feeling and correlate with assignment intensity
+   - **Free write session themes** - Recurring topics they've been processing emotionally
 
 2. **REMEMBERS EVERYTHING**: Reference specific past conversations, assignments, debriefs, and patterns. You should proactively mention relevant context without being asked.
 
@@ -383,6 +545,21 @@ You are not just answering questions - you are the central intelligence that:
    - Notice patterns in assignment types
    - Suggest relevant past experiences
 
+8. **SKILLS & TRAINING INTEGRATION**:
+   - Know what skill modules they've completed and are working on
+   - Connect skill learnings to their real assignments: "The nervous system regulation you practiced in Module 1.1 will be especially useful for your cardiology assignment Friday"
+   - Reference specific techniques from training when relevant: "Remember the body scan check-in from your training? Try that before tomorrow's session"
+   - Suggest applying learnings: "You just learned about the Window of Tolerance. Your upcoming medical assignments are a perfect chance to practice noticing where you are"
+   - Celebrate training progress: "Nice work completing the Nervous System Management series!"
+
+9. **WELLNESS-AWARE SUPPORT**:
+   - Notice when they've been feeling drained or overwhelmed
+   - Correlate wellness patterns with workload (e.g., "You've been feeling drained after your last 3 medical assignments")
+   - Gently acknowledge patterns without being preachy
+   - Suggest Free Write or self-care when appropriate
+   - Notice workload intensity and proactively check in
+   - Reference Free Write themes they've been processing
+
 ## HOW TO BEHAVE
 
 - **Be Proactive**: Don't wait to be asked. If you see an upcoming assignment, mention it. If you notice a pattern, point it out.
@@ -417,7 +594,7 @@ You are not just answering questions - you are the central intelligence that:
 
 You can help users practice interpreting in several ways:
 
-8. **INTERPRETING PRACTICE COACH**:
+10. **INTERPRETING PRACTICE COACH**:
    - Create realistic practice scenarios based on their upcoming assignments or skill gaps
    - Generate vocabulary quizzes for specific domains (medical, legal, technical, etc.)
    - Simulate conversations in their working languages for shadowing/sight translation practice
@@ -451,6 +628,9 @@ When users ask to practice, create engaging, realistic scenarios that match thei
 
 ❌ "I'll research that person"
 ✅ "Let me research Professor James Martinez for you. He's the keynote speaker, right? I'll look into his academic background, recent publications, presentation style, and create a profile so you know exactly what to expect. I'll also flag any specialized terminology he commonly uses."
+
+❌ "How are you feeling?"
+✅ "I noticed you've checked in as 'drained' after your last two medical assignments. That's a real pattern worth paying attention to. Before we prep for Friday's cardiology session, would it help to talk through what's been weighing on you? We can also look at ways to protect your energy during these intensive assignments."
 
 ## PARTICIPANT RESEARCH CAPABILITIES
 
@@ -557,8 +737,95 @@ This is NOT a crisis intervention service. If the user expresses thoughts of sel
 
 Remember: Your job is to be a safe, nonjudgmental presence. Sometimes the most helpful thing is simply being present.`;
 
+    // Skill Reflection Mode: Connect module learnings with real assignments
+    const skillReflectionSystemPrompt = `You are Elya, the AI co-pilot within InterpretReflect. Right now, you're in **Skill Reflection** mode - helping the user process and integrate what they just learned in their training module.
+
+## CURRENT DATE AND TIME
+
+**Right now it is: ${currentDateTime}**
+
+## CURRENT MODULE CONTEXT
+
+${context?.module_title ? `**Module**: ${context.module_title}` : ''}
+${context?.module_subtitle ? `**Focus**: ${context.module_subtitle}` : ''}
+${context?.series_title ? `**Series**: ${context.series_title}` : ''}
+${context?.ecci_domain ? `**Focus Area**: ${context.ecci_domain}` : ''}
+${context?.order_in_series ? `**Module ${context.order_in_series} in series**` : ''}
+
+${context?.sections_completed ? `
+**Their Progress in This Module**:
+- Concept/Learn: ${context.sections_completed.concept ? '✓ Complete' : 'Not done'}
+- Practice/Try It: ${context.sections_completed.practice ? '✓ Complete' : 'Not done'}
+- Reflection: ${context.sections_completed.reflection ? '✓ Complete' : 'In progress'}
+- Application: ${context.sections_completed.application ? '✓ Complete' : 'Not done'}
+` : ''}
+
+${contextSummary}
+
+## YOUR ROLE IN SKILL REFLECTION
+
+You're helping them **integrate** what they just learned. This means:
+
+1. **CONNECT TO REAL ASSIGNMENTS**:
+   - Look at their upcoming assignments and find specific opportunities to apply this skill
+   - Example: "The nervous system regulation you just practiced is going to be really useful for your cardiology assignment on Friday"
+   - Be specific about WHICH assignment and HOW the skill applies
+
+2. **DEEPEN UNDERSTANDING**:
+   - Ask questions that help them personalize the concepts
+   - "What resonated most for you in this module?"
+   - "How does this connect to something you've experienced in your work?"
+
+3. **BUILD BRIDGES**:
+   - Connect this module to previous modules they've completed
+   - Connect to patterns you see in their debrief history
+   - Make the learning feel cumulative and meaningful
+
+4. **CELEBRATE PROGRESS**:
+   - Acknowledge they're investing in their professional development
+   - Note specific milestones ("You've now completed 3 modules in the NSM series!")
+   - Be genuine, not over-the-top
+
+## HOW TO RESPOND
+
+- **Be specific about their context**: Reference their actual assignments, not hypotheticals
+- **Make practical connections**: "You mentioned your jaw gets tight before medical assignments. The body scan from this module can help you notice that sooner"
+- **Keep it conversational**: This is reflection, not a quiz. Follow their lead.
+- **Acknowledge their insights**: When they share what they noticed or learned, validate it
+
+## EXAMPLE RESPONSES
+
+User: "I didn't realize I hold so much tension in my shoulders"
+✅ "That's a really important awareness. I noticed you have that medical oncology assignment coming up on Friday - that tends to be high-stakes. Maybe try the shoulder check right before? You could even do it in your car before walking in."
+❌ "Shoulder tension is common. Here's more information about anatomy..."
+
+User: "This is useful but I'm not sure how to remember to use it"
+✅ "That's the real challenge, isn't it? Looking at your schedule, you have 3 assignments this week. What if you picked just ONE - maybe the community interpreting tomorrow - to try the pre-assignment check-in? Start small."
+❌ "You should practice every day to build the habit."
+
+## INCLUSIVE LANGUAGE
+
+Use modality-neutral language:
+- "I understand" not "I hear you"
+- "It seems like" not "sounds like"
+- "Express" not "speak"
+- "Interpret" or "render" instead of "speak"
+
+## IMPORTANT
+
+This is their reflection space - follow their lead on where they want to go. If they want to discuss something unrelated to the module, that's okay - you're their co-pilot across their whole interpreting journey, not just a training bot.
+
+Remember: You're helping them see how this module fits into their real work and growth as an interpreter.`;
+
     // Choose the appropriate system prompt
-    const finalSystemPrompt = isFreeWriteMode ? freeWriteSystemPrompt : systemPrompt;
+    let finalSystemPrompt;
+    if (isFreeWriteMode) {
+      finalSystemPrompt = freeWriteSystemPrompt;
+    } else if (isSkillReflectionMode) {
+      finalSystemPrompt = skillReflectionSystemPrompt;
+    } else {
+      finalSystemPrompt = systemPrompt;
+    }
 
     // Save user message to database
     const lastMessage = messages[messages.length - 1];

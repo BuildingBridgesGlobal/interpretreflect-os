@@ -304,7 +304,11 @@ export default function DebriefLog() {
                       <ul className="space-y-1">
                         {debrief.performanceFlags.breakthroughs.map((breakthrough, idx) => (
                           <li key={idx} className="text-sm text-slate-300 flex items-start gap-2">
-                            <span className="text-purple-400">⚡</span>
+                            <div className="w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                            </div>
                             {breakthrough}
                           </li>
                         ))}

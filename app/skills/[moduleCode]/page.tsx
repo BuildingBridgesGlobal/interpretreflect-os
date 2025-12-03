@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
+import { motion, AnimatePresence } from "framer-motion";
 
 type ContentBlock = {
   type: string;
@@ -256,8 +257,20 @@ export default function ModulePage() {
             type: "skill_reflection",
             module_code: module.module_code,
             module_title: module.title,
+            module_subtitle: module.subtitle,
+            module_description: module.description,
             ecci_domain: module.ecci_domain,
-            elya_prompt_set_id: module.elya_prompt_set_id
+            series_title: module.series?.title,
+            series_code: module.series?.series_code,
+            order_in_series: module.order_in_series,
+            elya_prompt_set_id: module.elya_prompt_set_id,
+            // Include what sections they've completed so Elya knows their progress in this module
+            sections_completed: {
+              concept: progress?.concept_completed || false,
+              practice: progress?.practice_completed || false,
+              reflection: progress?.reflection_completed || false,
+              application: progress?.application_completed || false
+            }
           }
         })
       });
@@ -310,39 +323,131 @@ export default function ModulePage() {
     setSending(false);
   };
 
+  // Animation variants for staggered content
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.08,
+        delayChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 12 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.4,
+        ease: "easeOut"
+      }
+    }
+  };
+
+  // Parse markdown-style bold (**text**) into styled HTML
+  const parseMarkdownBold = (text: string): string => {
+    if (!text) return "";
+    // Convert **text** to styled span with nice typography
+    return text.replace(
+      /\*\*([^*]+)\*\*/g,
+      '<span class="font-semibold text-slate-100 tracking-tight">$1</span>'
+    );
+  };
+
   const renderContentBlock = (block: ContentBlock, index: number) => {
     switch (block.type) {
       case "heading":
-        return <h2 key={index} className="text-2xl font-semibold text-slate-50 mb-4">{block.text}</h2>;
+        return (
+          <motion.h2
+            key={index}
+            variants={itemVariants}
+            className="text-xl font-medium text-slate-50 mb-6 pb-3 border-b border-slate-800"
+            dangerouslySetInnerHTML={{ __html: parseMarkdownBold(block.text || "") }}
+          />
+        );
 
       case "subheading":
-        return <h3 key={index} className="text-xl font-semibold text-slate-100 mt-6 mb-3">{block.text}</h3>;
+        return (
+          <motion.h3
+            key={index}
+            variants={itemVariants}
+            className="text-base font-medium text-teal-400 mt-8 mb-4 flex items-center gap-2"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+            <span dangerouslySetInnerHTML={{ __html: parseMarkdownBold(block.text || "") }} />
+          </motion.h3>
+        );
 
       case "paragraph":
-        return <p key={index} className="text-slate-300 leading-relaxed mb-4">{block.text}</p>;
+        return (
+          <motion.p
+            key={index}
+            variants={itemVariants}
+            className="text-slate-300 leading-loose mb-6 text-[15px]"
+            dangerouslySetInnerHTML={{ __html: parseMarkdownBold(block.text || "") }}
+          />
+        );
 
       case "bullet_list":
         return (
-          <ul key={index} className="list-disc list-inside space-y-2 mb-4 text-slate-300">
+          <motion.ul key={index} variants={itemVariants} className="space-y-4 mb-8 ml-2">
             {block.items?.map((item, i) => (
-              <li key={i} className="ml-4" dangerouslySetInnerHTML={{ __html: item }} />
+              <motion.li
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 * i, duration: 0.3 }}
+                className="flex items-start gap-3 text-slate-300 text-[15px] leading-relaxed"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 mt-2 flex-shrink-0" />
+                <span dangerouslySetInnerHTML={{ __html: parseMarkdownBold(item) }} />
+              </motion.li>
             ))}
-          </ul>
+          </motion.ul>
         );
 
-      case "callout":
-        const calloutStyles = {
-          insight: "bg-teal-500/10 border-teal-500/30 text-teal-100",
-          practice_tip: "bg-violet-500/10 border-violet-500/30 text-violet-100",
-          next_step: "bg-blue-500/10 border-blue-500/30 text-blue-100"
+      case "callout": {
+        const calloutConfig = {
+          insight: {
+            bg: "bg-slate-800/50",
+            border: "border-teal-500/30",
+            accentColor: "bg-teal-500",
+            label: "Key Insight"
+          },
+          practice_tip: {
+            bg: "bg-slate-800/50",
+            border: "border-emerald-500/30",
+            accentColor: "bg-emerald-500",
+            label: "Nice Work"
+          },
+          next_step: {
+            bg: "bg-slate-800/50",
+            border: "border-violet-500/30",
+            accentColor: "bg-violet-500",
+            label: "Next"
+          }
         };
-        const style = calloutStyles[block.style as keyof typeof calloutStyles] || calloutStyles.insight;
+        const config = calloutConfig[block.style as keyof typeof calloutConfig] || calloutConfig.insight;
 
         return (
-          <div key={index} className={`p-4 rounded-lg border ${style} mb-4`}>
-            <p dangerouslySetInnerHTML={{ __html: block.text || "" }} />
-          </div>
+          <motion.div
+            key={index}
+            variants={itemVariants}
+            className={`p-5 rounded-xl border ${config.bg} ${config.border} my-8 relative overflow-hidden`}
+          >
+            {/* Subtle accent bar */}
+            <div className={`absolute left-0 top-0 bottom-0 w-1 ${config.accentColor}`} />
+            <div className="flex items-start gap-3 pl-3">
+              <div className="flex-1">
+                <p className="text-slate-300 text-[15px] leading-relaxed" dangerouslySetInnerHTML={{ __html: parseMarkdownBold(block.text || "") }} />
+              </div>
+            </div>
+          </motion.div>
         );
+      }
 
       default:
         return null;
@@ -361,60 +466,100 @@ export default function ModulePage() {
 
     if (currentSection === "reflection") {
       return (
-        <div className="h-full flex flex-col">
-          <div className="mb-4">
-            <h2 className="text-2xl font-semibold text-slate-50 mb-2">Reflect with Elya</h2>
-            <p className="text-slate-400">
-              Take a moment to process what you've learned. Elya will guide you through a brief reflection.
+        <motion.div
+          key="reflection"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
+          className="h-full flex flex-col"
+        >
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-6"
+          >
+            <p className="text-slate-500 text-sm italic mb-4">
+              Take a breath. There's no rush here.
             </p>
-          </div>
+            <h2 className="text-xl font-medium text-slate-50 mb-2">Chat with Elya</h2>
+            <p className="text-slate-400 text-sm">
+              Share what stood out to you, or ask any questions that came up.
+            </p>
+          </motion.div>
 
           {/* Chat Interface */}
-          <div className="flex-1 rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col" style={{ minHeight: "400px" }}>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.4 }}
+            className="flex-1 rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col"
+            style={{ minHeight: "400px" }}
+          >
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {reflectionMessages.length === 0 && (
-                <div className="text-center py-8">
-                  <div className="text-5xl mb-3">💭</div>
-                  <p className="text-slate-400">
-                    Ready to reflect? Start the conversation with Elya.
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-center py-12"
+                >
+                  {/* Animated orb indicator */}
+                  <motion.div
+                    className="w-12 h-12 mx-auto mb-4 rounded-full bg-gradient-to-br from-teal-400/20 to-violet-500/20 border border-teal-500/30 flex items-center justify-center"
+                    animate={{ scale: [1, 1.05, 1], opacity: [0.7, 1, 0.7] }}
+                    transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+                  >
+                    <div className="w-4 h-4 rounded-full bg-teal-400/50" />
+                  </motion.div>
+                  <p className="text-slate-300 mb-2">What's on your mind?</p>
+                  <p className="text-slate-500 text-sm">
+                    Share a thought, ask a question, or just say hi.
                   </p>
-                </div>
+                </motion.div>
               )}
 
-              {reflectionMessages.map((message) => {
-                const isElya = message.role === "assistant";
+              <AnimatePresence mode="popLayout">
+                {reflectionMessages.map((message) => {
+                  const isElya = message.role === "assistant";
 
-                return (
-                  <div
-                    key={message.id}
-                    className={`flex gap-3 ${isElya ? 'flex-row' : 'flex-row-reverse'}`}
-                  >
-                    {/* Avatar */}
-                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${
-                      isElya
-                        ? 'bg-teal-500 text-slate-950'
-                        : 'bg-violet-500 text-white'
-                    }`}>
-                      {isElya ? 'E' : 'You'.charAt(0)}
-                    </div>
-
-                    {/* Message */}
-                    <div className={`flex-1 max-w-[80%] ${!isElya ? 'text-right' : ''}`}>
-                      <div className={`text-xs text-slate-400 mb-1 ${!isElya ? 'text-right' : ''}`}>
-                        {isElya ? 'Elya' : 'You'} • {new Date(message.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                      </div>
-                      <div className={`rounded-lg p-4 ${
+                  return (
+                    <motion.div
+                      key={message.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.3 }}
+                      className={`flex gap-3 ${isElya ? 'flex-row' : 'flex-row-reverse'}`}
+                    >
+                      {/* Avatar */}
+                      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${
                         isElya
-                          ? 'bg-teal-500/10 border border-teal-500/30 text-slate-100'
-                          : 'bg-violet-500/10 border border-violet-500/30 text-slate-100'
+                          ? 'bg-teal-500 text-slate-950'
+                          : 'bg-violet-500 text-white'
                       }`}>
-                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                        {isElya ? 'E' : 'You'.charAt(0)}
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+
+                      {/* Message */}
+                      <div className={`flex-1 max-w-[80%] ${!isElya ? 'text-right' : ''}`}>
+                        <div className={`text-xs text-slate-400 mb-1 ${!isElya ? 'text-right' : ''}`}>
+                          {isElya ? 'Elya' : 'You'} • {new Date(message.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                        </div>
+                        <div className={`rounded-lg p-4 ${
+                          isElya
+                            ? 'bg-teal-500/10 border border-teal-500/30 text-slate-100'
+                            : 'bg-violet-500/10 border border-violet-500/30 text-slate-100'
+                        }`}>
+                          <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
               <div ref={messagesEndRef} />
             </div>
 
@@ -439,27 +584,68 @@ export default function ModulePage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       );
     }
 
     const section = sections[currentSection];
     if (!section) return null;
 
-    return (
-      <div>
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-semibold text-slate-50">{section.section_title}</h2>
-            <span className="text-sm text-slate-400">{section.duration_minutes} min</span>
-          </div>
-        </div>
+    // Friendly section intro with clear purpose
+    const sectionIntros: Record<string, { hint: string; purpose: string }> = {
+      concept: {
+        hint: "Read & absorb",
+        purpose: "Understanding the idea behind this skill"
+      },
+      practice: {
+        hint: "Try it out",
+        purpose: "A quick exercise to experience this yourself"
+      },
+      application: {
+        hint: "Take it with you",
+        purpose: "How to use this in your interpreting work"
+      }
+    };
 
-        <div className="prose prose-invert prose-slate max-w-none">
+    const intro = sectionIntros[currentSection];
+
+    return (
+      <motion.div
+        key={currentSection}
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        transition={{ duration: 0.3, ease: "easeInOut" }}
+      >
+        {/* Section context */}
+        {intro && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-8 pb-6 border-b border-slate-800/50"
+          >
+            <div className="flex items-center gap-3 mb-1">
+              <span className="text-xs uppercase tracking-wider text-teal-500 font-medium">
+                {intro.hint}
+              </span>
+            </div>
+            <p className="text-slate-500 text-sm">
+              {intro.purpose}
+            </p>
+          </motion.div>
+        )}
+
+        <motion.div
+          className="max-w-2xl"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
           {section.content_blocks.map((block, index) => renderContentBlock(block, index))}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     );
   };
 
@@ -489,7 +675,9 @@ export default function ModulePage() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-6xl mb-4">📚</div>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+            <div className="w-8 h-1 bg-slate-600 rounded-full" />
+          </div>
           <h2 className="text-xl font-semibold text-slate-300 mb-2">Module not found</h2>
           <button
             onClick={() => router.push("/skills")}
@@ -503,18 +691,28 @@ export default function ModulePage() {
   }
 
   const sectionProgress = [
-    { key: "concept", label: "Concept", completed: progress?.concept_completed || false },
-    { key: "practice", label: "Practice", completed: progress?.practice_completed || false },
-    { key: "reflection", label: "Reflection", completed: progress?.reflection_completed || false },
-    { key: "application", label: "Application", completed: progress?.application_completed || false }
+    { key: "concept", label: "Learn", completed: progress?.concept_completed || false },
+    { key: "practice", label: "Try It", completed: progress?.practice_completed || false },
+    { key: "reflection", label: "Reflect", completed: progress?.reflection_completed || false },
+    { key: "application", label: "Apply", completed: progress?.application_completed || false }
   ];
 
   return (
     <div className="min-h-screen bg-slate-950">
       <NavBar />
-      <div className="container mx-auto max-w-5xl px-4 md:px-6 py-6 md:py-8">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4 }}
+        className="container mx-auto max-w-5xl px-4 md:px-6 py-6 md:py-8"
+      >
         {/* Header */}
-        <div className="mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="mb-6"
+        >
           <button
             onClick={() => router.push("/skills")}
             className="text-sm text-slate-400 hover:text-teal-400 mb-4 flex items-center gap-1"
@@ -522,51 +720,97 @@ export default function ModulePage() {
             ← Back to Skills Library
           </button>
 
-          <div className="flex items-start gap-4 mb-4">
-            <span className="text-5xl">{module.series.icon_emoji}</span>
+          <div className="flex items-start gap-4 mb-6">
+            <motion.span
+              className="text-4xl"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
+            >
+              {module.series.icon_emoji}
+            </motion.span>
             <div className="flex-1">
-              <p className="text-sm text-teal-400 mb-1">{module.series.title} • Module {module.order_in_series}</p>
-              <h1 className="text-3xl font-semibold text-slate-50">{module.title}</h1>
-              <p className="mt-2 text-lg text-slate-300">{module.subtitle}</p>
-              <div className="flex items-center gap-4 mt-3 text-sm text-slate-400">
-                <span>{module.duration_minutes} minutes</span>
-                <span>•</span>
-                <span>{module.ecci_domain}</span>
-              </div>
+              <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide">{module.series.title}</p>
+              <h1 className="text-2xl font-medium text-slate-50">{module.title}</h1>
+              <p className="mt-2 text-slate-400">{module.subtitle}</p>
             </div>
           </div>
 
-          {/* Progress Bar */}
-          <div className="flex gap-2">
-            {sectionProgress.map((section, index) => (
-              <div key={section.key} className="flex-1">
-                <div className={`h-2 rounded-full ${
-                  section.completed
-                    ? 'bg-teal-500'
-                    : section.key === currentSection
-                    ? 'bg-teal-500/50'
-                    : 'bg-slate-700'
-                }`} />
-                <p className={`text-xs mt-1 text-center ${
-                  section.key === currentSection ? 'text-teal-400' : 'text-slate-500'
-                }`}>
-                  {section.label}
-                </p>
-              </div>
-            ))}
+          {/* Progress Steps - Clearer flow indicator */}
+          <div className="flex items-center gap-1">
+            {sectionProgress.map((section, index) => {
+              const isActive = section.key === currentSection;
+              const isPast = sectionProgress.findIndex(s => s.key === currentSection) > index;
+
+              return (
+                <div key={section.key} className="flex items-center">
+                  {/* Step indicator */}
+                  <button
+                    onClick={() => {
+                      if (isPast || section.completed) {
+                        setCurrentSection(section.key as "concept" | "practice" | "reflection" | "application");
+                      }
+                    }}
+                    disabled={!isPast && !section.completed && !isActive}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-teal-500/20 text-teal-400 border border-teal-500/40'
+                        : section.completed || isPast
+                        ? 'bg-slate-800 text-slate-400 hover:text-teal-400 cursor-pointer'
+                        : 'bg-slate-800/50 text-slate-600 cursor-default'
+                    }`}
+                  >
+                    {section.completed ? (
+                      <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
+                        isActive ? 'bg-teal-500 text-slate-950' : 'bg-slate-700 text-slate-500'
+                      }`}>
+                        {index + 1}
+                      </span>
+                    )}
+                    {section.label}
+                  </button>
+
+                  {/* Connector line */}
+                  {index < sectionProgress.length - 1 && (
+                    <div className={`w-4 h-px mx-1 ${
+                      isPast || section.completed ? 'bg-teal-500/50' : 'bg-slate-700'
+                    }`} />
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </motion.div>
 
         {/* Content */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 mb-6">
-          {renderSection()}
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 mb-6"
+        >
+          <AnimatePresence mode="wait">
+            {renderSection()}
+          </AnimatePresence>
+        </motion.div>
 
         {/* Navigation */}
-        <div className="flex justify-between items-center">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+          className="flex justify-between items-center"
+        >
           <div>
             {currentSection !== "concept" && (
-              <button
+              <motion.button
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
                 onClick={() => {
                   const sectionOrder: Array<"concept" | "practice" | "reflection" | "application"> = ["concept", "practice", "reflection", "application"];
                   const currentIndex = sectionOrder.indexOf(currentSection);
@@ -574,20 +818,22 @@ export default function ModulePage() {
                     setCurrentSection(sectionOrder[currentIndex - 1]);
                   }
                 }}
-                className="px-6 py-3 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
+                className="px-5 py-2.5 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors text-sm"
               >
-                ← Previous
-              </button>
+                ← Back
+              </motion.button>
             )}
           </div>
 
-          <button
+          <motion.button
             onClick={nextSection}
-            className="px-6 py-3 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="px-6 py-2.5 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors"
           >
-            {currentSection === "application" ? "Complete Module" : "Next →"}
-          </button>
-        </div>
+            {currentSection === "application" ? "Finish" : "Continue →"}
+          </motion.button>
+        </motion.div>
 
         {/* Attribution */}
         <div className="mt-8 pt-6 border-t border-slate-800">
@@ -595,7 +841,7 @@ export default function ModulePage() {
             {module.attribution_text}
           </p>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

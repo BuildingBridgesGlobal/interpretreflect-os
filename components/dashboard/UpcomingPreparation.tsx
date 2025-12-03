@@ -32,7 +32,11 @@ export default function UpcomingPreparation({ userData }: UpcomingPreparationPro
           {upcomingAssignments.map((assignment) => (
             <div key={assignment.id} className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-5">
               <div className="flex items-start gap-3 mb-3">
-                <span className="text-2xl">📋</span>
+                <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
                 <div className="flex-1">
                   <p className="font-semibold text-slate-100">{assignment.type}</p>
                   <p className="text-sm text-amber-400 mt-0.5">{assignment.date}</p>

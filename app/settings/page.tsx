@@ -9,16 +9,16 @@ export default function SettingsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [userData, setUserData] = useState<any>(null);
-  const [selectedTab, setSelectedTab] = useState<"account" | "profile" | "preferences" | "billing" | "privacy">("account");
+  const [selectedTab, setSelectedTab] = useState<"account" | "profile" | "credentials" | "preferences" | "billing" | "privacy">("account");
 
-  // Form states
+  // Account form states
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+
+  // Community Profile form states
   const [bio, setBio] = useState("");
-  const [yearsExperience, setYearsExperience] = useState("");
-  const [certifications, setCertifications] = useState<string[]>([]);
-  const [specialties, setSpecialties] = useState<string[]>([]);
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [openToMentoring, setOpenToMentoring] = useState(false);
 
@@ -27,6 +27,10 @@ export default function SettingsPage() {
   const [weeklyReports, setWeeklyReports] = useState(true);
   const [communityUpdates, setCommunityUpdates] = useState(true);
   const [trainingReminders, setTrainingReminders] = useState(true);
+
+  // Privacy
+  const [profileVisibility, setProfileVisibility] = useState("everyone");
+  const [dataSharing, setDataSharing] = useState("anonymous");
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -47,14 +51,21 @@ export default function SettingsPage() {
       // Populate form fields
       if (profile) {
         const profileData = profile as any;
+        // Account
         setFullName(profileData.full_name || "");
         setEmail(session.user.email || "");
+        // Community Profile
         setBio(profileData.bio || "");
-        setYearsExperience(profileData.years_experience?.toString() || "");
-        setCertifications(profileData.certifications || []);
-        setSpecialties(profileData.specialties || []);
         setLinkedinUrl(profileData.linkedin_url || "");
         setOpenToMentoring(profileData.open_to_mentoring || false);
+        // Preferences
+        setEmailNotifications(profileData.email_notifications ?? true);
+        setWeeklyReports(profileData.weekly_reports ?? true);
+        setCommunityUpdates(profileData.community_updates ?? true);
+        setTrainingReminders(profileData.training_reminders ?? true);
+        // Privacy
+        setProfileVisibility(profileData.profile_visibility || "everyone");
+        setDataSharing(profileData.data_sharing || "anonymous");
       }
 
       setLoading(false);
@@ -62,43 +73,120 @@ export default function SettingsPage() {
     loadUserData();
   }, [router]);
 
+  // Helper to show save feedback
+  const showMessage = (type: "success" | "error", text: string) => {
+    setSaveMessage({ type, text });
+    setTimeout(() => setSaveMessage(null), 3000);
+  };
+
   const handleSaveAccount = async () => {
     setSaving(true);
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      showMessage("error", "Session expired. Please sign in again.");
+      setSaving(false);
+      return;
+    }
 
-    await supabase
+    const { error } = await supabase
       .from("profiles")
       .update({
         full_name: fullName,
-        bio,
-        years_experience: parseInt(yearsExperience) || 0,
-        certifications,
-        specialties,
-        linkedin_url: linkedinUrl,
-        open_to_mentoring: openToMentoring
+        updated_at: new Date().toISOString()
       })
       .eq("id", session.user.id);
 
     setSaving(false);
+    if (error) {
+      showMessage("error", "Failed to save. Please try again.");
+      console.error("Save error:", error);
+    } else {
+      showMessage("success", "Account settings saved!");
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setSaving(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Session expired. Please sign in again.");
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        bio,
+        linkedin_url: linkedinUrl,
+        open_to_mentoring: openToMentoring,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", session.user.id);
+
+    setSaving(false);
+    if (error) {
+      showMessage("error", "Failed to save. Please try again.");
+      console.error("Save error:", error);
+    } else {
+      showMessage("success", "Profile saved!");
+    }
   };
 
   const handleSavePreferences = async () => {
     setSaving(true);
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      showMessage("error", "Session expired. Please sign in again.");
+      setSaving(false);
+      return;
+    }
 
-    await supabase
+    const { error } = await supabase
       .from("profiles")
       .update({
         email_notifications: emailNotifications,
         weekly_reports: weeklyReports,
         community_updates: communityUpdates,
-        training_reminders: trainingReminders
-      } as any)
+        training_reminders: trainingReminders,
+        updated_at: new Date().toISOString()
+      })
       .eq("id", session.user.id);
 
     setSaving(false);
+    if (error) {
+      showMessage("error", "Failed to save. Please try again.");
+      console.error("Save error:", error);
+    } else {
+      showMessage("success", "Preferences saved!");
+    }
+  };
+
+  const handleSavePrivacy = async () => {
+    setSaving(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Session expired. Please sign in again.");
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        profile_visibility: profileVisibility,
+        data_sharing: dataSharing,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", session.user.id);
+
+    setSaving(false);
+    if (error) {
+      showMessage("error", "Failed to save. Please try again.");
+      console.error("Save error:", error);
+    } else {
+      showMessage("success", "Privacy settings saved!");
+    }
   };
 
   if (loading) {
@@ -116,7 +204,7 @@ export default function SettingsPage() {
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-slate-50">Settings</h1>
-          <p className="mt-1 text-sm text-slate-400">Manage your account, preferences, and privacy</p>
+          <p className="mt-1 text-sm text-slate-300">Manage your account, preferences, and privacy</p>
         </div>
 
         {/* Tab Navigation */}
@@ -124,6 +212,7 @@ export default function SettingsPage() {
           {[
             { key: "account", label: "Account" },
             { key: "profile", label: "Community Profile" },
+            { key: "credentials", label: "Credentials" },
             { key: "preferences", label: "Preferences" },
             { key: "billing", label: "Billing" },
             { key: "privacy", label: "Privacy & Data" }
@@ -143,9 +232,20 @@ export default function SettingsPage() {
         </div>
 
         {/* Tab Content */}
+        {/* Save Message Toast */}
+        {saveMessage && (
+          <div className={`fixed top-20 right-6 px-4 py-3 rounded-lg shadow-lg z-50 ${
+            saveMessage.type === "success"
+              ? "bg-emerald-500/20 border border-emerald-500/50 text-emerald-400"
+              : "bg-rose-500/20 border border-rose-500/50 text-rose-400"
+          }`}>
+            {saveMessage.text}
+          </div>
+        )}
+
         {selectedTab === "account" && (
           <div className="max-w-2xl space-y-6">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Account Information</h3>
 
               <div className="space-y-4">
@@ -155,8 +255,10 @@ export default function SettingsPage() {
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Enter your full name"
                     className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                   />
+                  <p className="text-xs text-slate-500 mt-1">This name will be used across the platform</p>
                 </div>
 
                 <div>
@@ -170,16 +272,6 @@ export default function SettingsPage() {
                   <p className="text-xs text-slate-500 mt-1">Email cannot be changed</p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Years of Experience</label>
-                  <input
-                    type="number"
-                    value={yearsExperience}
-                    onChange={(e) => setYearsExperience(e.target.value)}
-                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                  />
-                </div>
-
                 <button
                   onClick={handleSaveAccount}
                   disabled={saving}
@@ -190,9 +282,9 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-6">
+            <div className="rounded-xl border border-rose-500/50 bg-rose-500/5 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-2">Danger Zone</h3>
-              <p className="text-sm text-slate-400 mb-4">Irreversible actions</p>
+              <p className="text-sm text-slate-300 mb-4">Irreversible actions</p>
               <button className="px-4 py-2 rounded-lg border border-rose-500/50 text-rose-400 hover:bg-rose-500/10 transition-colors">
                 Delete Account
               </button>
@@ -202,9 +294,9 @@ export default function SettingsPage() {
 
         {selectedTab === "profile" && (
           <div className="max-w-2xl space-y-6">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-2">Community Profile</h3>
-              <p className="text-sm text-slate-400 mb-4">This information is visible to other interpreters in the Community tab</p>
+              <p className="text-sm text-slate-300 mb-4">This information is visible to other interpreters in the Community tab</p>
 
               <div className="space-y-4">
                 <div>
@@ -250,7 +342,7 @@ export default function SettingsPage() {
                 </div>
 
                 <button
-                  onClick={handleSaveAccount}
+                  onClick={handleSaveProfile}
                   disabled={saving}
                   className="px-6 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50"
                 >
@@ -261,9 +353,75 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {selectedTab === "credentials" && (
+          <div className="max-w-2xl space-y-6">
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">Professional Credentials</h3>
+              <p className="text-sm text-slate-300 mb-4">Manage your certifications, licenses, and professional credentials</p>
+
+              <div className="space-y-4">
+                <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-slate-100 mb-1">Certifications & Licenses</h4>
+                      <p className="text-xs text-slate-400">Upload and track your professional credentials</p>
+                    </div>
+                  </div>
+                  <button className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-slate-600 hover:border-teal-500 text-slate-400 hover:text-teal-400 transition-all flex items-center justify-center gap-2">
+                    <span className="text-lg">📄</span>
+                    <span className="text-sm font-medium">Add Credential</span>
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {/* Example credential cards - will be populated from database */}
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="px-2 py-1 rounded-md bg-teal-500/20 border border-teal-500/30 text-teal-400 text-xs font-medium">
+                            Active
+                          </span>
+                          <h4 className="text-sm font-semibold text-slate-100">NIC Certification</h4>
+                        </div>
+                        <p className="text-xs text-slate-400 mb-1">Issued: Jan 2020</p>
+                        <p className="text-xs text-slate-400">Expires: Jan 2026</p>
+                      </div>
+                      <button className="text-xs text-slate-400 hover:text-slate-300">View</button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="px-2 py-1 rounded-md bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-medium">
+                            Expiring Soon
+                          </span>
+                          <h4 className="text-sm font-semibold text-slate-100">State License</h4>
+                        </div>
+                        <p className="text-xs text-slate-400 mb-1">Issued: March 2022</p>
+                        <p className="text-xs text-amber-400">Expires: March 2025 (2 months)</p>
+                      </div>
+                      <button className="text-xs text-slate-400 hover:text-slate-300">View</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-blue-500/50 bg-blue-500/10 p-5">
+              <h3 className="text-sm font-semibold text-blue-400 mb-2">Credential Reminders</h3>
+              <p className="text-sm text-slate-300">
+                We'll notify you 3 months before any credential expires so you have time to renew. All credentials are stored securely and encrypted.
+              </p>
+            </div>
+          </div>
+        )}
+
         {selectedTab === "preferences" && (
           <div className="max-w-2xl space-y-6">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Email Notifications</h3>
 
               <div className="space-y-4">
@@ -357,7 +515,7 @@ export default function SettingsPage() {
 
         {selectedTab === "billing" && (
           <div className="max-w-2xl space-y-6">
-            <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-purple-500/10 p-6">
+            <div className="rounded-xl border border-violet-500/50 bg-gradient-to-br from-violet-500/10 to-purple-500/10 p-6">
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-100">Current Plan</h3>
@@ -398,7 +556,7 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Payment Method</h3>
               <div className="flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/50">
                 <div className="flex items-center gap-3">
@@ -414,7 +572,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Billing History</h3>
               <div className="space-y-3">
                 {[
@@ -442,42 +600,58 @@ export default function SettingsPage() {
 
         {selectedTab === "privacy" && (
           <div className="max-w-2xl space-y-6">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Privacy Settings</h3>
 
               <div className="space-y-4">
                 <div className="p-4 rounded-lg border border-slate-700 bg-slate-800/50">
                   <p className="text-sm font-medium text-slate-100 mb-2">Profile Visibility</p>
                   <p className="text-xs text-slate-400 mb-3">Control who can see your profile in the Community tab</p>
-                  <select className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400">
-                    <option>Everyone</option>
-                    <option>Connections Only</option>
-                    <option>Private</option>
+                  <select
+                    value={profileVisibility}
+                    onChange={(e) => setProfileVisibility(e.target.value)}
+                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  >
+                    <option value="everyone">Everyone</option>
+                    <option value="connections">Connections Only</option>
+                    <option value="private">Private</option>
                   </select>
                 </div>
 
                 <div className="p-4 rounded-lg border border-slate-700 bg-slate-800/50">
-                  <p className="text-sm font-medium text-slate-100 mb-2">ECCI Data Sharing</p>
-                  <p className="text-xs text-slate-400 mb-3">Allow anonymous ECCI data to help improve recommendations</p>
-                  <select className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400">
-                    <option>Share anonymously</option>
-                    <option>Do not share</option>
+                  <p className="text-sm font-medium text-slate-100 mb-2">Anonymous Data Sharing</p>
+                  <p className="text-xs text-slate-400 mb-3">Help improve recommendations by sharing anonymized usage patterns</p>
+                  <select
+                    value={dataSharing}
+                    onChange={(e) => setDataSharing(e.target.value)}
+                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  >
+                    <option value="anonymous">Share anonymously</option>
+                    <option value="none">Do not share</option>
                   </select>
                 </div>
+
+                <button
+                  onClick={handleSavePrivacy}
+                  disabled={saving}
+                  className="px-6 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Save Privacy Settings"}
+                </button>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Data Export</h3>
-              <p className="text-sm text-slate-400 mb-4">Download a copy of your data including debriefs, assignments, and performance history</p>
+              <p className="text-sm text-slate-300 mb-4">Download a copy of your data including debriefs, assignments, and performance history</p>
               <button className="px-4 py-2 rounded-lg border border-teal-500/50 text-teal-400 hover:bg-teal-500/10 transition-colors">
                 Request Data Export
               </button>
             </div>
 
-            <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4">
+            <div className="rounded-xl border border-blue-500/50 bg-blue-500/10 p-4">
               <p className="text-sm text-slate-300">
-                <strong className="text-slate-100">Your privacy matters.</strong> We never sell your data. All debrief content is encrypted, and ECCI data is only shared anonymously if you opt in. Read our <a href="/privacy" className="text-blue-400 hover:text-blue-300 underline">Privacy Policy</a>.
+                <strong className="text-slate-100">Your privacy matters.</strong> We never sell your data. All debrief content is encrypted, and anonymous data is only shared if you opt in. Read our <a href="/privacy" className="text-blue-400 hover:text-blue-300 underline">Privacy Policy</a>.
               </p>
             </div>
           </div>

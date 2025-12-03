@@ -38,7 +38,15 @@ export const TeamsPrograms: React.FC = () => {
             </ul>
           </div>
         </div>
-        <p className="mt-8 text-[0.75rem] text-slate-500">Organizations see patterns, never personal data.</p>
+        <div className="mt-8 flex flex-col sm:flex-row gap-4 items-center">
+          <a
+            href="/for-agencies"
+            className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-6 py-3 text-sm font-semibold shadow-lg shadow-teal-400/20 hover:bg-teal-300 transition"
+          >
+            Learn More for Agencies
+          </a>
+          <p className="text-[0.75rem] text-slate-500">Organizations see patterns, never personal data.</p>
+        </div>
       </div>
     </section>
   );
