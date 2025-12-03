@@ -11,6 +11,7 @@ export default function NavBar() {
   const [user, setUser] = useState<any>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isAgencyAdmin, setIsAgencyAdmin] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -18,6 +19,9 @@ export default function NavBar() {
     if (supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         setUser(session?.user ?? null);
+        if (session?.user) {
+          checkAgencyAdmin(session.user.id);
+        }
       });
 
       // Listen for auth changes
@@ -25,11 +29,29 @@ export default function NavBar() {
         data: { subscription },
       } = supabase.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user ?? null);
+        if (session?.user) {
+          checkAgencyAdmin(session.user.id);
+        } else {
+          setIsAgencyAdmin(false);
+        }
       });
 
       return () => subscription.unsubscribe();
     }
   }, []);
+
+  const checkAgencyAdmin = async (userId: string) => {
+    const { data: membership } = await supabase
+      .from("organization_members")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .in("role", ["admin", "owner", "manager"])
+      .limit(1)
+      .single();
+
+    setIsAgencyAdmin(!!membership);
+  };
 
   const handleLogout = async () => {
     if (supabase) {
@@ -143,6 +165,18 @@ export default function NavBar() {
                       {/* Dropdown Menu */}
                       <div className="absolute right-0 mt-2 w-48 rounded-lg border border-slate-700 bg-slate-900 shadow-xl z-20">
                         <div className="py-1">
+                          {isAgencyAdmin && (
+                            <Link
+                              href="/agency"
+                              onClick={() => setDropdownOpen(false)}
+                              className="flex items-center gap-2 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-teal-300 transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              Agency Dashboard
+                            </Link>
+                          )}
                           <Link
                             href="/settings"
                             onClick={() => setDropdownOpen(false)}

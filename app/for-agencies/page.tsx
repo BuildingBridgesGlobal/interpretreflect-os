@@ -35,7 +35,7 @@ export default function ForAgenciesPage() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
-                href="/admin/onboarding"
+                href="/signup/agency"
                 className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-8 py-4 text-base font-semibold shadow-lg shadow-teal-400/30 hover:bg-teal-300 transition"
               >
                 Start Free Trial
@@ -48,9 +48,6 @@ export default function ForAgenciesPage() {
               </a>
             </div>
 
-            <p className="text-sm text-slate-500 mt-6">
-              Trusted by NC Division of Services for the Deaf and Hard of Hearing
-            </p>
           </div>
         </section>
 
@@ -292,7 +289,7 @@ export default function ForAgenciesPage() {
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
-                href="/admin/onboarding"
+                href="/signup/agency"
                 className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-8 py-4 text-lg font-semibold shadow-lg shadow-teal-400/30 hover:bg-teal-300 transition"
               >
                 Start Free Trial
