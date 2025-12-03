@@ -38,9 +38,10 @@ export default function ForAgenciesPage() {
                 href="https://lunacal.ai/interpretreflect/agency-discovery-call-interpretreflect"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-8 py-4 text-base font-semibold shadow-lg shadow-teal-400/30 hover:bg-teal-300 transition"
+                className="inline-flex flex-col items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-8 py-4 shadow-lg shadow-teal-400/30 hover:bg-teal-300 transition"
               >
-                Schedule Discovery Call
+                <span className="text-base font-semibold">Schedule Discovery Call</span>
+                <span className="text-sm font-medium opacity-80">in ASL or English</span>
               </a>
               <a
                 href="#features"
@@ -289,25 +290,23 @@ export default function ForAgenciesPage() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex justify-center">
               <a
                 href="https://lunacal.ai/interpretreflect/agency-discovery-call-interpretreflect"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-8 py-4 text-lg font-semibold shadow-lg shadow-teal-400/30 hover:bg-teal-300 transition"
+                className="inline-flex flex-col items-center justify-center rounded-lg bg-teal-400 text-slate-950 px-10 py-5 shadow-lg shadow-teal-400/30 hover:bg-teal-300 transition"
               >
-                Schedule Discovery Call
-              </a>
-              <a
-                href="mailto:info@interpretreflect.com?subject=Agency Inquiry"
-                className="inline-flex items-center justify-center rounded-lg border-2 border-slate-600 text-slate-200 px-8 py-4 text-lg font-semibold hover:bg-slate-800 transition"
-              >
-                Email Us
+                <span className="text-lg font-semibold">Schedule Discovery Call</span>
+                <span className="text-sm font-medium opacity-80">in ASL or English</span>
               </a>
             </div>
 
             <p className="text-sm text-slate-500 mt-6">
-              Questions? Email us at info@interpretreflect.com
+              Questions? Email us at{" "}
+              <a href="mailto:info@interpretreflect.com" className="text-teal-400 hover:text-teal-300">
+                info@interpretreflect.com
+              </a>
             </p>
           </div>
         </section>
