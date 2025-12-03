@@ -1,5 +1,8 @@
 import { ImageResponse } from "next/og";
 
+// Force dynamic rendering to avoid build-time URL resolution issues
+export const runtime = "edge";
+
 export const size = {
   width: 1200,
   height: 630,

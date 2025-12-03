@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
@@ -21,7 +21,7 @@ type Assignment = {
   prep_status: string | null;
 };
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -375,5 +375,25 @@ export default function DashboardPage() {
 
       <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function DashboardPageLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <NavBar />
+      <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6">
+        <SkeletonDashboard />
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardPageLoading />}>
+      <DashboardPageContent />
+    </Suspense>
   );
 }

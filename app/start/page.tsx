@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function StartPage() {
+function StartPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const organizationId = searchParams.get("org");
@@ -345,5 +345,22 @@ export default function StartPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function StartPageLoading() {
+  return (
+    <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center">
+      <div className="text-slate-400">Loading...</div>
+    </div>
+  );
+}
+
+export default function StartPage() {
+  return (
+    <Suspense fallback={<StartPageLoading />}>
+      <StartPageContent />
+    </Suspense>
   );
 }

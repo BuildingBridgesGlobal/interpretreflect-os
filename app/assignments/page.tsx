@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
@@ -34,7 +34,7 @@ type FreeWriteSession = {
   messages?: { role: string; content: string; timestamp: string }[];
 };
 
-export default function AssignmentsPage() {
+function AssignmentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -1214,5 +1214,25 @@ export default function AssignmentsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function AssignmentsPageLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <NavBar />
+      <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8">
+        <div className="text-slate-400">Loading assignments...</div>
+      </div>
+    </div>
+  );
+}
+
+export default function AssignmentsPage() {
+  return (
+    <Suspense fallback={<AssignmentsPageLoading />}>
+      <AssignmentsPageContent />
+    </Suspense>
   );
 }
