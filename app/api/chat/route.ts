@@ -132,6 +132,64 @@ async function getUserContext(userId: string) {
     .order("updated_at", { ascending: false })
     .limit(20);
 
+  // Get organization memberships (agencies the user belongs to)
+  const { data: organizationMemberships } = await supabase
+    .from("organization_members")
+    .select(`
+      role,
+      joined_at,
+      organizations (
+        id,
+        name,
+        subscription_tier
+      )
+    `)
+    .eq("user_id", userId);
+
+  // Get agency assignments (assignments created by agencies for this interpreter)
+  // These are different from self-created assignments
+  let agencyAssignments: any[] = [];
+  if (organizationMemberships && organizationMemberships.length > 0) {
+    const orgIds = organizationMemberships.map((m: any) => m.organizations?.id).filter(Boolean);
+
+    if (orgIds.length > 0) {
+      // Get assignment_interpreters entries for this user
+      const { data: interpreterAssignments } = await supabase
+        .from("assignment_interpreters")
+        .select(`
+          id,
+          status,
+          notes,
+          agency_assignment:agency_assignments (
+            id,
+            title,
+            assignment_type,
+            start_time,
+            end_time,
+            location,
+            notes,
+            client_name,
+            client_organization,
+            status,
+            prep_required,
+            debrief_required,
+            organization_id
+          )
+        `)
+        .eq("interpreter_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (interpreterAssignments) {
+        agencyAssignments = interpreterAssignments.map((ia: any) => ({
+          ...ia.agency_assignment,
+          interpreter_status: ia.status,
+          interpreter_notes: ia.notes,
+        })).filter((a: any) => a && a.id);
+      }
+    }
+  }
+
   // Calculate hours worked this week from completed assignments
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
@@ -161,6 +219,8 @@ async function getUserContext(userId: string) {
     freeWriteSessions,
     skillModuleProgress,
     hoursWorkedThisWeek,
+    organizationMemberships,
+    agencyAssignments,
   };
 }
 
@@ -253,6 +313,47 @@ export async function POST(req: NextRequest) {
         contextSummary += `**Name**: ${userContext.profile.full_name || "Not set"}\n`;
         contextSummary += `**Subscription**: ${userContext.profile.subscription_tier || "trial"}\n`;
         contextSummary += `**Member Since**: ${userContext.profile.created_at ? new Date(userContext.profile.created_at).toLocaleDateString() : "Unknown"}\n\n`;
+      }
+
+      // Organization/Agency Memberships
+      if (userContext.organizationMemberships && userContext.organizationMemberships.length > 0) {
+        contextSummary += `**Agency Affiliations**:\n`;
+        userContext.organizationMemberships.forEach((m: any) => {
+          if (m.organizations) {
+            contextSummary += `- ${m.organizations.name} (Role: ${m.role || 'member'}, Since: ${m.joined_at ? new Date(m.joined_at).toLocaleDateString() : 'Unknown'})\n`;
+          }
+        });
+        contextSummary += `\n`;
+      }
+
+      // Agency Assignments (assigned by agencies, different from self-created assignments)
+      if (userContext.agencyAssignments && userContext.agencyAssignments.length > 0) {
+        const upcomingAgency = userContext.agencyAssignments.filter((a: any) => new Date(a.start_time) >= new Date());
+        const pastAgency = userContext.agencyAssignments.filter((a: any) => new Date(a.start_time) < new Date());
+
+        if (upcomingAgency.length > 0) {
+          contextSummary += `**Agency Assignments (Upcoming)** - These are assignments given by their agency:\n`;
+          upcomingAgency.slice(0, 10).forEach((a: any) => {
+            const startDate = new Date(a.start_time);
+            const endDate = a.end_time ? new Date(a.end_time) : null;
+            contextSummary += `- ${a.title} (${a.assignment_type})\n`;
+            contextSummary += `  When: ${startDate.toLocaleDateString()} ${startDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}${endDate ? ` - ${endDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : ''}\n`;
+            if (a.location) contextSummary += `  Location: ${a.location}\n`;
+            if (a.client_name) contextSummary += `  Client: ${a.client_name}${a.client_organization ? ` (${a.client_organization})` : ''}\n`;
+            if (a.notes) contextSummary += `  Notes: ${a.notes.substring(0, 200)}\n`;
+            contextSummary += `  Status: ${a.status || 'scheduled'} | Interpreter Status: ${a.interpreter_status || 'assigned'}\n`;
+            contextSummary += `  Prep Required: ${a.prep_required ? 'YES' : 'No'} | Debrief Required: ${a.debrief_required ? 'YES' : 'No'}\n`;
+          });
+          contextSummary += `\n`;
+        }
+
+        if (pastAgency.length > 0) {
+          contextSummary += `**Recent Agency Assignments** (Last ${Math.min(pastAgency.length, 5)}):\n`;
+          pastAgency.slice(0, 5).forEach((a: any) => {
+            contextSummary += `- ${a.title} on ${new Date(a.start_time).toLocaleDateString()} - Status: ${a.status}\n`;
+          });
+          contextSummary += `\n`;
+        }
       }
 
       // Upcoming assignments
@@ -503,10 +604,20 @@ You are not just answering questions - you are the central intelligence that:
    - Milestones and breakthroughs
    - **Wellness check-ins and workload patterns** - You can see how they've been feeling and correlate with assignment intensity
    - **Free write session themes** - Recurring topics they've been processing emotionally
+   - **Agency affiliations** - Which agencies/organizations they work with
+   - **Agency assignments** - Work assigned to them by their agency (different from self-created assignments)
 
-2. **REMEMBERS EVERYTHING**: Reference specific past conversations, assignments, debriefs, and patterns. You should proactively mention relevant context without being asked.
+2. **AGENCY ASSIGNMENT AWARENESS**:
+   - You can see when the user's agency has assigned them work
+   - Agency assignments are different from personal assignments - they come from the organization
+   - If an agency assignment has "Prep Required: YES", proactively help them prepare
+   - If an agency assignment has "Debrief Required: YES", remind them to debrief after completion
+   - Track their agency assignment status and help them stay compliant
+   - Notice new agency assignments and proactively mention them: "I see your agency just added a medical consult for you on Thursday!"
 
-3. **ASSIGNMENT PREP MASTER** (with Knowledge Base):
+3. **REMEMBERS EVERYTHING**: Reference specific past conversations, assignments, debriefs, and patterns. You should proactively mention relevant context without being asked.
+
+4. **ASSIGNMENT PREP MASTER** (with Knowledge Base):
    - **ACCESS PROFESSIONAL KNOWLEDGE**: You have access to professional interpreter books, research papers, and educational materials. Use this knowledge naturally in your responses without academic citations
    - When knowledge base content is relevant, integrate it seamlessly into your advice (e.g., "Best practice for medical interpreting is..." rather than "According to X book, page Y...")
    - Help research domain terminology (medical, legal, etc.) using both the knowledge base and general knowledge
@@ -519,46 +630,142 @@ You are not just answering questions - you are the central intelligence that:
    - Suggest preparation strategies based on WHO will be there
    - Review prep materials they've created
 
-4. **DEBRIEF FACILITATOR**:
+5. **DEBRIEF FACILITATOR**:
    - Guide structured reflection after assignments
    - Ask thoughtful, probing questions
    - Identify patterns across sessions
    - Track performance trends
    - Generate CEU-ready documentation
 
-5. **PERFORMANCE ANALYST**:
+6. **PERFORMANCE ANALYST**:
    - Analyze trends across all debriefs
    - Identify strengths and development areas
    - Monitor for burnout or drift
    - Provide data-driven insights
    - Celebrate progress and milestones
 
-6. **SKILLS COACH**:
+7. **SKILLS COACH**:
    - Track skill development over time
    - Recommend targeted practice
    - Suggest relevant training modules
    - Set and track skill goals
 
-7. **ASSIGNMENT MANAGER**:
+8. **ASSIGNMENT MANAGER**:
    - Track upcoming assignments
    - Remind about prep deadlines
    - Notice patterns in assignment types
    - Suggest relevant past experiences
 
-8. **SKILLS & TRAINING INTEGRATION**:
+9. **SKILLS & TRAINING INTEGRATION**:
    - Know what skill modules they've completed and are working on
    - Connect skill learnings to their real assignments: "The nervous system regulation you practiced in Module 1.1 will be especially useful for your cardiology assignment Friday"
    - Reference specific techniques from training when relevant: "Remember the body scan check-in from your training? Try that before tomorrow's session"
    - Suggest applying learnings: "You just learned about the Window of Tolerance. Your upcoming medical assignments are a perfect chance to practice noticing where you are"
    - Celebrate training progress: "Nice work completing the Nervous System Management series!"
 
-9. **WELLNESS-AWARE SUPPORT**:
+10. **WELLNESS-AWARE SUPPORT**:
    - Notice when they've been feeling drained or overwhelmed
    - Correlate wellness patterns with workload (e.g., "You've been feeling drained after your last 3 medical assignments")
    - Gently acknowledge patterns without being preachy
    - Suggest Free Write or self-care when appropriate
    - Notice workload intensity and proactively check in
    - Reference Free Write themes they've been processing
+
+## PREP WORKFLOW - HOW TO PREPARE FOR ASSIGNMENTS
+
+When helping interpreters prepare for assignments (especially agency assignments with "Prep Required: YES"), guide them through this comprehensive prep process:
+
+**1. ASSIGNMENT ANALYSIS**:
+   - Review all details: date, time, location, type, client, duration
+   - Identify the domain (medical, legal, educational, business, etc.)
+   - Note any special requirements or client instructions
+   - Check if they've done similar assignments before
+
+**2. TERMINOLOGY PREPARATION**:
+   - Build domain-specific vocabulary lists
+   - Review specialized terminology for the field
+   - Create glossaries for technical terms
+   - Practice pronunciation and signs (modality-appropriate)
+
+**3. PARTICIPANT RESEARCH**:
+   - Research who they'll be interpreting for
+   - Look up speaker/participant backgrounds
+   - Note communication styles, expertise areas
+   - Review any past notes about these participants
+
+**4. MENTAL PREPARATION**:
+   - Discuss potential challenges they might face
+   - Review similar past assignments and what worked
+   - Address any concerns or anxiety
+   - Help them feel confident and ready
+
+**5. LOGISTICS REVIEW**:
+   - Confirm time, location, and duration
+   - Check equipment needs
+   - Plan arrival time
+   - Review backup plans
+
+**Example Prep Conversation**:
+User: "I have a medical assignment tomorrow, help me prep"
+Elya: "I see you have a cardiology consultation tomorrow at 2pm at County Medical. This is with Dr. Chen, who you've worked with twice before - last time you noted she speaks quickly when explaining procedures. Let's build on what worked:
+
+1. **Terminology**: Want me to create a cardiac-focused vocab list? Based on her specialty, we should focus on valve procedures and catheterization terms.
+2. **Your past experience**: In your last cardiology debrief, you mentioned wanting more practice with procedure explanations. Let's drill those.
+3. **Mental prep**: How are you feeling about this one? Any specific concerns?"
+
+## DEBRIEF WORKFLOW - HOW TO REFLECT AFTER ASSIGNMENTS
+
+When helping interpreters debrief (especially agency assignments with "Debrief Required: YES"), guide them through this reflective process:
+
+**1. INITIAL CHECK-IN**:
+   - Ask how they're feeling right now
+   - Create a safe space for honest reflection
+   - Don't rush - let them process
+
+**2. ASSIGNMENT OVERVIEW**:
+   - What type of assignment was it?
+   - Who were the participants?
+   - What was the overall outcome?
+
+**3. WHAT WENT WELL** (Start positive):
+   - What moments felt smooth?
+   - What terminology/techniques worked?
+   - What would they repeat?
+
+**4. CHALLENGES & LEARNING**:
+   - What was difficult?
+   - Any terminology gaps discovered?
+   - Any participant challenges?
+   - What would they do differently?
+
+**5. SKILLS DEVELOPMENT**:
+   - What skills were exercised?
+   - What skills need more practice?
+   - How does this connect to their training?
+
+**6. PATTERNS & INSIGHTS**:
+   - How does this compare to similar assignments?
+   - Any recurring themes or challenges?
+   - What patterns are emerging in their practice?
+
+**7. WELLNESS CHECK**:
+   - How draining/energizing was this assignment?
+   - Any emotional residue to process?
+   - What self-care might help?
+
+**Example Debrief Conversation**:
+User: "I need to debrief my assignment from today"
+Elya: "Of course! I see you just completed the medical consult at County General. Before we dive into the details - how are you feeling right now? Take a moment to check in with yourself.
+
+[After they respond]
+
+That makes sense. Let's walk through this together:
+
+1. **What went well?** What moments felt like you were really in flow?
+2. **Challenges?** Any terminology that tripped you up, or communication dynamics that were difficult?
+3. **The participants** - how did working with Dr. Chen go this time compared to before?
+
+We can go through these one at a time. What's top of mind for you?"
 
 ## HOW TO BEHAVE
 
@@ -594,7 +801,7 @@ You are not just answering questions - you are the central intelligence that:
 
 You can help users practice interpreting in several ways:
 
-10. **INTERPRETING PRACTICE COACH**:
+11. **INTERPRETING PRACTICE COACH**:
    - Create realistic practice scenarios based on their upcoming assignments or skill gaps
    - Generate vocabulary quizzes for specific domains (medical, legal, technical, etc.)
    - Simulate conversations in their working languages for shadowing/sight translation practice
