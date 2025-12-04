@@ -5,6 +5,16 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 
+interface Credential {
+  id: string;
+  credential_type: string;
+  credential_name: string;
+  issuing_organization: string | null;
+  issue_date: string | null;
+  expiration_date: string | null;
+  status: string | null;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -16,6 +26,19 @@ export default function SettingsPage() {
   // Account form states
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+
+  // Credentials states
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [loadingCredentials, setLoadingCredentials] = useState(false);
+  const [showCredentialModal, setShowCredentialModal] = useState(false);
+  const [editingCredential, setEditingCredential] = useState<Credential | null>(null);
+  const [credentialForm, setCredentialForm] = useState({
+    credential_type: "certification",
+    credential_name: "",
+    issuing_organization: "",
+    issue_date: "",
+    expiration_date: "",
+  });
 
   // Community Profile form states
   const [bio, setBio] = useState("");
@@ -189,6 +212,154 @@ export default function SettingsPage() {
     }
   };
 
+  // Load credentials
+  const loadCredentials = async () => {
+    setLoadingCredentials(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await supabase
+      .from("credentials")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .order("created_at", { ascending: false });
+
+    if (!error && data) {
+      setCredentials(data);
+    }
+    setLoadingCredentials(false);
+  };
+
+  // Load credentials when tab changes
+  useEffect(() => {
+    if (selectedTab === "credentials" && credentials.length === 0) {
+      loadCredentials();
+    }
+  }, [selectedTab]);
+
+  const handleOpenCredentialModal = (credential?: Credential) => {
+    if (credential) {
+      setEditingCredential(credential);
+      setCredentialForm({
+        credential_type: credential.credential_type,
+        credential_name: credential.credential_name,
+        issuing_organization: credential.issuing_organization || "",
+        issue_date: credential.issue_date || "",
+        expiration_date: credential.expiration_date || "",
+      });
+    } else {
+      setEditingCredential(null);
+      setCredentialForm({
+        credential_type: "certification",
+        credential_name: "",
+        issuing_organization: "",
+        issue_date: "",
+        expiration_date: "",
+      });
+    }
+    setShowCredentialModal(true);
+  };
+
+  const handleSaveCredential = async () => {
+    setSaving(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Session expired. Please sign in again.");
+      setSaving(false);
+      return;
+    }
+
+    if (!credentialForm.credential_name.trim()) {
+      showMessage("error", "Credential name is required");
+      setSaving(false);
+      return;
+    }
+
+    const credentialData = {
+      user_id: session.user.id,
+      credential_type: credentialForm.credential_type,
+      credential_name: credentialForm.credential_name.trim(),
+      issuing_organization: credentialForm.issuing_organization.trim() || null,
+      issue_date: credentialForm.issue_date || null,
+      expiration_date: credentialForm.expiration_date || null,
+    };
+
+    if (editingCredential) {
+      // Update existing
+      const { error } = await supabase
+        .from("credentials")
+        .update(credentialData)
+        .eq("id", editingCredential.id);
+
+      if (error) {
+        showMessage("error", "Failed to update credential");
+        console.error("Update error:", error);
+      } else {
+        showMessage("success", "Credential updated!");
+        setShowCredentialModal(false);
+        loadCredentials();
+      }
+    } else {
+      // Create new
+      const { error } = await supabase
+        .from("credentials")
+        .insert(credentialData);
+
+      if (error) {
+        showMessage("error", "Failed to add credential");
+        console.error("Insert error:", error);
+      } else {
+        showMessage("success", "Credential added!");
+        setShowCredentialModal(false);
+        loadCredentials();
+      }
+    }
+    setSaving(false);
+  };
+
+  const handleDeleteCredential = async (credentialId: string) => {
+    if (!confirm("Are you sure you want to delete this credential?")) return;
+
+    const { error } = await supabase
+      .from("credentials")
+      .delete()
+      .eq("id", credentialId);
+
+    if (error) {
+      showMessage("error", "Failed to delete credential");
+      console.error("Delete error:", error);
+    } else {
+      showMessage("success", "Credential deleted");
+      loadCredentials();
+    }
+  };
+
+  const getStatusColor = (status: string | null) => {
+    switch (status) {
+      case "active":
+        return "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400";
+      case "expiring_soon":
+        return "bg-amber-500/20 border border-amber-500/30 text-amber-400";
+      case "expired":
+        return "bg-rose-500/20 border border-rose-500/30 text-rose-400";
+      default:
+        return "bg-slate-500/20 border border-slate-500/30 text-slate-400";
+    }
+  };
+
+  const formatCredentialStatus = (status: string | null) => {
+    switch (status) {
+      case "active":
+        return "Active";
+      case "expiring_soon":
+        return "Expiring Soon";
+      case "expired":
+        return "Expired";
+      default:
+        return status || "Active";
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -356,65 +527,193 @@ export default function SettingsPage() {
         {selectedTab === "credentials" && (
           <div className="max-w-2xl space-y-6">
             <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
-              <h3 className="text-lg font-semibold text-slate-100 mb-2">Professional Credentials</h3>
-              <p className="text-sm text-slate-300 mb-4">Manage your certifications, licenses, and professional credentials</p>
-
-              <div className="space-y-4">
-                <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h4 className="text-sm font-semibold text-slate-100 mb-1">Certifications & Licenses</h4>
-                      <p className="text-xs text-slate-400">Upload and track your professional credentials</p>
-                    </div>
-                  </div>
-                  <button className="w-full px-4 py-3 rounded-lg border-2 border-dashed border-slate-600 hover:border-teal-500 text-slate-400 hover:text-teal-400 transition-all flex items-center justify-center gap-2">
-                    <span className="text-lg">📄</span>
-                    <span className="text-sm font-medium">Add Credential</span>
-                  </button>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100 mb-1">Professional Credentials</h3>
+                  <p className="text-sm text-slate-300">Manage your certifications, licenses, and professional credentials</p>
                 </div>
+                <button
+                  onClick={() => handleOpenCredentialModal()}
+                  className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Credential
+                </button>
+              </div>
 
-                <div className="space-y-3">
-                  {/* Example credential cards - will be populated from database */}
-                  <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="px-2 py-1 rounded-md bg-teal-500/20 border border-teal-500/30 text-teal-400 text-xs font-medium">
-                            Active
-                          </span>
-                          <h4 className="text-sm font-semibold text-slate-100">NIC Certification</h4>
-                        </div>
-                        <p className="text-xs text-slate-400 mb-1">Issued: Jan 2020</p>
-                        <p className="text-xs text-slate-400">Expires: Jan 2026</p>
-                      </div>
-                      <button className="text-xs text-slate-400 hover:text-slate-300">View</button>
+              <div className="space-y-3">
+                {loadingCredentials ? (
+                  <div className="text-center py-8 text-slate-400">Loading credentials...</div>
+                ) : credentials.length === 0 ? (
+                  <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-8 text-center">
+                    <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center mx-auto mb-3">
+                      <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
                     </div>
+                    <p className="text-sm text-slate-400 mb-3">No credentials added yet</p>
+                    <button
+                      onClick={() => handleOpenCredentialModal()}
+                      className="text-sm text-teal-400 hover:text-teal-300"
+                    >
+                      Add your first credential
+                    </button>
                   </div>
-
-                  <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="px-2 py-1 rounded-md bg-amber-500/20 border border-amber-500/30 text-amber-400 text-xs font-medium">
-                            Expiring Soon
-                          </span>
-                          <h4 className="text-sm font-semibold text-slate-100">State License</h4>
+                ) : (
+                  credentials.map((cred) => (
+                    <div key={cred.id} className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`px-2 py-1 rounded-md text-xs font-medium ${getStatusColor(cred.status)}`}>
+                              {formatCredentialStatus(cred.status)}
+                            </span>
+                            <h4 className="text-sm font-semibold text-slate-100">{cred.credential_name}</h4>
+                          </div>
+                          <p className="text-xs text-slate-500 mb-1 capitalize">{cred.credential_type}</p>
+                          {cred.issuing_organization && (
+                            <p className="text-xs text-slate-400 mb-1">Issued by: {cred.issuing_organization}</p>
+                          )}
+                          <div className="flex gap-4 mt-2">
+                            {cred.issue_date && (
+                              <p className="text-xs text-slate-400">
+                                Issued: {new Date(cred.issue_date).toLocaleDateString()}
+                              </p>
+                            )}
+                            {cred.expiration_date && (
+                              <p className={`text-xs ${cred.status === "expired" ? "text-rose-400" : cred.status === "expiring_soon" ? "text-amber-400" : "text-slate-400"}`}>
+                                Expires: {new Date(cred.expiration_date).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-400 mb-1">Issued: March 2022</p>
-                        <p className="text-xs text-amber-400">Expires: March 2025 (2 months)</p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleOpenCredentialModal(cred)}
+                            className="text-xs text-teal-400 hover:text-teal-300 px-2 py-1"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCredential(cred.id)}
+                            className="text-xs text-rose-400 hover:text-rose-300 px-2 py-1"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                      <button className="text-xs text-slate-400 hover:text-slate-300">View</button>
                     </div>
-                  </div>
-                </div>
+                  ))
+                )}
               </div>
             </div>
 
             <div className="rounded-xl border border-blue-500/50 bg-blue-500/10 p-5">
               <h3 className="text-sm font-semibold text-blue-400 mb-2">Credential Reminders</h3>
               <p className="text-sm text-slate-300">
-                We'll notify you 3 months before any credential expires so you have time to renew. All credentials are stored securely and encrypted.
+                We'll notify you 3 months before any credential expires so you have time to renew. All credentials are stored securely and your agency can view your credential status.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Credential Add/Edit Modal */}
+        {showCredentialModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold text-slate-100">
+                    {editingCredential ? "Edit Credential" : "Add Credential"}
+                  </h2>
+                  <button
+                    onClick={() => setShowCredentialModal(false)}
+                    className="text-slate-400 hover:text-slate-300"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Credential Type</label>
+                    <select
+                      value={credentialForm.credential_type}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, credential_type: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    >
+                      <option value="certification">Certification</option>
+                      <option value="license">License</option>
+                      <option value="degree">Degree</option>
+                      <option value="training">Training/CEU</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Credential Name *</label>
+                    <input
+                      type="text"
+                      value={credentialForm.credential_name}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, credential_name: e.target.value })}
+                      placeholder="e.g., NIC Certification, State License"
+                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Issuing Organization</label>
+                    <input
+                      type="text"
+                      value={credentialForm.issuing_organization}
+                      onChange={(e) => setCredentialForm({ ...credentialForm, issuing_organization: e.target.value })}
+                      placeholder="e.g., RID, State Board"
+                      className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Issue Date</label>
+                      <input
+                        type="date"
+                        value={credentialForm.issue_date}
+                        onChange={(e) => setCredentialForm({ ...credentialForm, issue_date: e.target.value })}
+                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Expiration Date</label>
+                      <input
+                        type="date"
+                        value={credentialForm.expiration_date}
+                        onChange={(e) => setCredentialForm({ ...credentialForm, expiration_date: e.target.value })}
+                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => setShowCredentialModal(false)}
+                      className="flex-1 px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveCredential}
+                      disabled={saving}
+                      className="flex-1 px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50"
+                    >
+                      {saving ? "Saving..." : editingCredential ? "Update" : "Add Credential"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

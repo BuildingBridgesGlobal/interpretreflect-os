@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import NavBar from "@/components/NavBar";
+import AgencyNavBar from "@/components/AgencyNavBar";
 import { motion } from "framer-motion";
 
 interface TeamMember {
@@ -83,6 +83,7 @@ interface Team {
     role: string;
   }[];
   created_at: string;
+  conversation_id: string | null;
 }
 
 interface OrgSettings {
@@ -105,6 +106,7 @@ export default function AgencyDashboard() {
   const [inviting, setInviting] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [credentialFilter, setCredentialFilter] = useState<"all" | "active" | "expiring" | "expired">("all");
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
 
   // New state for assignments, teams, and settings
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -117,6 +119,12 @@ export default function AgencyDashboard() {
   });
   const [showCreateAssignmentModal, setShowCreateAssignmentModal] = useState(false);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
+  const [showTeamChatModal, setShowTeamChatModal] = useState(false);
+  const [selectedTeamForChat, setSelectedTeamForChat] = useState<Team | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [newAssignment, setNewAssignment] = useState({
     title: "",
     client_name: "",
@@ -127,12 +135,79 @@ export default function AgencyDashboard() {
     debrief_required: true,
     assigned_interpreters: [] as string[],
   });
+  const [createTeamWithAssignment, setCreateTeamWithAssignment] = useState(false);
+  const [assignmentTeamName, setAssignmentTeamName] = useState("");
   const [newTeam, setNewTeam] = useState({
     name: "",
     description: "",
     members: [] as string[],
   });
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "upcoming" | "completed">("upcoming");
+  const [interpreterSearch, setInterpreterSearch] = useState("");
+  const [downloadingReport, setDownloadingReport] = useState<string | null>(null);
+
+  // Report download helper functions
+  const downloadCSV = async (reportType: string, filename: string) => {
+    try {
+      setDownloadingReport(reportType);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/agency?report=${reportType}`, {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error("Failed to download report");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download error:", error);
+      setError("Failed to download report");
+    } finally {
+      setDownloadingReport(null);
+    }
+  };
+
+  const generatePDF = async (reportType: string) => {
+    try {
+      setDownloadingReport(reportType);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Open the report in a new window - it will auto-trigger print dialog
+      const reportUrl = `/api/agency?report=${reportType}`;
+      const newWindow = window.open("", "_blank");
+      if (newWindow) {
+        // Fetch the HTML content and write it to the new window
+        const response = await fetch(reportUrl, {
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (!response.ok) throw new Error("Failed to generate report");
+
+        const htmlContent = await response.text();
+        newWindow.document.write(htmlContent);
+        newWindow.document.close();
+      }
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      setError("Failed to generate PDF report");
+    } finally {
+      setDownloadingReport(null);
+    }
+  };
 
   useEffect(() => {
     loadAgencyData();
@@ -182,6 +257,12 @@ export default function AgencyDashboard() {
       setTeamMembers(data.teamMembers || []);
       setAllCredentials(data.credentials || []);
       setStats(data.stats);
+      setAssignments(data.assignments || []);
+      setTeams(data.teams || []);
+      // Load settings from organization
+      if (data.organization?.settings) {
+        setOrgSettings(data.organization.settings);
+      }
       setLoading(false);
     } catch (err: any) {
       console.error("Error loading agency data:", err);
@@ -225,7 +306,12 @@ export default function AgencyDashboard() {
         throw new Error(data.error || "Failed to send invitation");
       }
 
-      alert(`Invitation sent to ${inviteEmail}`);
+      // Show appropriate message based on whether email was sent
+      if (data.emailSent) {
+        alert(`Invitation email sent to ${inviteEmail}! They'll receive a link to join ${organization?.name}.`);
+      } else {
+        alert(`Invitation created for ${inviteEmail}. Note: Email service not configured - please share the invite link manually.`);
+      }
       setInviteEmail("");
       setShowInviteModal(false);
     } catch (err: any) {
@@ -234,6 +320,236 @@ export default function AgencyDashboard() {
     } finally {
       setInviting(false);
     }
+  };
+
+  /**
+   * Create a new assignment
+   */
+  const handleCreateAssignment = async () => {
+    if (!newAssignment.title || !newAssignment.start_time) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/signin");
+        return;
+      }
+
+      const response = await fetch("/api/agency", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "create_assignment",
+          ...newAssignment,
+          // Include team creation data if applicable
+          create_team: createTeamWithAssignment && newAssignment.assigned_interpreters.length >= 3,
+          team_name: assignmentTeamName || `${newAssignment.title} Team`,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create assignment");
+      }
+
+      // Reload data to get updated list
+      await loadAgencyData();
+
+      // Reset form and close modal
+      setNewAssignment({
+        title: "",
+        client_name: "",
+        location: "",
+        start_time: "",
+        end_time: "",
+        prep_required: true,
+        debrief_required: true,
+        assigned_interpreters: [],
+      });
+      setCreateTeamWithAssignment(false);
+      setAssignmentTeamName("");
+      setShowCreateAssignmentModal(false);
+
+      if (data.teamCreated) {
+        alert("Assignment created and team with group chat has been set up!");
+      } else {
+        alert("Assignment created successfully!");
+      }
+    } catch (err: any) {
+      console.error("Error creating assignment:", err);
+      alert(err.message || "Failed to create assignment. Please try again.");
+    }
+  };
+
+  /**
+   * Create a new team
+   */
+  const handleCreateTeam = async () => {
+    if (!newTeam.name) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/signin");
+        return;
+      }
+
+      const response = await fetch("/api/agency", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "create_team",
+          name: newTeam.name,
+          description: newTeam.description,
+          members: newTeam.members,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create team");
+      }
+
+      // Reload data to get updated list
+      await loadAgencyData();
+
+      // Reset form and close modal
+      setNewTeam({ name: "", description: "", members: [] });
+      setShowCreateTeamModal(false);
+      alert("Team created successfully!");
+    } catch (err: any) {
+      console.error("Error creating team:", err);
+      alert(err.message || "Failed to create team. Please try again.");
+    }
+  };
+
+  /**
+   * Save organization settings
+   */
+  const handleSaveSettings = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/signin");
+        return;
+      }
+
+      const response = await fetch("/api/agency", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "update_settings",
+          settings: orgSettings,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save settings");
+      }
+
+      alert("Settings saved successfully!");
+    } catch (err: any) {
+      console.error("Error saving settings:", err);
+      alert(err.message || "Failed to save settings. Please try again.");
+    }
+  };
+
+  /**
+   * Open team chat and load messages
+   */
+  const handleOpenTeamChat = async (team: Team) => {
+    if (!team.conversation_id) {
+      alert("This team doesn't have a chat yet. This may happen for teams created before the chat feature was added.");
+      return;
+    }
+
+    setSelectedTeamForChat(team);
+    setShowTeamChatModal(true);
+    setLoadingMessages(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/community/messages?conversation_id=${team.conversation_id}`, {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setChatMessages(data.messages || []);
+      }
+    } catch (err) {
+      console.error("Error loading messages:", err);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
+
+  /**
+   * Send a message to team chat
+   */
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedTeamForChat?.conversation_id) return;
+
+    setSendingMessage(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch("/api/community/messages", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversation_id: selectedTeamForChat.conversation_id,
+          content: newMessage.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setChatMessages((prev) => [...prev, data.message]);
+        setNewMessage("");
+      }
+    } catch (err) {
+      console.error("Error sending message:", err);
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  /**
+   * Get filtered assignments based on current filter
+   */
+  const getFilteredAssignments = () => {
+    if (assignmentFilter === "all") return assignments;
+    return assignments.filter((a) => {
+      if (assignmentFilter === "upcoming") {
+        return a.status === "upcoming" || a.status === "in_progress";
+      }
+      if (assignmentFilter === "completed") {
+        return a.status === "completed";
+      }
+      return true;
+    });
   };
 
   // Use credentials from API response (already includes memberName/memberEmail)
@@ -279,7 +595,7 @@ export default function AgencyDashboard() {
   if (error) {
     return (
       <div className="min-h-screen bg-slate-950">
-        <NavBar />
+        <AgencyNavBar />
         <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8">
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-6 text-center">
             <h2 className="text-lg font-semibold text-rose-400 mb-2">Error Loading Dashboard</h2>
@@ -307,7 +623,7 @@ export default function AgencyDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <NavBar />
+      <AgencyNavBar organizationName={organization?.name} />
       <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8">
         {/* Header */}
         <div className="mb-6 flex items-start justify-between">
@@ -384,6 +700,7 @@ export default function AgencyDashboard() {
                       <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Role</th>
                       <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Joined</th>
                       <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Assignments (This Month)</th>
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Prep Rate</th>
                       <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Debrief Rate</th>
                       <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Credentials</th>
                     </tr>
@@ -427,8 +744,25 @@ export default function AgencyDashboard() {
                               <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full ${
+                                    member.activity.prepCompletionRate >= 70
+                                      ? "bg-teal-500"
+                                      : member.activity.prepCompletionRate >= 40
+                                      ? "bg-amber-500"
+                                      : "bg-rose-500"
+                                  }`}
+                                  style={{ width: `${member.activity.prepCompletionRate}%` }}
+                                />
+                              </div>
+                              <span className="text-sm text-slate-400">{member.activity.prepCompletionRate}%</span>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
                                     member.activity.debriefCompletionRate >= 70
-                                      ? "bg-emerald-500"
+                                      ? "bg-violet-500"
                                       : member.activity.debriefCompletionRate >= 40
                                       ? "bg-amber-500"
                                       : "bg-rose-500"
@@ -684,9 +1018,22 @@ export default function AgencyDashboard() {
                       <span className="text-xs text-slate-500">
                         Created {formatDate(team.created_at)}
                       </span>
-                      <button className="text-xs text-teal-400 hover:text-teal-300 transition-colors">
-                        Edit Team
-                      </button>
+                      <div className="flex items-center gap-3">
+                        {team.conversation_id && (
+                          <button
+                            onClick={() => handleOpenTeamChat(team)}
+                            className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            Open Chat
+                          </button>
+                        )}
+                        <button className="text-xs text-teal-400 hover:text-teal-300 transition-colors">
+                          Edit Team
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -917,8 +1264,12 @@ export default function AgencyDashboard() {
                   <p className="text-xs text-slate-400 mb-4">
                     Full roster credential status including expiration dates and verification status
                   </p>
-                  <button className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm">
-                    Generate PDF
+                  <button
+                    onClick={() => generatePDF("credentials-pdf")}
+                    disabled={downloadingReport === "credentials-pdf"}
+                    className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingReport === "credentials-pdf" ? "Generating..." : "Generate PDF"}
                   </button>
                 </div>
 
@@ -927,8 +1278,12 @@ export default function AgencyDashboard() {
                   <p className="text-xs text-slate-400 mb-4">
                     Team activity metrics including prep completion and engagement rates
                   </p>
-                  <button className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm">
-                    Generate PDF
+                  <button
+                    onClick={() => generatePDF("activity-pdf")}
+                    disabled={downloadingReport === "activity-pdf"}
+                    className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingReport === "activity-pdf" ? "Generating..." : "Generate PDF"}
                   </button>
                 </div>
 
@@ -937,8 +1292,12 @@ export default function AgencyDashboard() {
                   <p className="text-xs text-slate-400 mb-4">
                     Complete team roster with credential and activity data
                   </p>
-                  <button className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors text-sm">
-                    Export CSV
+                  <button
+                    onClick={() => downloadCSV("roster-csv", `roster-${new Date().toISOString().split("T")[0]}.csv`)}
+                    disabled={downloadingReport === "roster-csv"}
+                    className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingReport === "roster-csv" ? "Downloading..." : "Export CSV"}
                   </button>
                 </div>
 
@@ -947,8 +1306,12 @@ export default function AgencyDashboard() {
                   <p className="text-xs text-slate-400 mb-4">
                     List of all credentials expiring in the next 90 days
                   </p>
-                  <button className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors text-sm">
-                    Export CSV
+                  <button
+                    onClick={() => downloadCSV("credentials-csv", `credentials-${new Date().toISOString().split("T")[0]}.csv`)}
+                    disabled={downloadingReport === "credentials-csv"}
+                    className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {downloadingReport === "credentials-csv" ? "Downloading..." : "Export CSV"}
                   </button>
                 </div>
               </div>
@@ -1002,23 +1365,22 @@ export default function AgencyDashboard() {
               <p className="text-sm text-slate-400 mb-6">Customize which features are enabled for your organization</p>
 
               <div className="space-y-4">
-                {/* CEU Tracking Toggle */}
-                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/30">
+                {/* CEU Tracking - Coming Soon */}
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/30 opacity-60">
                   <div>
-                    <h4 className="text-sm font-medium text-slate-200">CEU Tracking</h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-slate-200">CEU Tracking</h4>
+                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">
+                        Coming Soon
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-400 mt-1">Track continuing education units for team members</p>
                   </div>
                   <button
-                    onClick={() => setOrgSettings({ ...orgSettings, ceu_tracking_enabled: !orgSettings.ceu_tracking_enabled })}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${
-                      orgSettings.ceu_tracking_enabled ? "bg-teal-500" : "bg-slate-600"
-                    }`}
+                    disabled
+                    className="relative w-12 h-6 rounded-full bg-slate-600 cursor-not-allowed"
                   >
-                    <span
-                      className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                        orgSettings.ceu_tracking_enabled ? "left-7" : "left-1"
-                      }`}
-                    />
+                    <span className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white/50" />
                   </button>
                 </div>
 
@@ -1115,7 +1477,10 @@ export default function AgencyDashboard() {
 
             {/* Save Button */}
             <div className="flex justify-end">
-              <button className="px-6 py-3 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors">
+              <button
+                onClick={handleSaveSettings}
+                className="px-6 py-3 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors"
+              >
                 Save Settings
               </button>
             </div>
@@ -1145,32 +1510,79 @@ export default function AgencyDashboard() {
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md"
+              className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-lg"
             >
-              <h2 className="text-lg font-semibold text-slate-100 mb-4">Invite Team Member</h2>
-              <p className="text-sm text-slate-400 mb-4">
-                Send an invitation to join your organization. They&apos;ll receive an email with instructions to create an account or link their existing account.
+              <h2 className="text-lg font-semibold text-slate-100 mb-2">Invite Interpreters</h2>
+              <p className="text-sm text-slate-400 mb-6">
+                Share this link with interpreters to have them join your organization.
               </p>
-              <input
-                type="email"
-                placeholder="Enter email address"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500 mb-4"
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowInviteModal(false)}
-                  className="flex-1 px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
+
+              {/* Invite Link Section */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Your Interpreter Invite Link</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={typeof window !== 'undefined' ? `${window.location.origin}/start?org=${organization?.id}` : ''}
+                    readOnly
+                    className="flex-1 px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 font-mono text-sm focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/start?org=${organization?.id}`);
+                      setInviteLinkCopied(true);
+                      setTimeout(() => setInviteLinkCopied(false), 2000);
+                    }}
+                    className="px-4 py-3 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors whitespace-nowrap"
+                  >
+                    {inviteLinkCopied ? "Copied!" : "Copy Link"}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  When interpreters use this link to sign up, they&apos;ll automatically join {organization?.name}.
+                </p>
+              </div>
+
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-700"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-slate-900 text-slate-500">or send by email</span>
+                </div>
+              </div>
+
+              {/* Email Invite Section */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Send invite via email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="interpreter@example.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                  />
+                </div>
                 <button
                   onClick={handleInvite}
                   disabled={!inviteEmail || inviting}
-                  className="flex-1 px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {inviting ? "Sending..." : "Send Invite"}
+                  {inviting ? "Sending..." : "Send Email Invite"}
+                </button>
+              </div>
+
+              {/* Close Button */}
+              <div className="mt-6 pt-4 border-t border-slate-800">
+                <button
+                  onClick={() => setShowInviteModal(false)}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors"
+                >
+                  Done
                 </button>
               </div>
             </motion.div>
@@ -1243,12 +1655,88 @@ export default function AgencyDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">Assign Interpreters</label>
-                  <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-700 bg-slate-800 p-2">
+                  <label className="block text-sm font-medium text-slate-400 mb-2">
+                    Assign Interpreters *
+                    {newAssignment.assigned_interpreters.length > 0 && (
+                      <span className="ml-2 text-teal-400">({newAssignment.assigned_interpreters.length} selected)</span>
+                    )}
+                  </label>
+
+                  {/* Search Box */}
+                  <div className="relative mb-2">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search interpreters by name or email..."
+                      value={interpreterSearch}
+                      onChange={(e) => setInterpreterSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500 text-sm"
+                    />
+                    {interpreterSearch && (
+                      <button
+                        onClick={() => setInterpreterSearch("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Selected Interpreters Preview */}
+                  {newAssignment.assigned_interpreters.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {newAssignment.assigned_interpreters.map((userId) => {
+                        const member = teamMembers.find(m => m.user_id === userId);
+                        return (
+                          <span
+                            key={userId}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-teal-500/20 border border-teal-500/30 text-teal-300 text-xs"
+                          >
+                            {member?.profile.full_name || "Unknown"}
+                            <button
+                              onClick={() => setNewAssignment({
+                                ...newAssignment,
+                                assigned_interpreters: newAssignment.assigned_interpreters.filter(id => id !== userId)
+                              })}
+                              className="ml-1 hover:text-red-400"
+                            >
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Interpreter List */}
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-700 bg-slate-800 p-2">
                     {teamMembers.length === 0 ? (
-                      <p className="text-sm text-slate-500 text-center py-2">No interpreters available</p>
-                    ) : (
-                      teamMembers.map((member) => (
+                      <p className="text-sm text-slate-500 text-center py-4">No interpreters available. Invite interpreters first.</p>
+                    ) : (() => {
+                      const filteredMembers = teamMembers.filter((member) => {
+                        if (!interpreterSearch) return true;
+                        const search = interpreterSearch.toLowerCase();
+                        return (
+                          member.profile.full_name?.toLowerCase().includes(search) ||
+                          member.profile.email?.toLowerCase().includes(search)
+                        );
+                      });
+
+                      if (filteredMembers.length === 0) {
+                        return (
+                          <p className="text-sm text-slate-500 text-center py-4">
+                            No interpreters match &quot;{interpreterSearch}&quot;
+                          </p>
+                        );
+                      }
+
+                      return filteredMembers.map((member) => (
                         <label
                           key={member.user_id}
                           className="flex items-center gap-3 p-2 rounded hover:bg-slate-700 cursor-pointer"
@@ -1271,16 +1759,22 @@ export default function AgencyDashboard() {
                             }}
                             className="w-4 h-4 rounded border-slate-600 text-teal-500 focus:ring-teal-500 focus:ring-offset-0 bg-slate-700"
                           />
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-teal-500 flex items-center justify-center text-white text-xs font-medium">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-teal-500 flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
                               {member.profile.full_name?.charAt(0) || "?"}
                             </div>
-                            <span className="text-sm text-slate-200">{member.profile.full_name}</span>
+                            <div className="min-w-0">
+                              <span className="text-sm text-slate-200 block truncate">{member.profile.full_name}</span>
+                              <span className="text-xs text-slate-500 block truncate">{member.profile.email}</span>
+                            </div>
                           </div>
                         </label>
-                      ))
-                    )}
+                      ));
+                    })()}
                   </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {teamMembers.length} interpreter{teamMembers.length !== 1 ? 's' : ''} in your organization
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -1303,12 +1797,56 @@ export default function AgencyDashboard() {
                     <span className="text-sm text-slate-300">Debrief Required</span>
                   </label>
                 </div>
+
+                {/* Create Team Option - Only shown when 3+ interpreters selected */}
+                {newAssignment.assigned_interpreters.length >= 3 && (
+                  <div className="mt-4 p-4 rounded-lg bg-violet-500/10 border border-violet-500/30">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={createTeamWithAssignment}
+                        onChange={(e) => {
+                          setCreateTeamWithAssignment(e.target.checked);
+                          if (!e.target.checked) {
+                            setAssignmentTeamName("");
+                          }
+                        }}
+                        className="w-5 h-5 rounded border-slate-600 text-violet-500 focus:ring-violet-500 focus:ring-offset-0 bg-slate-700"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span className="text-sm font-medium text-violet-300">Create a Team</span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Automatically creates a team with a group chat for these {newAssignment.assigned_interpreters.length} interpreters
+                        </p>
+                      </div>
+                    </label>
+
+                    {createTeamWithAssignment && (
+                      <div className="mt-3">
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Team Name (optional)</label>
+                        <input
+                          type="text"
+                          value={assignmentTeamName}
+                          onChange={(e) => setAssignmentTeamName(e.target.value)}
+                          placeholder={`${newAssignment.title || "Assignment"} Team`}
+                          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => {
                     setShowCreateAssignmentModal(false);
+                    setInterpreterSearch("");
                     setNewAssignment({
                       title: "",
                       client_name: "",
@@ -1319,16 +1857,21 @@ export default function AgencyDashboard() {
                       debrief_required: true,
                       assigned_interpreters: [],
                     });
+                    setCreateTeamWithAssignment(false);
+                    setAssignmentTeamName("");
                   }}
                   className="flex-1 px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
-                  disabled={!newAssignment.title || !newAssignment.start_time}
+                  onClick={handleCreateAssignment}
+                  disabled={!newAssignment.title || !newAssignment.start_time || newAssignment.assigned_interpreters.length === 0}
                   className="flex-1 px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Assignment
+                  {newAssignment.assigned_interpreters.length === 0
+                    ? "Select Interpreter(s)"
+                    : `Assign to ${newAssignment.assigned_interpreters.length} Interpreter${newAssignment.assigned_interpreters.length > 1 ? 's' : ''}`}
                 </button>
               </div>
             </motion.div>
@@ -1427,11 +1970,142 @@ export default function AgencyDashboard() {
                   Cancel
                 </button>
                 <button
+                  onClick={handleCreateTeam}
                   disabled={!newTeam.name}
                   className="flex-1 px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Create Team
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Team Chat Modal */}
+        {showTeamChatModal && selectedTeamForChat && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl h-[80vh] flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-blue-500 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-100">{selectedTeamForChat.name} Chat</h2>
+                    <p className="text-xs text-slate-400">{selectedTeamForChat.members.length} members</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowTeamChatModal(false);
+                    setSelectedTeamForChat(null);
+                    setChatMessages([]);
+                    setNewMessage("");
+                  }}
+                  className="p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-200"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {loadingMessages ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-slate-400">Loading messages...</div>
+                  </div>
+                ) : chatMessages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <div className="w-16 h-16 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-slate-200 mb-2">Start the conversation</h3>
+                    <p className="text-sm text-slate-400">
+                      Send a message to get the team chat going
+                    </p>
+                  </div>
+                ) : (
+                  chatMessages.map((msg: any) => {
+                    const isSystemMessage = msg.is_system_message;
+                    const senderMember = selectedTeamForChat.members.find(m => m.user_id === msg.sender_id);
+
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`${isSystemMessage ? "text-center" : ""}`}
+                      >
+                        {isSystemMessage ? (
+                          <div className="inline-block px-4 py-2 rounded-lg bg-slate-800/50 text-slate-400 text-sm">
+                            {msg.content}
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-teal-500 flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
+                              {senderMember?.name?.charAt(0) || "?"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-slate-200">
+                                  {senderMember?.name || "Unknown"}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
+                              <p className="text-sm text-slate-300 break-words">{msg.content}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Message Input */}
+              <div className="p-4 border-t border-slate-700">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder="Type a message..."
+                    className="flex-1 px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!newMessage.trim() || sendingMessage}
+                    className="px-4 py-3 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {sendingMessage ? (
+                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

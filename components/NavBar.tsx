@@ -66,8 +66,8 @@ export default function NavBar() {
     <nav className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-50">
       <div className="container mx-auto max-w-7xl px-4 md:px-6">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
+          {/* Logo - links to dashboard when logged in, landing page when not */}
+          <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2">
             <span className="text-xl font-semibold text-slate-50">
               Interpret<span className="text-teal-400">Reflect</span>
             </span>

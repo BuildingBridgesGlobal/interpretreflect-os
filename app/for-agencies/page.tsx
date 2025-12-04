@@ -6,7 +6,7 @@ import { Footer } from "@/components/Footer";
 export default function ForAgenciesPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
-      <Header />
+      <Header variant="agency" />
 
       <main>
         {/* Hero Section */}
@@ -49,6 +49,31 @@ export default function ForAgenciesPage() {
               >
                 Learn More
               </a>
+            </div>
+
+            {/* Agency Portal Links */}
+            <div className="mt-8 pt-6 border-t border-slate-800">
+              <p className="text-sm text-slate-400 mb-4">Already an InterpretReflect agency partner?</p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <a
+                  href="/agency/login"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-500/20 border border-violet-500/30 text-violet-300 px-6 py-3 text-sm font-semibold hover:bg-violet-500/30 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                  Agency Sign In
+                </a>
+                <a
+                  href="/agency/signup"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-600 text-slate-300 px-6 py-3 text-sm font-semibold hover:bg-slate-800 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  Activate with Code
+                </a>
+              </div>
             </div>
 
           </div>
