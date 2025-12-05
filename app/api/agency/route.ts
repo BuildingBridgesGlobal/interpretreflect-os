@@ -325,8 +325,8 @@ export async function GET(req: NextRequest) {
             member.role,
             member.joined_at?.split("T")[0] || "",
             member.activity.assignmentsThisMonth,
-            `${member.activity.prepCompletionRate}%`,
-            `${member.activity.debriefCompletionRate}%`,
+            member.activity.prepCompletionRate !== null ? `${member.activity.prepCompletionRate}%` : "N/A",
+            member.activity.debriefCompletionRate !== null ? `${member.activity.debriefCompletionRate}%` : "N/A",
             activeCreds,
             expiringCreds,
             expiredCreds,
@@ -519,8 +519,8 @@ export async function GET(req: NextRequest) {
           <td>${member.profile.email}</td>
           <td>${member.role || "member"}</td>
           <td>${member.activity.assignmentsThisMonth}</td>
-          <td class="${member.activity.prepCompletionRate >= 70 ? "rate-high" : member.activity.prepCompletionRate >= 40 ? "rate-medium" : "rate-low"}">${member.activity.prepCompletionRate}%</td>
-          <td class="${member.activity.debriefCompletionRate >= 70 ? "rate-high" : member.activity.debriefCompletionRate >= 40 ? "rate-medium" : "rate-low"}">${member.activity.debriefCompletionRate}%</td>
+          <td class="${member.activity.prepCompletionRate !== null ? (member.activity.prepCompletionRate >= 70 ? "rate-high" : member.activity.prepCompletionRate >= 40 ? "rate-medium" : "rate-low") : ""}">${member.activity.prepCompletionRate !== null ? `${member.activity.prepCompletionRate}%` : "N/A"}</td>
+          <td class="${member.activity.debriefCompletionRate !== null ? (member.activity.debriefCompletionRate >= 70 ? "rate-high" : member.activity.debriefCompletionRate >= 40 ? "rate-medium" : "rate-low") : ""}">${member.activity.debriefCompletionRate !== null ? `${member.activity.debriefCompletionRate}%` : "N/A"}</td>
         </tr>
       `).join("")}
     </tbody>

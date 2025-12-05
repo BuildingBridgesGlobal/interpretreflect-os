@@ -32,6 +32,8 @@ type AssessmentResult = {
     id: string;
     certificate_number: string;
     ceu_value: number;
+    rid_category?: string;
+    issued_at?: string;
   };
   message: string;
 };
@@ -291,6 +293,8 @@ export default function AssessmentQuiz({
                 ...result.certificate,
                 title: moduleTitle,
                 assessment_score: result.score,
+                rid_category: result.certificate.rid_category || "Professional Studies",
+                issued_at: result.certificate.issued_at || new Date().toISOString(),
               }}
               onClose={() => setShowCertificate(false)}
             />

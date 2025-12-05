@@ -363,22 +363,23 @@ export async function POST(req: NextRequest) {
         .eq("module_id", module_id);
 
       // If passed, issue certificate
-      let certificate = null;
+      let certificate: any = null;
       if (passed) {
         const certificateResult = await issueCertificate(userId, module, attempt.id);
-        if (certificateResult.success) {
-          certificate = certificateResult.certificate;
+        if (certificateResult.success && certificateResult.certificate) {
+          const issuedCert = certificateResult.certificate;
+          certificate = issuedCert;
 
           // Link certificate to progress and attempt
           await supabaseAdmin
             .from("user_module_progress")
-            .update({ certificate_id: certificate.id })
+            .update({ certificate_id: issuedCert.id })
             .eq("user_id", userId)
             .eq("module_id", module_id);
 
           await supabaseAdmin
             .from("module_assessment_attempts")
-            .update({ certificate_id: certificate.id })
+            .update({ certificate_id: issuedCert.id })
             .eq("id", attempt.id);
         }
       }
