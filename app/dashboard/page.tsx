@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 import ElyaInterface from "@/components/dashboard/ElyaInterface";
 import UpgradeModal from "@/components/UpgradeModal";
+import PendingInvitationBanner from "@/components/PendingInvitationBanner";
 import { motion } from "framer-motion";
 import { SkeletonDashboard } from "@/components/ui/skeleton";
 import { FadeIn, ListItem } from "@/components/ui/motion";
@@ -21,6 +22,13 @@ type Assignment = {
   prep_status: string | null;
 };
 
+type CEUSummary = {
+  total_earned: number;
+  total_required: number;
+  professional_studies_earned: number;
+  certificates_count: number;
+};
+
 function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,6 +38,7 @@ function DashboardPageContent() {
   const [elyaPreFillMessage, setElyaPreFillMessage] = useState<string>("");
   const [nextAssignment, setNextAssignment] = useState<Assignment | null>(null);
   const [recentAssignments, setRecentAssignments] = useState<Assignment[]>([]);
+  const [ceuSummary, setCeuSummary] = useState<CEUSummary | null>(null);
 
   // Check for mode parameter (e.g., ?mode=free-write)
   const initialMode = searchParams.get('mode') === 'free-write' ? 'free-write' : 'chat';
@@ -110,6 +119,17 @@ function DashboardPageContent() {
         setRecentAssignments(recentData);
       }
 
+      // Fetch CEU summary
+      try {
+        const ceuResponse = await fetch('/api/ceu?action=summary');
+        if (ceuResponse.ok) {
+          const ceuData = await ceuResponse.json();
+          setCeuSummary(ceuData);
+        }
+      } catch (error) {
+        console.error('Error fetching CEU summary:', error);
+      }
+
       setLoading(false);
     };
 
@@ -175,6 +195,9 @@ function DashboardPageContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <NavBar />
+
+      {/* Pending Invitation Banner - Shown when interpreter has pending agency invitations */}
+      <PendingInvitationBanner />
 
       {/* Trial Banner - Sticky at top */}
       {userData?.subscription_tier === "trial" && (
@@ -366,6 +389,65 @@ function DashboardPageContent() {
               </div>
               ) : (
                 <p className="text-sm text-slate-500 text-center py-4">No completed sessions yet</p>
+              )}
+            </motion.div>
+
+            {/* CEU Progress Widget */}
+            <motion.div
+              className="rounded-xl border border-teal-500/30 bg-gradient-to-br from-teal-500/10 to-transparent p-4"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-teal-300 uppercase tracking-wider">CEU Progress</h3>
+                <a
+                  href="/ceu"
+                  className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
+                >
+                  View All →
+                </a>
+              </div>
+
+              {ceuSummary ? (
+                <>
+                  <div className="mb-3">
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className="text-2xl font-bold text-slate-100">{ceuSummary.total_earned.toFixed(1)}</span>
+                      <span className="text-sm text-slate-400">/ {ceuSummary.total_required} CEUs</span>
+                    </div>
+                    <div className="w-full bg-slate-700/50 rounded-full h-2 overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-to-r from-teal-500 to-teal-400 rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min((ceuSummary.total_earned / ceuSummary.total_required) * 100, 100)}%` }}
+                        transition={{ duration: 0.8, delay: 0.6, ease: "easeOut" }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="bg-slate-800/50 rounded-lg p-2">
+                      <div className="text-lg font-semibold text-slate-100">{ceuSummary.professional_studies_earned.toFixed(1)}</div>
+                      <div className="text-xs text-slate-400">Prof. Studies</div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-lg p-2">
+                      <div className="text-lg font-semibold text-slate-100">{ceuSummary.certificates_count}</div>
+                      <div className="text-xs text-slate-400">Certificates</div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-4">
+                  <div className="text-3xl mb-2">🎓</div>
+                  <p className="text-sm text-slate-400 mb-2">Track your RID certification</p>
+                  <a
+                    href="/skills"
+                    className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
+                  >
+                    Start Learning →
+                  </a>
+                </div>
               )}
             </motion.div>
 

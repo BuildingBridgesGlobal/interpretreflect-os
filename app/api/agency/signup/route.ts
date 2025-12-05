@@ -136,13 +136,22 @@ export async function POST(req: NextRequest) {
       // Continue anyway, profile might be created by trigger
     }
 
-    // Add user to organization_members as owner
+    // Add user to organization_members as owner with default data sharing settings
     const { error: memberError } = await supabaseAdmin
       .from("organization_members")
       .insert({
         organization_id: organizationId,
         user_id: userId,
         role: "owner",
+        is_active: true,
+        status: "active",
+        data_sharing_preferences: {
+          share_prep_completion: true,
+          share_debrief_completion: true,
+          share_credential_status: true,
+          share_checkin_streaks: true,
+          share_module_progress: true,
+        },
       });
 
     if (memberError) {

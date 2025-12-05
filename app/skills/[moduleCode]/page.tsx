@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 import { motion, AnimatePresence } from "framer-motion";
+import AssessmentQuiz from "@/components/AssessmentQuiz";
 
 type ContentBlock = {
   type: string;
@@ -17,6 +18,14 @@ type ContentSection = {
   section_title: string;
   duration_minutes: number;
   content_blocks: ContentBlock[];
+};
+
+type AssessmentQuestion = {
+  id: string;
+  question: string;
+  options: { id: string; text: string }[];
+  correct_answer: string;
+  explanation: string;
 };
 
 type SkillModule = {
@@ -40,6 +49,12 @@ type SkillModule = {
     series_code: string;
     icon_emoji: string;
   };
+  // CEU fields
+  ceu_eligible: boolean;
+  ceu_value: number | null;
+  assessment_questions: AssessmentQuestion[] | null;
+  assessment_pass_threshold: number | null;
+  learning_objectives: { id: string; objective: string; verb: string }[] | null;
 };
 
 type UserProgress = {
@@ -49,6 +64,8 @@ type UserProgress = {
   practice_completed: boolean;
   reflection_completed: boolean;
   application_completed: boolean;
+  assessment_completed: boolean;
+  assessment_passed: boolean;
   started_at: string | null;
   completed_at: string | null;
   time_spent_seconds: number;
@@ -70,7 +87,7 @@ export default function ModulePage() {
   const [user, setUser] = useState<any>(null);
   const [module, setModule] = useState<SkillModule | null>(null);
   const [progress, setProgress] = useState<UserProgress | null>(null);
-  const [currentSection, setCurrentSection] = useState<"concept" | "practice" | "reflection" | "application">("concept");
+  const [currentSection, setCurrentSection] = useState<"concept" | "practice" | "reflection" | "application" | "assessment">("concept");
   const [reflectionMessages, setReflectionMessages] = useState<ReflectionMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -100,7 +117,7 @@ export default function ModulePage() {
 
     setUser(session.user);
 
-    // Load module with series data
+    // Load module with series data (including CEU fields)
     const { data: moduleData } = await (supabase as any)
       .from("skill_modules")
       .select(`
@@ -109,6 +126,16 @@ export default function ModulePage() {
       `)
       .eq("module_code", moduleCode)
       .single();
+
+    // Log CEU data for debugging
+    if (moduleData) {
+      console.log("Module CEU data:", {
+        ceu_eligible: moduleData.ceu_eligible,
+        ceu_value: moduleData.ceu_value,
+        has_assessment: !!moduleData.assessment_questions,
+        question_count: moduleData.assessment_questions?.length || 0
+      });
+    }
 
     if (moduleData) {
       setModule(moduleData as any);
@@ -156,7 +183,7 @@ export default function ModulePage() {
     setLoading(false);
   };
 
-  const markSectionComplete = async (section: "concept" | "practice" | "reflection" | "application") => {
+  const markSectionComplete = async (section: "concept" | "practice" | "reflection" | "application" | "assessment") => {
     if (!progress || !module) return;
 
     const sectionField = `${section}_completed`;
@@ -169,11 +196,16 @@ export default function ModulePage() {
     };
 
     // Check if all sections are complete
-    const allComplete =
+    // For CEU-eligible modules, assessment must also be complete
+    const coreComplete =
       (section === "concept" || progress.concept_completed) &&
       (section === "practice" || progress.practice_completed) &&
       (section === "reflection" || progress.reflection_completed) &&
       (section === "application" || progress.application_completed);
+
+    // Module is complete if core is complete AND (not CEU-eligible OR assessment is complete)
+    const allComplete = coreComplete &&
+      (!module.ceu_eligible || section === "assessment" || progress.assessment_completed);
 
     if (allComplete) {
       updates.status = "completed";
@@ -190,8 +222,10 @@ export default function ModulePage() {
     if (updatedProgress) {
       setProgress(updatedProgress);
 
-      // Update ECCI competency scores
-      await updateECCIScore();
+      // Update ECCI competency scores only when core content is complete
+      if (coreComplete) {
+        await updateECCIScore();
+      }
     }
   };
 
@@ -454,6 +488,44 @@ export default function ModulePage() {
     }
   };
 
+  // Handle assessment completion
+  const handleAssessmentComplete = async (passed: boolean, certificate?: any) => {
+    if (!progress) return;
+
+    // Update progress with assessment results
+    const updates: any = {
+      assessment_completed: true,
+      assessment_passed: passed,
+      updated_at: new Date().toISOString()
+    };
+
+    if (passed) {
+      updates.status = "completed";
+      updates.completed_at = new Date().toISOString();
+    }
+
+    await (supabase as any)
+      .from("user_module_progress")
+      .update(updates)
+      .eq("id", progress.id);
+
+    // Reload progress
+    const { data: updatedProgress } = await (supabase as any)
+      .from("user_module_progress")
+      .select("*")
+      .eq("id", progress.id)
+      .single();
+
+    if (updatedProgress) {
+      setProgress(updatedProgress);
+    }
+
+    // Navigate back to skills page on completion
+    if (passed) {
+      router.push("/skills?completed=true&ceu=" + (module?.ceu_value || 0));
+    }
+  };
+
   const renderSection = () => {
     if (!module) return null;
 
@@ -461,8 +533,24 @@ export default function ModulePage() {
       concept: module.content_concept,
       practice: module.content_practice,
       application: module.content_application,
-      reflection: null
+      reflection: null,
+      assessment: null
     };
+
+    // Render Assessment section for CEU-eligible modules
+    if (currentSection === "assessment" && module.ceu_eligible && module.assessment_questions) {
+      return (
+        <AssessmentQuiz
+          moduleId={module.id}
+          moduleTitle={module.title}
+          ceuValue={module.ceu_value || 0}
+          questions={module.assessment_questions}
+          passThreshold={module.assessment_pass_threshold || 80}
+          onComplete={handleAssessmentComplete}
+          onBack={() => setCurrentSection("application")}
+        />
+      );
+    }
 
     if (currentSection === "reflection") {
       return (
@@ -652,7 +740,14 @@ export default function ModulePage() {
   const nextSection = async () => {
     await markSectionComplete(currentSection);
 
-    const sectionOrder: Array<"concept" | "practice" | "reflection" | "application"> = ["concept", "practice", "reflection", "application"];
+    // For CEU-eligible modules, add assessment after application
+    const baseSections: Array<"concept" | "practice" | "reflection" | "application" | "assessment"> =
+      ["concept", "practice", "reflection", "application"];
+
+    const sectionOrder = module?.ceu_eligible && module?.assessment_questions
+      ? [...baseSections, "assessment" as const]
+      : baseSections;
+
     const currentIndex = sectionOrder.indexOf(currentSection);
 
     if (currentIndex < sectionOrder.length - 1) {
@@ -690,12 +785,17 @@ export default function ModulePage() {
     );
   }
 
-  const sectionProgress = [
+  // Build section progress including assessment for CEU-eligible modules
+  const baseSectionProgress = [
     { key: "concept", label: "Learn", completed: progress?.concept_completed || false },
     { key: "practice", label: "Try It", completed: progress?.practice_completed || false },
     { key: "reflection", label: "Reflect", completed: progress?.reflection_completed || false },
     { key: "application", label: "Apply", completed: progress?.application_completed || false }
   ];
+
+  const sectionProgress = module.ceu_eligible && module.assessment_questions
+    ? [...baseSectionProgress, { key: "assessment", label: "CEU Quiz", completed: progress?.assessment_completed || false }]
+    : baseSectionProgress;
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -798,42 +898,52 @@ export default function ModulePage() {
           </AnimatePresence>
         </motion.div>
 
-        {/* Navigation */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="flex justify-between items-center"
-        >
-          <div>
-            {currentSection !== "concept" && (
-              <motion.button
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                onClick={() => {
-                  const sectionOrder: Array<"concept" | "practice" | "reflection" | "application"> = ["concept", "practice", "reflection", "application"];
-                  const currentIndex = sectionOrder.indexOf(currentSection);
-                  if (currentIndex > 0) {
-                    setCurrentSection(sectionOrder[currentIndex - 1]);
-                  }
-                }}
-                className="px-5 py-2.5 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors text-sm"
-              >
-                ← Back
-              </motion.button>
-            )}
-          </div>
-
-          <motion.button
-            onClick={nextSection}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="px-6 py-2.5 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors"
+        {/* Navigation - hide for assessment since it has its own nav */}
+        {currentSection !== "assessment" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="flex justify-between items-center"
           >
-            {currentSection === "application" ? "Finish" : "Continue →"}
-          </motion.button>
-        </motion.div>
+            <div>
+              {currentSection !== "concept" && (
+                <motion.button
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  onClick={() => {
+                    const baseSections: Array<"concept" | "practice" | "reflection" | "application" | "assessment"> =
+                      ["concept", "practice", "reflection", "application"];
+                    const sectionOrder = module.ceu_eligible && module.assessment_questions
+                      ? [...baseSections, "assessment" as const]
+                      : baseSections;
+                    const currentIndex = sectionOrder.indexOf(currentSection);
+                    if (currentIndex > 0) {
+                      setCurrentSection(sectionOrder[currentIndex - 1]);
+                    }
+                  }}
+                  className="px-5 py-2.5 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors text-sm"
+                >
+                  ← Back
+                </motion.button>
+              )}
+            </div>
+
+            <motion.button
+              onClick={nextSection}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="px-6 py-2.5 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors"
+            >
+              {currentSection === "application" && module.ceu_eligible && module.assessment_questions
+                ? "Take CEU Quiz →"
+                : currentSection === "application"
+                ? "Finish"
+                : "Continue →"}
+            </motion.button>
+          </motion.div>
+        )}
 
         {/* Attribution */}
         <div className="mt-8 pt-6 border-t border-slate-800">

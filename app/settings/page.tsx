@@ -55,6 +55,28 @@ export default function SettingsPage() {
   const [profileVisibility, setProfileVisibility] = useState("everyone");
   const [dataSharing, setDataSharing] = useState("anonymous");
 
+  // Agency Privacy - data sharing preferences per agency
+  interface AgencyMembership {
+    id: string;
+    organization_id: string;
+    role: string;
+    status: string;
+    data_sharing_preferences: {
+      share_prep_completion: boolean;
+      share_debrief_completion: boolean;
+      share_credential_status: boolean;
+      share_checkin_streaks: boolean;
+      share_module_progress: boolean;
+    };
+    organizations: {
+      id: string;
+      name: string;
+    } | null;
+  }
+  const [agencyMemberships, setAgencyMemberships] = useState<AgencyMembership[]>([]);
+  const [loadingAgencies, setLoadingAgencies] = useState(false);
+  const [savingAgencyPrefs, setSavingAgencyPrefs] = useState<string | null>(null);
+
   useEffect(() => {
     const loadUserData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -212,6 +234,83 @@ export default function SettingsPage() {
     }
   };
 
+  // Load agency memberships for privacy settings
+  const loadAgencyMemberships = async () => {
+    setLoadingAgencies(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    try {
+      const response = await fetch("/api/interpreter/privacy", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAgencyMemberships(data.memberships || []);
+      }
+    } catch (error) {
+      console.error("Error loading agency memberships:", error);
+    } finally {
+      setLoadingAgencies(false);
+    }
+  };
+
+  // Save agency data sharing preferences
+  const handleSaveAgencyPreferences = async (membershipId: string, preferences: AgencyMembership["data_sharing_preferences"]) => {
+    setSavingAgencyPrefs(membershipId);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Session expired. Please sign in again.");
+      setSavingAgencyPrefs(null);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/interpreter/privacy", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          membership_id: membershipId,
+          preferences,
+        }),
+      });
+
+      if (response.ok) {
+        showMessage("success", "Agency privacy settings saved!");
+      } else {
+        const data = await response.json();
+        showMessage("error", data.error || "Failed to save agency preferences");
+      }
+    } catch (error) {
+      console.error("Error saving agency preferences:", error);
+      showMessage("error", "Failed to save. Please try again.");
+    } finally {
+      setSavingAgencyPrefs(null);
+    }
+  };
+
+  // Toggle a specific preference for an agency
+  const toggleAgencyPreference = (membershipId: string, key: keyof AgencyMembership["data_sharing_preferences"]) => {
+    setAgencyMemberships(prev => prev.map(m => {
+      if (m.id === membershipId) {
+        return {
+          ...m,
+          data_sharing_preferences: {
+            ...m.data_sharing_preferences,
+            [key]: !m.data_sharing_preferences[key],
+          },
+        };
+      }
+      return m;
+    }));
+  };
+
   // Load credentials
   const loadCredentials = async () => {
     setLoadingCredentials(true);
@@ -234,6 +333,13 @@ export default function SettingsPage() {
   useEffect(() => {
     if (selectedTab === "credentials" && credentials.length === 0) {
       loadCredentials();
+    }
+  }, [selectedTab]);
+
+  // Load agency memberships when privacy tab is selected
+  useEffect(() => {
+    if (selectedTab === "privacy" && agencyMemberships.length === 0) {
+      loadAgencyMemberships();
     }
   }, [selectedTab]);
 
@@ -938,6 +1044,217 @@ export default function SettingsPage() {
                   {saving ? "Saving..." : "Save Privacy Settings"}
                 </button>
               </div>
+            </div>
+
+            {/* Agency Visibility Section */}
+            <div className="rounded-xl border border-violet-500/30 bg-slate-900/50 p-6">
+              <div className="flex items-center gap-3 mb-2">
+                <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <h3 className="text-lg font-semibold text-slate-100">Agency Visibility</h3>
+              </div>
+              <p className="text-sm text-slate-400 mb-4">Control what data your agencies can see about your activity. Your debrief content and wellness check-in details are <strong className="text-slate-300">never</strong> shared.</p>
+
+              {loadingAgencies ? (
+                <div className="text-center py-8 text-slate-400">Loading agency memberships...</div>
+              ) : agencyMemberships.length === 0 ? (
+                <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-6 text-center">
+                  <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-slate-400">You're not part of any agency yet.</p>
+                  <p className="text-xs text-slate-500 mt-1">These settings will appear when you join an agency.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {agencyMemberships.map((membership) => (
+                    <div key={membership.id} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                            <span className="text-violet-400 font-bold text-sm">
+                              {membership.organizations?.name?.charAt(0) || "A"}
+                            </span>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-100">
+                              {membership.organizations?.name || "Agency"}
+                            </h4>
+                            <p className="text-xs text-slate-500 capitalize">{membership.role}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick Summary: What Can This Agency See? */}
+                      <div className="mb-4 p-3 rounded-lg bg-slate-900/70 border border-slate-700">
+                        <p className="text-xs font-medium text-slate-400 mb-2">What {membership.organizations?.name || "this agency"} can see:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {membership.data_sharing_preferences?.share_prep_completion && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              Prep rates
+                            </span>
+                          )}
+                          {membership.data_sharing_preferences?.share_debrief_completion && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              Debrief rates
+                            </span>
+                          )}
+                          {membership.data_sharing_preferences?.share_credential_status && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              Credentials
+                            </span>
+                          )}
+                          {membership.data_sharing_preferences?.share_checkin_streaks && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              Streaks
+                            </span>
+                          )}
+                          {membership.data_sharing_preferences?.share_module_progress && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                              Modules
+                            </span>
+                          )}
+                          {!membership.data_sharing_preferences?.share_prep_completion &&
+                           !membership.data_sharing_preferences?.share_debrief_completion &&
+                           !membership.data_sharing_preferences?.share_credential_status &&
+                           !membership.data_sharing_preferences?.share_checkin_streaks &&
+                           !membership.data_sharing_preferences?.share_module_progress && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                              All data hidden
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">Your debrief content and check-in details are never shared.</p>
+                      </div>
+
+                      <div className="space-y-3">
+                        {/* Prep Completion */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                          <div>
+                            <p className="text-sm text-slate-200">Prep completion status</p>
+                            <p className="text-xs text-slate-500">Show when you've prepped for assignments</p>
+                          </div>
+                          <button
+                            onClick={() => toggleAgencyPreference(membership.id, "share_prep_completion")}
+                            aria-label="Toggle prep completion sharing"
+                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                              membership.data_sharing_preferences?.share_prep_completion ? "bg-violet-500" : "bg-slate-700"
+                            }`}
+                          >
+                            <div
+                              className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-transform ${
+                                membership.data_sharing_preferences?.share_prep_completion ? "translate-x-6" : "translate-x-1"
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Debrief Completion */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                          <div>
+                            <p className="text-sm text-slate-200">Debrief completion status</p>
+                            <p className="text-xs text-slate-500">Show when you've completed debriefs (not content)</p>
+                          </div>
+                          <button
+                            onClick={() => toggleAgencyPreference(membership.id, "share_debrief_completion")}
+                            aria-label="Toggle debrief completion sharing"
+                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                              membership.data_sharing_preferences?.share_debrief_completion ? "bg-violet-500" : "bg-slate-700"
+                            }`}
+                          >
+                            <div
+                              className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-transform ${
+                                membership.data_sharing_preferences?.share_debrief_completion ? "translate-x-6" : "translate-x-1"
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Credential Status */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                          <div>
+                            <p className="text-sm text-slate-200">Credential status</p>
+                            <p className="text-xs text-slate-500">Show your credential expiration status</p>
+                          </div>
+                          <button
+                            onClick={() => toggleAgencyPreference(membership.id, "share_credential_status")}
+                            aria-label="Toggle credential status sharing"
+                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                              membership.data_sharing_preferences?.share_credential_status ? "bg-violet-500" : "bg-slate-700"
+                            }`}
+                          >
+                            <div
+                              className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-transform ${
+                                membership.data_sharing_preferences?.share_credential_status ? "translate-x-6" : "translate-x-1"
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Check-in Streaks */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                          <div>
+                            <p className="text-sm text-slate-200">Check-in streaks</p>
+                            <p className="text-xs text-slate-500">Show your wellness check-in streak count</p>
+                          </div>
+                          <button
+                            onClick={() => toggleAgencyPreference(membership.id, "share_checkin_streaks")}
+                            aria-label="Toggle check-in streaks sharing"
+                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                              membership.data_sharing_preferences?.share_checkin_streaks ? "bg-violet-500" : "bg-slate-700"
+                            }`}
+                          >
+                            <div
+                              className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-transform ${
+                                membership.data_sharing_preferences?.share_checkin_streaks ? "translate-x-6" : "translate-x-1"
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Module Progress */}
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                          <div>
+                            <p className="text-sm text-slate-200">Module progress</p>
+                            <p className="text-xs text-slate-500">Show your training module completion</p>
+                          </div>
+                          <button
+                            onClick={() => toggleAgencyPreference(membership.id, "share_module_progress")}
+                            aria-label="Toggle module progress sharing"
+                            className={`relative w-11 h-6 rounded-full transition-colors ${
+                              membership.data_sharing_preferences?.share_module_progress ? "bg-violet-500" : "bg-slate-700"
+                            }`}
+                          >
+                            <div
+                              className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-transform ${
+                                membership.data_sharing_preferences?.share_module_progress ? "translate-x-6" : "translate-x-1"
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Save Button for this agency */}
+                        <button
+                          onClick={() => handleSaveAgencyPreferences(membership.id, membership.data_sharing_preferences)}
+                          disabled={savingAgencyPrefs === membership.id}
+                          className="w-full mt-2 px-4 py-2 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors disabled:opacity-50"
+                        >
+                          {savingAgencyPrefs === membership.id ? "Saving..." : "Save Agency Settings"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">

@@ -77,11 +77,12 @@ export async function GET(req: NextRequest) {
     const orgId = membership.organization_id;
 
     // Get all team members - SECURITY: Only from the admin's own organization
+    // Include membership id for remove action, status for filtering, and data_sharing_preferences
     const { data: members } = await supabaseAdmin
       .from("organization_members")
-      .select("user_id, role, joined_at, is_active")
+      .select("id, user_id, role, joined_at, is_active, status, removed_at, data_sharing_preferences")
       .eq("organization_id", orgId)
-      .eq("is_active", true);
+      .in("status", ["active", "pending"]); // Only show active and pending members by default
 
     if (!members) {
       return NextResponse.json({
@@ -170,10 +171,11 @@ export async function GET(req: NextRequest) {
       .eq("organization_id", orgId)
       .gte("date", monthStart.toISOString().split("T")[0]);
 
-    // Calculate team averages
+    // Calculate team averages (only including members who share their data)
     let totalPrepRate = 0;
     let totalDebriefRate = 0;
-    let membersWithAssignments = 0;
+    let membersWithPrepShared = 0;
+    let membersWithDebriefShared = 0;
 
     const memberStats = members.map((member) => {
       const memberAssignments =
@@ -187,13 +189,33 @@ export async function GET(req: NextRequest) {
       const prepRate = total > 0 ? Math.round((completed / total) * 100) : 0;
       const debriefRate = total > 0 ? Math.round((debriefed / total) * 100) : 0;
 
+      // Get interpreter's data sharing preferences for average calculation
+      const prefs = (member as any).data_sharing_preferences || {
+        share_prep_completion: true,
+        share_debrief_completion: true,
+        share_credential_status: true,
+        share_checkin_streaks: true,
+        share_module_progress: true,
+      };
+
+      // Only include in averages if member has assignments AND shares that data type
       if (total > 0) {
-        totalPrepRate += prepRate;
-        totalDebriefRate += debriefRate;
-        membersWithAssignments++;
+        if (prefs.share_prep_completion) {
+          totalPrepRate += prepRate;
+          membersWithPrepShared++;
+        }
+        if (prefs.share_debrief_completion) {
+          totalDebriefRate += debriefRate;
+          membersWithDebriefShared++;
+        }
       }
 
       const profile = profiles?.find((p) => p.id === member.user_id);
+
+      // Filter credentials based on share_credential_status preference
+      const memberCredentials = prefs.share_credential_status
+        ? processedCredentials.filter((c) => c.user_id === member.user_id)
+        : []; // Return empty array if interpreter opted out
 
       return {
         ...member,
@@ -205,22 +227,30 @@ export async function GET(req: NextRequest) {
         },
         activity: {
           assignmentsThisMonth: total,
-          prepCompletionRate: prepRate,
-          debriefCompletionRate: debriefRate,
+          // Only show prep rate if interpreter allows it
+          prepCompletionRate: prefs.share_prep_completion ? prepRate : null,
+          // Only show debrief rate if interpreter allows it
+          debriefCompletionRate: prefs.share_debrief_completion ? debriefRate : null,
         },
-        credentials: processedCredentials.filter(
-          (c) => c.user_id === member.user_id
-        ),
+        // Include preferences so frontend knows what's hidden
+        dataSharing: {
+          prep: prefs.share_prep_completion,
+          debrief: prefs.share_debrief_completion,
+          credentials: prefs.share_credential_status,
+          checkins: prefs.share_checkin_streaks,
+          modules: prefs.share_module_progress,
+        },
+        credentials: memberCredentials,
       };
     });
 
     const avgPrepRate =
-      membersWithAssignments > 0
-        ? Math.round(totalPrepRate / membersWithAssignments)
+      membersWithPrepShared > 0
+        ? Math.round(totalPrepRate / membersWithPrepShared)
         : 0;
     const avgDebriefRate =
-      membersWithAssignments > 0
-        ? Math.round(totalDebriefRate / membersWithAssignments)
+      membersWithDebriefShared > 0
+        ? Math.round(totalDebriefRate / membersWithDebriefShared)
         : 0;
 
     // If requesting a specific report format
@@ -815,12 +845,37 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // First, check if this is the owner trying to remove themselves
+      const { data: memberToRemove } = await supabaseAdmin
+        .from("organization_members")
+        .select("user_id, role")
+        .eq("id", member_id)
+        .eq("organization_id", membership.organization_id)
+        .single();
+
+      if (!memberToRemove) {
+        return NextResponse.json(
+          { error: "Member not found" },
+          { status: 404 }
+        );
+      }
+
+      // Prevent owner from removing themselves
+      if (memberToRemove.user_id === userId && memberToRemove.role === "owner") {
+        return NextResponse.json(
+          { error: "Owner cannot remove themselves from the organization" },
+          { status: 400 }
+        );
+      }
+
       // SECURITY: Can only remove members from YOUR organization
+      // Use status field for soft delete (new schema), is_active stays in sync via trigger
       const { error: removeError } = await supabaseAdmin
         .from("organization_members")
         .update({
-          is_active: false,
-          left_at: new Date().toISOString(),
+          status: "removed",
+          removed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq("id", member_id)
         .eq("organization_id", membership.organization_id);
