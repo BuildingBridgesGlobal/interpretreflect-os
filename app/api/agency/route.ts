@@ -446,10 +446,10 @@ export async function GET(req: NextRequest) {
       const orgName = org?.name || "Organization";
 
       const avgPrepRate = memberStats.length > 0
-        ? Math.round(memberStats.reduce((sum, m) => sum + m.activity.prepCompletionRate, 0) / memberStats.length)
+        ? Math.round(memberStats.reduce((sum, m) => sum + (m.activity.prepCompletionRate ?? 0), 0) / memberStats.length)
         : 0;
       const avgDebriefRate = memberStats.length > 0
-        ? Math.round(memberStats.reduce((sum, m) => sum + m.activity.debriefCompletionRate, 0) / memberStats.length)
+        ? Math.round(memberStats.reduce((sum, m) => sum + (m.activity.debriefCompletionRate ?? 0), 0) / memberStats.length)
         : 0;
       const totalAssignments = memberStats.reduce((sum, m) => sum + m.activity.assignmentsThisMonth, 0);
 
