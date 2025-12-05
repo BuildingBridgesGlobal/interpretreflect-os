@@ -17,23 +17,16 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 async function verifyAuthAndGetUser(req: NextRequest): Promise<string | null> {
   const authHeader = req.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.error("[Agency API] No authorization header or invalid format");
     return null;
   }
 
   const token = authHeader.replace("Bearer ", "");
-
-  // Debug: Log token presence (not the actual token for security)
-  console.log("[Agency API] Token received, length:", token.length);
-
   const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
 
   if (error || !user) {
-    console.error("[Agency API] Token validation failed:", error?.message || "No user returned");
     return null;
   }
 
-  console.log("[Agency API] User verified:", user.id);
   return user.id;
 }
 

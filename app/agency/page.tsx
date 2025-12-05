@@ -268,20 +268,7 @@ export default function AgencyDashboard() {
   };
 
   useEffect(() => {
-    // Wait for auth state to be properly hydrated before loading data
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-        if (session) {
-          loadAgencyData();
-        } else {
-          router.push("/signin");
-        }
-      } else if (event === 'SIGNED_OUT') {
-        router.push("/signin");
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    loadAgencyData();
   }, []);
 
   /**
@@ -291,19 +278,8 @@ export default function AgencyDashboard() {
    */
   const loadAgencyData = async () => {
     try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      // Debug logging
-      console.log("[Agency Page] Session check:", {
-        hasSession: !!session,
-        hasAccessToken: !!session?.access_token,
-        tokenLength: session?.access_token?.length || 0,
-        error: sessionError?.message,
-        userId: session?.user?.id,
-      });
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        console.log("[Agency Page] No session, redirecting to signin");
         router.push("/signin");
         return;
       }
@@ -316,8 +292,6 @@ export default function AgencyDashboard() {
           "Content-Type": "application/json",
         },
       });
-
-      console.log("[Agency Page] API response status:", response.status);
 
       if (response.status === 401) {
         router.push("/signin");
