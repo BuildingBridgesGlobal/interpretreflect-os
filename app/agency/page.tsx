@@ -268,7 +268,20 @@ export default function AgencyDashboard() {
   };
 
   useEffect(() => {
-    loadAgencyData();
+    // Wait for auth state to be properly hydrated before loading data
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        if (session) {
+          loadAgencyData();
+        } else {
+          router.push("/signin");
+        }
+      } else if (event === 'SIGNED_OUT') {
+        router.push("/signin");
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   /**
