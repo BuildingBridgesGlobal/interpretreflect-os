@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -30,8 +27,7 @@ export async function POST(req: NextRequest) {
 
   console.log(`Processing event: ${event.type}`);
 
-  // Initialize Supabase client with service role key
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const supabase = supabaseAdmin;
 
   try {
     switch (event.type) {
