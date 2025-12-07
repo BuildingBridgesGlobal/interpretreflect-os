@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import * as pdfParse from "pdf-parse";
+// @ts-ignore - pdf-parse has no default export but works at runtime
+import pdfParse from "pdf-parse";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const supabase = supabaseAdmin;
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Extract text from PDF
-    const pdfData = await (pdfParse as any).default(buffer);
+    const pdfData = await pdfParse(buffer);
     const fullText = pdfData.text;
     const pageCount = pdfData.numpages;
 
