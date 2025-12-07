@@ -96,8 +96,7 @@ export default function Step6Account({
           primary_goal,
           current_practices,
           weekly_summary_opt_in,
-          // Set trial period: 7 days from now
-          trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          // No trial - starts on Basic plan
         })
         .eq("id", authData.user.id);
 

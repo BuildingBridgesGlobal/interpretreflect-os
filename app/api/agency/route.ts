@@ -79,12 +79,15 @@ export async function GET(req: NextRequest) {
       .eq("organization_id", orgId)
       .in("status", ["active", "pending"]); // Only show active and pending members by default
 
-    if (!members) {
+    // Handle case where members is null OR empty array
+    if (!members || members.length === 0) {
       return NextResponse.json({
         success: true,
         organization: membership.organizations,
         teamMembers: [],
         credentials: [],
+        assignments: [],
+        teams: [],
         stats: {
           totalMembers: 0,
           activeCredentials: 0,
@@ -92,11 +95,33 @@ export async function GET(req: NextRequest) {
           expired: 0,
           avgPrepRate: 0,
           avgDebriefRate: 0,
+          totalAssignmentsThisMonth: 0,
         },
       });
     }
 
-    const userIds = members.map((m) => m.user_id);
+    const userIds = members.map((m) => m.user_id).filter(Boolean); // Filter out any null/undefined user_ids
+
+    // Double-check we have valid user IDs to query
+    if (userIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        organization: membership.organizations,
+        teamMembers: [],
+        credentials: [],
+        assignments: [],
+        teams: [],
+        stats: {
+          totalMembers: 0,
+          activeCredentials: 0,
+          expiringSoon: 0,
+          expired: 0,
+          avgPrepRate: 0,
+          avgDebriefRate: 0,
+          totalAssignmentsThisMonth: 0,
+        },
+      });
+    }
 
     // Get profiles for all members
     const { data: profiles } = await supabaseAdmin
@@ -1461,6 +1486,79 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: "Team deleted",
+      });
+    }
+
+    // =====================================================
+    // INVITE CODE ACTIONS
+    // =====================================================
+
+    if (action === "get_invite_code") {
+      // Get the current active invite code for this organization
+      const { data: existingCode, error: codeError } = await supabaseAdmin
+        .from("agency_invite_codes")
+        .select("*")
+        .eq("organization_id", membership.organization_id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (codeError && codeError.code !== "PGRST116") {
+        // PGRST116 = no rows found, which is OK
+        console.error("Error fetching invite code:", codeError);
+      }
+
+      // If no active code exists, generate a new one
+      if (!existingCode) {
+        // Generate a readable code: XXXX-XXXX format
+        const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Removed confusing chars
+        let newCode = "";
+        for (let i = 0; i < 4; i++) {
+          newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        newCode += "-";
+        for (let i = 0; i < 4; i++) {
+          newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        // Create the new invite code (expires in 1 year, unlimited uses)
+        const expiresAt = new Date();
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+        const { data: createdCode, error: createError } = await supabaseAdmin
+          .from("agency_invite_codes")
+          .insert({
+            code: newCode,
+            organization_id: membership.organization_id,
+            created_by: userId,
+            expires_at: expiresAt.toISOString(),
+            max_uses: 10000, // Essentially unlimited
+            current_uses: 0,
+            is_active: true,
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error("Error creating invite code:", createError);
+          return NextResponse.json(
+            { error: "Failed to create invite code" },
+            { status: 500 }
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          inviteCode: createdCode,
+          isNew: true,
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        inviteCode: existingCode,
+        isNew: false,
       });
     }
 

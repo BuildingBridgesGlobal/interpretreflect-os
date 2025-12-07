@@ -199,24 +199,22 @@ function DashboardPageContent() {
       {/* Pending Invitation Banner - Shown when interpreter has pending agency invitations */}
       <PendingInvitationBanner />
 
-      {/* Trial Banner - Sticky at top */}
-      {userData?.subscription_tier === "trial" && (
+      {/* Upgrade Banner - Show for Basic users */}
+      {userData?.subscription_tier === "basic" && (
         <div className="sticky top-0 z-10 bg-gradient-to-r from-teal-500/10 via-blue-500/10 to-purple-500/10 border-b border-teal-500/30 backdrop-blur-lg">
           <div className="container mx-auto max-w-7xl px-4 md:px-6 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="text-xs text-teal-300 font-semibold">FREE TRIAL</span>
+                <span className="text-xs text-teal-300 font-semibold">BASIC PLAN</span>
                 <span className="text-xs text-slate-400">
-                  {userData?.trial_ends_at
-                    ? `Ends ${new Date(userData.trial_ends_at).toLocaleDateString()}`
-                    : "All features unlocked"}
+                  Upgrade to Pro for CEU workshops & unlimited features
                 </span>
               </div>
               <button
                 onClick={() => setShowUpgrade(true)}
                 className="px-4 py-1.5 bg-teal-400 hover:bg-teal-300 text-slate-950 text-sm font-semibold rounded-lg transition-all"
               >
-                Upgrade
+                Upgrade to Pro
               </button>
             </div>
           </div>
@@ -392,64 +390,98 @@ function DashboardPageContent() {
               )}
             </motion.div>
 
-            {/* CEU Progress Widget */}
-            <motion.div
-              className="rounded-xl border border-teal-500/30 bg-gradient-to-br from-teal-500/10 to-transparent p-4"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-teal-300 uppercase tracking-wider">CEU Progress</h3>
-                <a
-                  href="/ceu"
-                  className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
-                >
-                  View All →
-                </a>
-              </div>
-
-              {ceuSummary ? (
-                <>
-                  <div className="mb-3">
-                    <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-2xl font-bold text-slate-100">{ceuSummary.total_earned.toFixed(1)}</span>
-                      <span className="text-sm text-slate-400">/ {ceuSummary.total_required} CEUs</span>
-                    </div>
-                    <div className="w-full bg-slate-700/50 rounded-full h-2 overflow-hidden">
-                      <motion.div
-                        className="h-full bg-gradient-to-r from-teal-500 to-teal-400 rounded-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.min((ceuSummary.total_earned / ceuSummary.total_required) * 100, 100)}%` }}
-                        transition={{ duration: 0.8, delay: 0.6, ease: "easeOut" }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-center">
-                    <div className="bg-slate-800/50 rounded-lg p-2">
-                      <div className="text-lg font-semibold text-slate-100">{ceuSummary.professional_studies_earned.toFixed(1)}</div>
-                      <div className="text-xs text-slate-400">Prof. Studies</div>
-                    </div>
-                    <div className="bg-slate-800/50 rounded-lg p-2">
-                      <div className="text-lg font-semibold text-slate-100">{ceuSummary.certificates_count}</div>
-                      <div className="text-xs text-slate-400">Certificates</div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-4">
-                  <div className="text-3xl mb-2">🎓</div>
-                  <p className="text-sm text-slate-400 mb-2">Track your RID certification</p>
+            {/* CEU Progress Widget - Different for Basic vs Pro users */}
+            {userData?.subscription_tier === "pro" ? (
+              // PRO USER: Show actual CEU progress or prompt to start
+              <motion.div
+                className="rounded-xl border border-teal-500/30 bg-gradient-to-br from-teal-500/10 to-transparent p-4"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-teal-300 uppercase tracking-wider">CEU Progress</h3>
                   <a
-                    href="/skills"
+                    href="/ceu"
                     className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
                   >
-                    Start Learning →
+                    View All →
                   </a>
                 </div>
-              )}
-            </motion.div>
+
+                {ceuSummary ? (
+                  <>
+                    <div className="mb-3">
+                      <div className="flex items-baseline gap-1 mb-1">
+                        <span className="text-2xl font-bold text-slate-100">{ceuSummary.total_earned.toFixed(1)}</span>
+                        <span className="text-sm text-slate-400">/ {ceuSummary.total_required} CEUs</span>
+                      </div>
+                      <div className="w-full bg-slate-700/50 rounded-full h-2 overflow-hidden">
+                        <motion.div
+                          className="h-full bg-gradient-to-r from-teal-500 to-teal-400 rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min((ceuSummary.total_earned / ceuSummary.total_required) * 100, 100)}%` }}
+                          transition={{ duration: 0.8, delay: 0.6, ease: "easeOut" }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-center">
+                      <div className="bg-slate-800/50 rounded-lg p-2">
+                        <div className="text-lg font-semibold text-slate-100">{ceuSummary.professional_studies_earned.toFixed(1)}</div>
+                        <div className="text-xs text-slate-400">Prof. Studies</div>
+                      </div>
+                      <div className="bg-slate-800/50 rounded-lg p-2">
+                        <div className="text-lg font-semibold text-slate-100">{ceuSummary.certificates_count}</div>
+                        <div className="text-xs text-slate-400">Certificates</div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-4">
+                    <div className="text-3xl mb-2">🎓</div>
+                    <p className="text-sm text-slate-400 mb-2">Start earning CEUs for your RID certification</p>
+                    <a
+                      href="/ceu"
+                      className="text-xs text-teal-400 hover:text-teal-300 transition-colors"
+                    >
+                      Browse Workshops →
+                    </a>
+                  </div>
+                )}
+              </motion.div>
+            ) : (
+              // BASIC USER: Show upgrade prompt to drive Pro conversion
+              <motion.div
+                className="rounded-xl border border-slate-600 bg-gradient-to-br from-slate-800/50 to-transparent p-4 relative overflow-hidden"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">CEU Workshops</h3>
+                  <span className="px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-400 text-[10px] font-medium">
+                    PRO
+                  </span>
+                </div>
+
+                <div className="text-center py-2">
+                  <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-slate-700/50 border border-slate-600 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-slate-300 mb-1">Earn CEUs for RID certification</p>
+                  <p className="text-xs text-slate-500 mb-3">2 workshops/month included with Pro</p>
+                  <button
+                    onClick={() => setShowUpgrade(true)}
+                    className="px-4 py-2 bg-teal-400 hover:bg-teal-300 text-slate-950 text-xs font-semibold rounded-lg transition-all"
+                  >
+                    Upgrade to Pro
+                  </button>
+                </div>
+              </motion.div>
+            )}
 
           </motion.div>
         </div>

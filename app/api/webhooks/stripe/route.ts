@@ -34,7 +34,36 @@ export async function POST(req: NextRequest) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
 
-        // Get user_id from metadata
+        // Check if this is a top-up purchase
+        if (session.metadata?.type === "topup") {
+          const userId = session.metadata.supabase_user_id;
+          const credits = parseInt(session.metadata.credits || "0", 10);
+          const packageName = session.metadata.package_name;
+
+          if (!userId || credits <= 0) {
+            console.error("Invalid top-up metadata:", session.metadata);
+            break;
+          }
+
+          // Add top-up credits using RPC function
+          const { error } = await supabase.rpc("add_topup_credits", {
+            p_user_id: userId,
+            p_credits: credits,
+            p_stripe_payment_id: session.payment_intent as string,
+            p_package_name: packageName,
+            p_price_cents: session.amount_total,
+          });
+
+          if (error) {
+            console.error("Error adding top-up credits:", error);
+            throw error;
+          }
+
+          console.log(`Added ${credits} top-up credits for user ${userId}`);
+          break;
+        }
+
+        // Handle subscription checkout
         const userId = session.metadata?.user_id;
         if (!userId) {
           console.error("No user_id in session metadata");
@@ -71,6 +100,9 @@ export async function POST(req: NextRequest) {
           throw error;
         }
 
+        // Add monthly credits for Pro users
+        await addMonthlyCreditsForPro(supabase, userId, tier);
+
         console.log(`Subscription created for user ${userId}: ${tier} ${cycle}`);
         break;
       }
@@ -97,11 +129,11 @@ export async function POST(req: NextRequest) {
             ? "yearly"
             : "monthly";
 
-        // Determine status
+        // Determine status (no more trialing - map to active)
         let status = "active";
         if (subscription.status === "past_due") status = "past_due";
         if (subscription.status === "canceled") status = "canceled";
-        if (subscription.status === "trialing") status = "trialing";
+        // Note: trialing status now maps to active since we removed trial tier
 
         const { error } = await supabase.rpc("apply_subscription_update", {
           p_user_id: profile.id,
@@ -161,6 +193,38 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "invoice.paid": {
+        // Handle successful recurring payment - add monthly credits
+        const invoice = event.data.object as Stripe.Invoice;
+        const invoiceData = invoice as any;
+
+        // Only process subscription invoices (not one-time payments)
+        if (invoiceData.billing_reason !== "subscription_cycle") break;
+
+        const subscriptionId = typeof invoiceData.subscription === 'string'
+          ? invoiceData.subscription
+          : invoiceData.subscription?.id;
+
+        if (!subscriptionId) break;
+
+        const { data: profile, error: fetchError } = await supabase
+          .from("profiles")
+          .select("id, subscription_tier")
+          .eq("stripe_subscription_id", subscriptionId)
+          .single();
+
+        if (fetchError || !profile) {
+          console.error("Could not find user for subscription:", subscriptionId);
+          break;
+        }
+
+        // Add monthly credits for Pro users on billing cycle
+        await addMonthlyCreditsForPro(supabase, profile.id, profile.subscription_tier);
+
+        console.log(`Invoice paid for user ${profile.id}, credits refreshed`);
+        break;
+      }
+
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
         const invoiceData = invoice as any;
@@ -212,15 +276,42 @@ export async function POST(req: NextRequest) {
 
 // Helper function to map Stripe price IDs to tier names
 function getTierFromPriceId(priceId: string): string {
-  const BASIC_MONTHLY = process.env.STRIPE_PRICE_BASIC_MONTHLY;
-  const BASIC_YEARLY = process.env.STRIPE_PRICE_BASIC_YEARLY;
+  // Environment variables for new prices
+  const GROWTH_MONTHLY = process.env.STRIPE_PRICE_GROWTH_MONTHLY;
+  const GROWTH_YEARLY = process.env.STRIPE_PRICE_GROWTH_YEARLY;
   const PRO_MONTHLY = process.env.STRIPE_PRICE_PRO_MONTHLY;
   const PRO_YEARLY = process.env.STRIPE_PRICE_PRO_YEARLY;
 
-  if (priceId === BASIC_MONTHLY || priceId === BASIC_YEARLY) return "basic";
+  // Legacy Pro prices (grandfathered users at $25/month or $250/year)
+  const PRO_MONTHLY_LEGACY = "price_1SYeJ8IouyG60O9haPEp6P1H";
+  const PRO_YEARLY_LEGACY = "price_1SYeJ8IouyG60O9hkAn4L26v";
+
+  // Check for Growth tier
+  if (priceId === GROWTH_MONTHLY || priceId === GROWTH_YEARLY) return "growth";
+
+  // Check for Pro tier (new prices)
   if (priceId === PRO_MONTHLY || priceId === PRO_YEARLY) return "pro";
 
-  // Default to basic if unknown
-  console.warn(`Unknown price ID: ${priceId}, defaulting to basic`);
-  return "basic";
+  // Check for legacy Pro tier (grandfathered users still get Pro benefits)
+  if (priceId === PRO_MONTHLY_LEGACY || priceId === PRO_YEARLY_LEGACY) {
+    console.log(`Legacy Pro price detected: ${priceId} - treating as Pro tier`);
+    return "pro";
+  }
+
+  // Default to free if unknown (no paid subscription = free tier)
+  console.warn(`Unknown price ID: ${priceId}, defaulting to free`);
+  return "free";
+}
+
+// Helper function to add monthly credits for Pro users
+async function addMonthlyCreditsForPro(supabase: any, userId: string, tier: string) {
+  if (tier !== "pro") return;
+
+  try {
+    await supabase.rpc("add_monthly_credits", { p_user_id: userId });
+    console.log(`Added 4 monthly credits for Pro user ${userId}`);
+  } catch (error) {
+    console.error("Error adding monthly credits:", error);
+    // Non-critical - don't fail the webhook
+  }
 }

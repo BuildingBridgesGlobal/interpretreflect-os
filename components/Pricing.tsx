@@ -1,109 +1,184 @@
 "use client";
-import React, { useState } from "react";
+import React from "react";
 
 export const Pricing: React.FC = () => {
-  const [isYearly, setIsYearly] = useState(false);
-
   return (
     <section id="pricing" className="border-t border-slate-900/80 bg-slate-950/95">
       <div className="container mx-auto max-w-6xl px-6 md:px-8 py-16 md:py-20">
         <div className="max-w-3xl">
           <p className="text-[0.75rem] font-medium uppercase tracking-[0.16em] text-teal-300/80">Pricing</p>
-          <h2 className="mt-2 text-3xl md:text-4xl font-semibold text-slate-50 tracking-tight">Clear pricing for individuals and programs.</h2>
-          <p className="mt-3 text-base text-slate-300">Professional infrastructure that scales with your career. 7-day free trial, no credit card required.</p>
+          <h2 className="mt-2 text-3xl md:text-4xl font-semibold text-slate-50 tracking-tight">Simple pricing. Start free, grow with your practice.</h2>
+          <p className="mt-3 text-base text-slate-300">Free tier for journaling, Growth for daily support, Pro for CEU credits.</p>
         </div>
 
-        <div className="mt-8 flex items-center justify-center gap-3">
-          <span className={`text-sm font-medium ${!isYearly ? "text-slate-50" : "text-slate-400"}`}>Monthly</span>
-          <button
-            onClick={() => setIsYearly(!isYearly)}
-            aria-label={isYearly ? "Switch to monthly billing" : "Switch to yearly billing"}
-            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-offset-2 focus:ring-offset-slate-950"
-            style={{ backgroundColor: isYearly ? "#5eead4" : "#334155" }}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-slate-950 transition-transform ${
-                isYearly ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
-          <span className={`text-sm font-medium ${isYearly ? "text-slate-50" : "text-slate-400"}`}>
-            Yearly <span className="text-teal-300">(save 20%)</span>
-          </span>
-        </div>
-
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Basic Plan */}
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* FREE Plan */}
           <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-6">
-            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-slate-400">Basic</p>
+            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-slate-400">Free</p>
             <div className="mt-3 flex items-baseline gap-2">
-              <p className="text-2xl font-semibold text-slate-50">
-                ${isYearly ? "115.20" : "12"}
-              </p>
-              <span className="text-[0.75rem] text-slate-400">/{isYearly ? "year" : "month"}</span>
+              <p className="text-2xl font-semibold text-slate-50">$0</p>
+              <span className="text-[0.75rem] text-slate-400">forever</span>
             </div>
-            {isYearly && (
-              <p className="mt-1 text-xs text-teal-300">Save $28.80/year (2 months free)</p>
-            )}
-            <p className="mt-2 text-sm text-slate-400">Core tools for professional interpreters</p>
+            <p className="mt-2 text-sm text-slate-400">Start your wellness journey with Elya</p>
             <ul className="mt-4 space-y-2 text-sm text-slate-300">
-              <li>• Assignment prep workflow</li>
-              <li>• Performance analysis tools</li>
-              <li>• Pattern tracking dashboard</li>
-              <li>• Domain mapping</li>
-              <li>• Skills development tracking</li>
-              <li>• Tools library</li>
-              <li>• Basic insights</li>
+              <li className="flex items-start gap-2">
+                <span className="text-slate-500 mt-0.5">•</span>
+                <span>5 Elya conversations/month</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-slate-500 mt-0.5">•</span>
+                <span>Basic mood tracking</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-slate-500 mt-0.5">•</span>
+                <span>Conversation history</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-slate-500 mt-0.5">•</span>
+                <span>Calendar view</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-slate-500 mt-0.5">•</span>
+                <span>Dark/light mode</span>
+              </li>
             </ul>
-            <a href="/start" className="mt-6 inline-flex items-center rounded-lg border border-slate-700 text-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-800">Try Free for 7 Days</a>
+            <div className="mt-4 pt-4 border-t border-slate-800">
+              <p className="text-xs text-slate-500">Best for: Students, curious interpreters</p>
+            </div>
+            <a href="/start" className="mt-6 inline-flex items-center rounded-lg border border-slate-700 text-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-800 w-full justify-center">Get Started Free</a>
           </div>
 
-          {/* Pro Plan */}
+          {/* GROWTH Plan */}
+          <div className="rounded-2xl border border-violet-500/50 bg-slate-900/90 p-6 relative">
+            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-violet-300">Growth</p>
+            <div className="mt-3 flex items-baseline gap-2">
+              <p className="text-2xl font-semibold text-slate-50">$15</p>
+              <span className="text-[0.75rem] text-slate-400">/month</span>
+            </div>
+            <p className="mt-2 text-sm text-slate-400">Daily support for working interpreters</p>
+            <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              <li className="flex items-start gap-2">
+                <span className="text-violet-400 mt-0.5">✓</span>
+                <span><span className="text-violet-300 font-medium">Unlimited</span> Elya conversations</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-violet-400 mt-0.5">✓</span>
+                <span>Pre-assignment prep workflow</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-violet-400 mt-0.5">✓</span>
+                <span>Post-assignment debrief</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-violet-400 mt-0.5">✓</span>
+                <span>Burnout monitoring</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-violet-400 mt-0.5">✓</span>
+                <span>AI insights & patterns</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-violet-400 mt-0.5">✓</span>
+                <span>Wellness tracking dashboard</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-violet-400 mt-0.5">✓</span>
+                <span>Export conversation history</span>
+              </li>
+            </ul>
+            <div className="mt-4 pt-4 border-t border-slate-800">
+              <p className="text-xs text-slate-500">Best for: Working interpreters who don't need CEUs yet</p>
+            </div>
+            <a href="/start" className="mt-6 inline-flex items-center rounded-lg border border-violet-400 text-violet-300 px-4 py-2 text-sm font-semibold hover:bg-violet-500/10 w-full justify-center">Start with Growth</a>
+          </div>
+
+          {/* PRO Plan */}
           <div className="rounded-2xl border-2 border-teal-400/60 bg-slate-900/95 p-6 relative">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-              <span className="inline-flex items-center rounded-full bg-teal-400 px-3 py-1 text-xs font-semibold text-slate-950">Popular</span>
+              <span className="inline-flex items-center rounded-full bg-teal-400 px-3 py-1 text-xs font-semibold text-slate-950">For CEUs</span>
             </div>
             <p className="text-xs font-semibold tracking-[0.16em] uppercase text-teal-300">Pro</p>
             <div className="mt-3 flex items-baseline gap-2">
-              <p className="text-2xl font-semibold text-slate-50">
-                ${isYearly ? "240" : "25"}
-              </p>
-              <span className="text-[0.75rem] text-slate-400">/{isYearly ? "year" : "month"}</span>
+              <p className="text-2xl font-semibold text-slate-50">$30</p>
+              <span className="text-[0.75rem] text-slate-400">/month</span>
             </div>
-            {isYearly && (
-              <p className="mt-1 text-xs text-teal-300">Save $60/year (2 months free)</p>
-            )}
-            <p className="mt-2 text-sm text-slate-400">Everything in Basic, plus CEU support & AI coaching</p>
+            <p className="mt-2 text-sm text-slate-400">Full professional toolkit with CEU credits</p>
             <ul className="mt-4 space-y-2 text-sm text-slate-300">
-              <li>• Everything in Basic</li>
-              <li>• CEU alignment & tracking</li>
-              <li>• Automated CEU evidence collection</li>
-              <li>• AI coaching agent (Elya)</li>
-              <li>• Advanced analytics</li>
-              <li>• Priority support</li>
-              <li>• Early access to new features</li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-400 mt-0.5">✓</span>
+                <span>Everything in Growth</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-400 mt-0.5">✓</span>
+                <span><span className="text-teal-300 font-medium">4 CEU credits/month</span></span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-400 mt-0.5">✓</span>
+                <span>All theory videos</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-400 mt-0.5">✓</span>
+                <span>All skill practice modules</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-400 mt-0.5">✓</span>
+                <span>Deep Dive case studies</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-400 mt-0.5">✓</span>
+                <span>CEU certificates</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-400 mt-0.5">✓</span>
+                <span>RID compliance tracking</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-400 mt-0.5">✓</span>
+                <span>Competency profile</span>
+              </li>
             </ul>
-            <a href="/start" className="mt-6 inline-flex items-center rounded-lg bg-teal-400 text-slate-950 px-4 py-2 text-sm font-semibold hover:bg-teal-300">Try Free for 7 Days</a>
+            <div className="mt-4 pt-4 border-t border-slate-800">
+              <p className="text-xs text-slate-500">Best for: Certified interpreters needing CEUs</p>
+            </div>
+            <a href="/start" className="mt-6 inline-flex items-center rounded-lg bg-teal-400 text-slate-950 px-4 py-2 text-sm font-semibold hover:bg-teal-300 w-full justify-center">Upgrade to Pro</a>
           </div>
+        </div>
 
-          {/* Enterprise Plan */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/85 p-6">
-            <p className="text-xs font-semibold tracking-[0.16em] uppercase text-slate-400">For Programs & Organizations</p>
-            <div className="mt-3">
-              <p className="text-2xl font-semibold text-slate-50">Contact Us</p>
-              <p className="text-sm text-slate-400 mt-1">Custom pricing for agencies, programs, and institutions</p>
+        {/* For Agencies Banner */}
+        <div className="mt-8 rounded-2xl border border-slate-700 bg-slate-900/60 p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-100">For Agencies & Programs</h3>
+              <p className="text-sm text-slate-400 mt-1">Custom solutions for organizations with team management, analytics, and bulk CEU access</p>
             </div>
-            <p className="mt-4 text-sm text-slate-300">
-              Tailored solutions for organizations that want to provide professional development infrastructure, performance analytics, and team coordination tools.
-            </p>
-            <ul className="mt-4 space-y-2 text-sm text-slate-300">
-              <li>• Team analytics and insights</li>
-              <li>• Performance pattern dashboards</li>
-              <li>• Supervisor insights and support</li>
-              <li>• CEU alignment and tracking</li>
-              <li>• Cohort reports and trends</li>
-            </ul>
-            <a href="#contact" className="mt-6 inline-flex items-center rounded-lg border border-teal-400 text-teal-300 px-4 py-2 text-sm font-semibold hover:bg-teal-500/10">Contact Us to Learn More</a>
+            <a href="/for-agencies" className="inline-flex items-center rounded-lg border border-teal-400 text-teal-300 px-5 py-2.5 text-sm font-semibold hover:bg-teal-500/10 whitespace-nowrap">Learn More</a>
+          </div>
+        </div>
+
+        {/* Top-Up Credits */}
+        <div className="mt-8 rounded-2xl border border-violet-500/30 bg-violet-500/5 p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-100">Need more CEU credits?</h3>
+              <p className="text-sm text-slate-400 mt-1">Pro members can purchase additional credits as needed. Never expire.</p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-center min-w-[90px]">
+                <p className="text-lg font-bold text-slate-100">$5</p>
+                <p className="text-xs text-slate-400">2 credits</p>
+                <p className="text-[10px] text-slate-500">$2.50/credit</p>
+              </div>
+              <div className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-4 py-2 text-center min-w-[90px]">
+                <p className="text-lg font-bold text-violet-300">$8</p>
+                <p className="text-xs text-slate-400">4 credits</p>
+                <p className="text-[10px] text-violet-400">$2.00/credit</p>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-center min-w-[90px]">
+                <p className="text-lg font-bold text-slate-100">$14</p>
+                <p className="text-xs text-slate-400">8 credits</p>
+                <p className="text-[10px] text-slate-500">$1.75/credit</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -112,8 +187,42 @@ export const Pricing: React.FC = () => {
           <p className="text-sm text-slate-400">
             Student or new interpreter (first 2 years)?{" "}
             <a href="#contact" className="text-teal-300 hover:text-teal-200 underline">
-              Get 50% off with verification
+              Get 50% off Pro with verification
             </a>
+          </p>
+        </div>
+
+        {/* Credit Values Explanation */}
+        <div className="mt-10 border-t border-slate-800 pt-8">
+          <h3 className="text-lg font-semibold text-slate-100 mb-4">How CEU Credits Work</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-lg bg-slate-900/50 border border-slate-800 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">📹</span>
+                <span className="font-medium text-slate-200">Theory Videos</span>
+              </div>
+              <p className="text-sm text-slate-400">0.5 credits each</p>
+              <p className="text-xs text-slate-500 mt-1">Quick concept learning (10-15 min)</p>
+            </div>
+            <div className="rounded-lg bg-slate-900/50 border border-slate-800 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">🎯</span>
+                <span className="font-medium text-slate-200">Skill Practice</span>
+              </div>
+              <p className="text-sm text-slate-400">1 credit each</p>
+              <p className="text-xs text-slate-500 mt-1">Interactive practice + assessment (30-45 min)</p>
+            </div>
+            <div className="rounded-lg bg-slate-900/50 border border-slate-800 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-2xl">🔍</span>
+                <span className="font-medium text-slate-200">Deep Dive</span>
+              </div>
+              <p className="text-sm text-slate-400">2 credits each</p>
+              <p className="text-xs text-slate-500 mt-1">Case study + analysis (60+ min)</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 mt-4 text-center">
+            Monthly credits reset on your billing date. Top-up credits never expire.
           </p>
         </div>
       </div>

@@ -73,6 +73,20 @@ export default function AdminPage() {
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
+  // CEU Export state
+  const [exportStartDate, setExportStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(1); // First of current month
+    return date.toISOString().split("T")[0];
+  });
+  const [exportEndDate, setExportEndDate] = useState(() => {
+    return new Date().toISOString().split("T")[0];
+  });
+  const [exportActivityNumber, setExportActivityNumber] = useState("");
+  const [exportSummary, setExportSummary] = useState<any>(null);
+  const [loadingExportSummary, setLoadingExportSummary] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
+
   // Super admin emails - only these can access /admin
   const SUPER_ADMIN_EMAILS = [
     "maddox@interpretreflect.com",
@@ -288,6 +302,83 @@ export default function AdminPage() {
       year: "numeric",
     });
   };
+
+  // CEU Export functions
+  const loadExportSummary = async () => {
+    setLoadingExportSummary(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch("/api/admin/ceu-export", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "summary",
+          start_date: exportStartDate,
+          end_date: exportEndDate,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setExportSummary(data.summary);
+      }
+    } catch (error) {
+      console.error("Error loading export summary:", error);
+    } finally {
+      setLoadingExportSummary(false);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const params = new URLSearchParams({
+        start_date: exportStartDate,
+        end_date: exportEndDate,
+        format: "csv",
+      });
+      if (exportActivityNumber) {
+        params.append("activity_number", exportActivityNumber);
+      }
+
+      const response = await fetch(`/api/admin/ceu-export?${params}`, {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `RID_CEU_Export_${exportStartDate}_to_${exportEndDate}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }
+    } catch (error) {
+      console.error("Error exporting CSV:", error);
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
+  // Load export summary when compliance tab is selected or dates change
+  useEffect(() => {
+    if (selectedView === "compliance") {
+      loadExportSummary();
+    }
+  }, [selectedView, exportStartDate, exportEndDate]);
 
   // Show loading state until authorization is confirmed
   // This prevents any flash of admin content for unauthorized users
@@ -1156,15 +1247,124 @@ export default function AdminPage() {
         {/* Compliance & CEUs Tab */}
         {selectedView === "compliance" && (
           <div className="space-y-6">
+            {/* RID Export Section - Primary Feature */}
+            <div className="rounded-xl border border-teal-500/30 bg-gradient-to-br from-teal-500/10 to-violet-500/10 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-teal-500/20 border border-teal-500/30 flex items-center justify-center">
+                  <span className="text-teal-400 font-bold text-sm">RID</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100">RID CEU Export</h3>
+                  <p className="text-sm text-slate-400">Generate CSV for batch upload to RID (Sponsor #2309)</p>
+                </div>
+              </div>
+
+              {/* Date Range Selection */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={exportStartDate}
+                    onChange={(e) => setExportStartDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={exportEndDate}
+                    onChange={(e) => setExportEndDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Activity Number (optional)</label>
+                  <input
+                    type="text"
+                    value={exportActivityNumber}
+                    onChange={(e) => setExportActivityNumber(e.target.value)}
+                    placeholder="e.g., 2309-2025-001"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={handleExportCsv}
+                    disabled={exportingCsv || !exportSummary?.total_certificates}
+                    className="w-full px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {exportingCsv ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Download CSV
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Export Summary */}
+              {loadingExportSummary ? (
+                <div className="text-center py-4 text-slate-400 text-sm">Loading summary...</div>
+              ) : exportSummary ? (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <p className="text-2xl font-bold text-teal-400">{exportSummary.total_certificates}</p>
+                    <p className="text-xs text-slate-400">Certificates</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <p className="text-2xl font-bold text-violet-400">{exportSummary.unique_participants}</p>
+                    <p className="text-xs text-slate-400">Participants</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <p className="text-2xl font-bold text-emerald-400">{exportSummary.total_ceus}</p>
+                    <p className="text-xs text-slate-400">Total CEUs</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <p className="text-2xl font-bold text-blue-400">{exportSummary.by_category?.["Professional Studies"]?.toFixed(2) || "0.00"}</p>
+                    <p className="text-xs text-slate-400">Prof. Studies</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <p className={`text-2xl font-bold ${exportSummary.missing_rid_numbers > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                      {exportSummary.missing_rid_numbers}
+                    </p>
+                    <p className="text-xs text-slate-400">Missing RID #</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-4 text-slate-500 text-sm">No certificates in this date range</div>
+              )}
+
+              {/* Warning for missing RID numbers */}
+              {exportSummary?.missing_rid_numbers > 0 && (
+                <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                  <p className="text-sm text-amber-400">
+                    <strong>{exportSummary.missing_rid_numbers} participant(s)</strong> are missing RID member numbers.
+                    The CSV will export with blank RID numbers - you may need to look these up manually before submitting to RID.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Original Compliance Stats */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-100">Compliance & CEU Tracking</h3>
-                  <p className="text-sm text-slate-400 mt-1">Can we prove this to our funders?</p>
+                  <p className="text-sm text-slate-400 mt-1">Platform-wide CEU statistics</p>
                 </div>
-                <button className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors">
-                  Export PDF Report
-                </button>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -1205,6 +1405,19 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* RID Workflow Info */}
+            <div className="rounded-xl border border-blue-500/50 bg-blue-500/10 p-5">
+              <h3 className="text-sm font-semibold text-blue-400 mb-2">Monthly RID Submission Workflow</h3>
+              <ol className="text-sm text-slate-300 space-y-2 list-decimal list-inside">
+                <li>Select the date range for your reporting period (typically 1st - end of month)</li>
+                <li>Optionally enter the RID Activity Number for this batch</li>
+                <li>Review the summary - check for missing RID numbers</li>
+                <li>Download CSV and review the data</li>
+                <li>Upload to RID CEU Sponsor portal for batch processing</li>
+                <li>Log completion in your CEU tracking system (Stage 6 of workflow)</li>
+              </ol>
             </div>
           </div>
         )}

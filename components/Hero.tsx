@@ -16,10 +16,10 @@ type HeroProps = {
 export const Hero: React.FC<HeroProps> = ({
   headline = "InterpretReflect",
   slogan = "The operating system for your interpreting career.",
-  subhead = "AI-powered prep and debriefs. RAG knowledge base with interpreter-specific resources. Team collaboration built in. Track credentials, build skills, prevent burnout—all in one place.",
-  primary = { label: "Try Free for 7 Days", href: "/start" },
+  subhead = "Meet Elya, your AI companion for prep, debriefs, and reflection. Earn RID-approved CEUs with interactive workshops. Track wellness, build skills, prevent burnout—all in one place.",
+  primary = { label: "Get Started Free", href: "/start" },
   secondary = { label: "See How It Works", href: "#interpreter-os" },
-  microcopy = "7-day free trial. No credit card required.",
+  microcopy = "Basic plan is free forever. No credit card required.",
   primaryHref,
   secondaryHref,
 }) => {
@@ -68,15 +68,15 @@ export const Hero: React.FC<HeroProps> = ({
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-400">
               <div className="inline-flex items-center gap-2">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-teal-400" />
-                <span>AI + RAG Knowledge Base</span>
+                <span>Elya AI Companion</span>
               </div>
               <div className="inline-flex items-center gap-2">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400" />
-                <span>Team Collaboration</span>
+                <span>CEU Workshops</span>
               </div>
               <div className="inline-flex items-center gap-2">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
-                <span>Professional Credentials Tracking</span>
+                <span>RID Compliance Tracking</span>
               </div>
             </div>
           </div>
@@ -87,94 +87,96 @@ export const Hero: React.FC<HeroProps> = ({
             <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.25),_transparent_55%)] opacity-80 blur-3xl" />
 
             <div className="grid gap-4 grid-cols-2">
-              {/* Before */}
+              {/* Elya AI */}
               <div className="rounded-xl border border-teal-500/30 bg-gradient-to-br from-teal-500/5 to-transparent p-5">
                 <div className="mb-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-teal-400 mb-1">Before</p>
-                  <p className="text-base font-semibold text-slate-100">Assignment Prep</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-teal-400 mb-1">AI Companion</p>
+                  <p className="text-base font-semibold text-slate-100">Elya</p>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
-                    <span>Research participants</span>
+                    <span>Assignment prep</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
-                    <span>Build mental models</span>
+                    <span>Debrief sessions</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
-                    <span>Generate vocab</span>
+                    <span>Free-write journaling</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
-                    <span>Team coordination</span>
+                    <span>Process emotions</span>
                   </div>
                 </div>
               </div>
 
-              {/* After */}
+              {/* CEU Workshops */}
               <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/5 to-transparent p-5">
                 <div className="mb-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-violet-400 mb-1">After</p>
-                  <p className="text-base font-semibold text-slate-100">Growth & Reflection</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-violet-400 mb-1">Pro Feature</p>
+                  </div>
+                  <p className="text-base font-semibold text-slate-100">CEU Workshops</p>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
-                    <span>Structured debriefs</span>
+                    <span>RID-approved content</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
-                    <span>Pattern recognition</span>
+                    <span>Interactive modules</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
-                    <span>CEU evidence</span>
+                    <span>Certificates on completion</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
-                    <span>Skill development</span>
+                    <span>2 workshops/month</span>
                   </div>
                 </div>
               </div>
 
-              {/* Always */}
+              {/* Wellness & Skills */}
               <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent p-5">
                 <div className="mb-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-1">Always</p>
-                  <p className="text-base font-semibold text-slate-100">Career Infrastructure</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-1">Always On</p>
+                  <p className="text-base font-semibold text-slate-100">Wellness & Skills</p>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-amber-400 flex-shrink-0" />
-                    <span>RAG knowledge base</span>
+                    <span>Wellness check-ins</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-amber-400 flex-shrink-0" />
-                    <span>Team collaboration</span>
+                    <span>Burnout drift tracking</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-amber-400 flex-shrink-0" />
-                    <span>Credentials tracking</span>
+                    <span>Skill development drills</span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-amber-400 flex-shrink-0" />
-                    <span>Skills & wellness</span>
+                    <span>RID compliance tracking</span>
                   </div>
                 </div>
               </div>
 
-              {/* Result */}
+              {/* Pricing */}
               <div className="rounded-xl border border-slate-600/50 bg-gradient-to-br from-slate-700/20 to-transparent p-5 flex flex-col justify-between">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">The Result</p>
-                  <p className="text-base font-semibold text-slate-100 mb-2">You focus on interpretation.</p>
-                  <p className="text-xs text-slate-400">We handle everything else.</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Simple Pricing</p>
+                  <p className="text-base font-semibold text-slate-100 mb-2">Basic: Free Forever</p>
+                  <p className="text-xs text-slate-400">Pro: $30/mo for CEU workshops</p>
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-700">
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    <span className="text-teal-300 font-semibold">Less cognitive load.</span> More presence.
+                    <span className="text-teal-300 font-semibold">Start free.</span> Upgrade when ready.
                   </p>
                 </div>
               </div>

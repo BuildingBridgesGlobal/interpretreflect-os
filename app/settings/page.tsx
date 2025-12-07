@@ -3,7 +3,492 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import NavBar from "@/components/NavBar";
+
+// Billing Tab Component
+function BillingTab({ userData, showMessage }: { userData: any; showMessage: (type: "success" | "error", text: string) => void }) {
+  const [credits, setCredits] = useState({ monthly: 0, topup: 0, total: 0 });
+  const [loadingCredits, setLoadingCredits] = useState(true);
+  const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null);
+  const [billingHistory, setBillingHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  const tier = userData?.subscription_tier || "free";
+  const cycle = userData?.subscription_cycle || "monthly";
+  const status = userData?.subscription_status || "active";
+
+  // Load credits on mount
+  useEffect(() => {
+    const loadCredits = async () => {
+      if (tier !== "pro") {
+        setLoadingCredits(false);
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      try {
+        const response = await fetch("/api/ceu?action=credits", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCredits({
+            monthly: data.monthly_credits || 0,
+            topup: data.topup_credits || 0,
+            total: (data.monthly_credits || 0) + (data.topup_credits || 0),
+          });
+        }
+      } catch (error) {
+        console.error("Error loading credits:", error);
+      } finally {
+        setLoadingCredits(false);
+      }
+    };
+
+    loadCredits();
+  }, [tier]);
+
+  // Load billing history
+  useEffect(() => {
+    const loadHistory = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      try {
+        // Fetch credit transactions as billing history
+        // Use type assertion since table may not be in schema yet
+        const { data, error } = await (supabase as any)
+          .from("credit_transactions")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        if (!error && data) {
+          setBillingHistory(data);
+        }
+      } catch (error) {
+        console.error("Error loading billing history:", error);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    loadHistory();
+  }, []);
+
+  // Handle upgrade
+  const handleUpgrade = async (targetTier: "growth" | "pro", targetCycle: "monthly" | "yearly") => {
+    setLoadingCheckout(`${targetTier}-${targetCycle}`);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Please sign in to upgrade");
+      setLoadingCheckout(null);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/create-checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ tier: targetTier, cycle: targetCycle }),
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        showMessage("error", data.error || "Failed to create checkout session");
+      }
+    } catch (error) {
+      console.error("Checkout error:", error);
+      showMessage("error", "Failed to start checkout");
+    } finally {
+      setLoadingCheckout(null);
+    }
+  };
+
+  // Handle top-up purchase
+  const handleTopUp = async (packageName: string) => {
+    setLoadingCheckout(`topup-${packageName}`);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Please sign in to purchase credits");
+      setLoadingCheckout(null);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/credits/topup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ package: packageName }),
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        showMessage("error", data.error || "Failed to create checkout session");
+      }
+    } catch (error) {
+      console.error("Top-up error:", error);
+      showMessage("error", "Failed to start checkout");
+    } finally {
+      setLoadingCheckout(null);
+    }
+  };
+
+  // Handle manage subscription (Stripe Customer Portal)
+  const handleManageSubscription = async () => {
+    setLoadingCheckout("manage");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Please sign in");
+      setLoadingCheckout(null);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/create-portal", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        showMessage("error", data.error || "Failed to open billing portal");
+      }
+    } catch (error) {
+      console.error("Portal error:", error);
+      showMessage("error", "Failed to open billing portal");
+    } finally {
+      setLoadingCheckout(null);
+    }
+  };
+
+  const getTierDisplay = () => {
+    switch (tier) {
+      case "pro":
+        return { name: "Pro", color: "violet", price: cycle === "yearly" ? "$300/year" : "$30/month" };
+      case "growth":
+        return { name: "Growth", color: "teal", price: cycle === "yearly" ? "$150/year" : "$15/month" };
+      default:
+        return { name: "Free", color: "slate", price: "$0" };
+    }
+  };
+
+  const tierDisplay = getTierDisplay();
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      {/* Current Plan Card */}
+      <div className={`rounded-xl border ${
+        tier === "pro" ? "border-violet-500/50 bg-gradient-to-br from-violet-500/10 to-purple-500/10" :
+        tier === "growth" ? "border-teal-500/50 bg-gradient-to-br from-teal-500/10 to-emerald-500/10" :
+        "border-slate-600 bg-slate-900/50"
+      } p-6`}>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-100">Current Plan</h3>
+            <p className={`text-sm mt-1 ${
+              tier === "pro" ? "text-violet-400" :
+              tier === "growth" ? "text-teal-400" :
+              "text-slate-400"
+            }`}>
+              {tierDisplay.name} Plan
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {status === "active" && tier !== "free" && (
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-medium">
+                Active
+              </span>
+            )}
+            {status === "past_due" && (
+              <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium">
+                Past Due
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="text-center p-3 rounded-lg bg-slate-800/50">
+            <p className="text-xs text-slate-400">Price</p>
+            <p className={`text-xl font-bold ${
+              tier === "pro" ? "text-violet-400" :
+              tier === "growth" ? "text-teal-400" :
+              "text-slate-400"
+            }`}>
+              {tierDisplay.price}
+            </p>
+          </div>
+          <div className="text-center p-3 rounded-lg bg-slate-800/50">
+            <p className="text-xs text-slate-400">CEU Credits</p>
+            <p className="text-xl font-bold text-amber-400">
+              {tier === "pro" ? "4/mo" : "0"}
+            </p>
+          </div>
+          <div className="text-center p-3 rounded-lg bg-slate-800/50">
+            <p className="text-xs text-slate-400">Elya</p>
+            <p className="text-xl font-bold text-emerald-400">
+              {tier === "free" ? "5/mo" : "Unlimited"}
+            </p>
+          </div>
+        </div>
+
+        {/* Tier Actions */}
+        {tier === "free" && (
+          <div className="space-y-2">
+            <button
+              onClick={() => handleUpgrade("growth", "monthly")}
+              disabled={loadingCheckout !== null}
+              className="w-full px-4 py-2 rounded-lg bg-teal-500 text-white font-medium hover:bg-teal-400 transition-colors disabled:opacity-50"
+            >
+              {loadingCheckout === "growth-monthly" ? "Loading..." : "Upgrade to Growth - $15/mo"}
+            </button>
+            <button
+              onClick={() => handleUpgrade("pro", "monthly")}
+              disabled={loadingCheckout !== null}
+              className="w-full px-4 py-2 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors disabled:opacity-50"
+            >
+              {loadingCheckout === "pro-monthly" ? "Loading..." : "Upgrade to Pro - $30/mo"}
+            </button>
+          </div>
+        )}
+
+        {tier === "growth" && (
+          <div className="space-y-2">
+            <button
+              onClick={() => handleUpgrade("pro", "monthly")}
+              disabled={loadingCheckout !== null}
+              className="w-full px-4 py-2 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors disabled:opacity-50"
+            >
+              {loadingCheckout === "pro-monthly" ? "Loading..." : "Upgrade to Pro - $30/mo"}
+            </button>
+            <button
+              onClick={handleManageSubscription}
+              disabled={loadingCheckout !== null}
+              className="w-full px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50"
+            >
+              {loadingCheckout === "manage" ? "Loading..." : "Manage Subscription"}
+            </button>
+          </div>
+        )}
+
+        {tier === "pro" && (
+          <button
+            onClick={handleManageSubscription}
+            disabled={loadingCheckout !== null}
+            className="w-full px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50"
+          >
+            {loadingCheckout === "manage" ? "Loading..." : "Manage Subscription"}
+          </button>
+        )}
+      </div>
+
+      {/* CEU Credits Card (Pro only) */}
+      {tier === "pro" && (
+        <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-orange-500/5 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-slate-100">CEU Credits</h3>
+              <p className="text-sm text-slate-400">Use credits to access CEU modules</p>
+            </div>
+          </div>
+
+          {loadingCredits ? (
+            <div className="text-center py-4 text-slate-400">Loading credits...</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="text-center p-3 rounded-lg bg-slate-800/50">
+                  <p className="text-xs text-slate-400">Monthly</p>
+                  <p className="text-2xl font-bold text-amber-400">{credits.monthly}</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-slate-800/50">
+                  <p className="text-xs text-slate-400">Top-Up</p>
+                  <p className="text-2xl font-bold text-teal-400">{credits.topup}</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-slate-800/50 border border-amber-500/30">
+                  <p className="text-xs text-slate-400">Total</p>
+                  <p className="text-2xl font-bold text-white">{credits.total}</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500 mb-4">
+                Monthly credits refresh on your billing date. Top-up credits never expire.
+              </p>
+
+              {/* Top-Up Packages */}
+              <div className="border-t border-slate-700 pt-4">
+                <h4 className="text-sm font-medium text-slate-300 mb-3">Buy More Credits</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => handleTopUp("small")}
+                    disabled={loadingCheckout !== null}
+                    className="p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:border-teal-500/50 hover:bg-slate-800 transition-all text-center disabled:opacity-50"
+                  >
+                    <p className="text-lg font-bold text-teal-400">2</p>
+                    <p className="text-xs text-slate-400">credits</p>
+                    <p className="text-sm font-medium text-slate-200 mt-1">$5</p>
+                  </button>
+                  <button
+                    onClick={() => handleTopUp("medium")}
+                    disabled={loadingCheckout !== null}
+                    className="p-3 rounded-lg border border-teal-500/50 bg-teal-500/10 hover:bg-teal-500/20 transition-all text-center relative disabled:opacity-50"
+                  >
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-teal-500 text-white text-[10px] font-medium rounded-full">
+                      Best Value
+                    </span>
+                    <p className="text-lg font-bold text-teal-400">4</p>
+                    <p className="text-xs text-slate-400">credits</p>
+                    <p className="text-sm font-medium text-slate-200 mt-1">$8</p>
+                  </button>
+                  <button
+                    onClick={() => handleTopUp("large")}
+                    disabled={loadingCheckout !== null}
+                    className="p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:border-teal-500/50 hover:bg-slate-800 transition-all text-center disabled:opacity-50"
+                  >
+                    <p className="text-lg font-bold text-teal-400">8</p>
+                    <p className="text-xs text-slate-400">credits</p>
+                    <p className="text-sm font-medium text-slate-200 mt-1">$14</p>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Plan Comparison */}
+      <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+        <h3 className="text-lg font-semibold text-slate-100 mb-4">Compare Plans</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="py-2 px-3 text-left text-slate-400 font-medium">Feature</th>
+                <th className="py-2 px-3 text-center text-slate-400 font-medium">Free</th>
+                <th className="py-2 px-3 text-center text-teal-400 font-medium">Growth</th>
+                <th className="py-2 px-3 text-center text-violet-400 font-medium">Pro</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              <tr>
+                <td className="py-2 px-3 text-slate-300">Elya Conversations</td>
+                <td className="py-2 px-3 text-center text-slate-400">5/month</td>
+                <td className="py-2 px-3 text-center text-teal-400">Unlimited</td>
+                <td className="py-2 px-3 text-center text-violet-400">Unlimited</td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 text-slate-300">Assignment Prep & Debrief</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-teal-400">✓</td>
+                <td className="py-2 px-3 text-center text-violet-400">✓</td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 text-slate-300">AI Insights & Patterns</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-teal-400">✓</td>
+                <td className="py-2 px-3 text-center text-violet-400">✓</td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 text-slate-300">Burnout Monitoring</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-teal-400">✓</td>
+                <td className="py-2 px-3 text-center text-violet-400">✓</td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 text-slate-300">CEU Credits</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-amber-400">4/month</td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 text-slate-300">CEU Modules & Certificates</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-violet-400">✓</td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 text-slate-300">Credit Top-Ups</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-violet-400">✓</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4 flex gap-3 text-center text-xs text-slate-500">
+          <span className="flex-1">$0/month</span>
+          <span className="flex-1">$15/month</span>
+          <span className="flex-1">$30/month</span>
+        </div>
+      </div>
+
+      {/* Credit Transaction History (Pro only) */}
+      {tier === "pro" && (
+        <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+          <h3 className="text-lg font-semibold text-slate-100 mb-4">Credit History</h3>
+          {loadingHistory ? (
+            <div className="text-center py-4 text-slate-400">Loading...</div>
+          ) : billingHistory.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-4">No credit transactions yet</p>
+          ) : (
+            <div className="space-y-2">
+              {billingHistory.map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      tx.amount > 0 ? "bg-emerald-500/20" : "bg-rose-500/20"
+                    }`}>
+                      {tx.amount > 0 ? (
+                        <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-200">{tx.description}</p>
+                      <p className="text-xs text-slate-500">
+                        {new Date(tx.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-sm font-medium ${tx.amount > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    {tx.amount > 0 ? "+" : ""}{tx.amount} credits
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Credential {
   id: string;
@@ -21,7 +506,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [userData, setUserData] = useState<any>(null);
-  const [selectedTab, setSelectedTab] = useState<"account" | "profile" | "credentials" | "preferences" | "billing" | "privacy">("account");
+  const [selectedTab, setSelectedTab] = useState<"account" | "profile" | "agencies" | "credentials" | "preferences" | "billing" | "privacy">("account");
 
   // Account form states
   const [fullName, setFullName] = useState("");
@@ -76,6 +561,21 @@ export default function SettingsPage() {
   const [agencyMemberships, setAgencyMemberships] = useState<AgencyMembership[]>([]);
   const [loadingAgencies, setLoadingAgencies] = useState(false);
   const [savingAgencyPrefs, setSavingAgencyPrefs] = useState<string | null>(null);
+
+  // My Agencies tab state
+  interface ConnectedAgency {
+    id: string;
+    organization_id: string;
+    role: string;
+    status: string;
+    joined_at: string | null;
+    organizations: { id: string; name: string } | null;
+  }
+  const [connectedAgencies, setConnectedAgencies] = useState<ConnectedAgency[]>([]);
+  const [loadingConnectedAgencies, setLoadingConnectedAgencies] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [connectingToAgency, setConnectingToAgency] = useState(false);
+  const [disconnectingAgency, setDisconnectingAgency] = useState<string | null>(null);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -234,6 +734,122 @@ export default function SettingsPage() {
     }
   };
 
+  // Load connected agencies for My Agencies tab
+  const loadConnectedAgencies = async () => {
+    setLoadingConnectedAgencies(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    try {
+      const response = await fetch("/api/interpreter/agencies", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnectedAgencies(data.agencies || []);
+      }
+    } catch (error) {
+      console.error("Error loading connected agencies:", error);
+    } finally {
+      setLoadingConnectedAgencies(false);
+    }
+  };
+
+  // Connect to agency using invite code
+  const handleConnectToAgency = async () => {
+    if (!inviteCode.trim()) {
+      showMessage("error", "Please enter an invite code");
+      return;
+    }
+
+    setConnectingToAgency(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Session expired. Please sign in again.");
+      setConnectingToAgency(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/interpreter/agencies", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          action: "connect",
+          code: inviteCode,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showMessage("success", data.message || "Successfully connected to agency!");
+        setInviteCode("");
+        loadConnectedAgencies();
+        // Also refresh the privacy memberships
+        loadAgencyMemberships();
+      } else {
+        showMessage("error", data.error || "Failed to connect to agency");
+      }
+    } catch (error) {
+      console.error("Error connecting to agency:", error);
+      showMessage("error", "Failed to connect. Please try again.");
+    } finally {
+      setConnectingToAgency(false);
+    }
+  };
+
+  // Disconnect from agency
+  const handleDisconnectFromAgency = async (membershipId: string, agencyName: string) => {
+    if (!confirm(`Are you sure you want to disconnect from ${agencyName}? You can reconnect using an invite code later.`)) {
+      return;
+    }
+
+    setDisconnectingAgency(membershipId);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Session expired. Please sign in again.");
+      setDisconnectingAgency(null);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/interpreter/agencies", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          action: "disconnect",
+          membership_id: membershipId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showMessage("success", data.message || "Disconnected from agency");
+        loadConnectedAgencies();
+        // Also refresh the privacy memberships
+        loadAgencyMemberships();
+      } else {
+        showMessage("error", data.error || "Failed to disconnect");
+      }
+    } catch (error) {
+      console.error("Error disconnecting from agency:", error);
+      showMessage("error", "Failed to disconnect. Please try again.");
+    } finally {
+      setDisconnectingAgency(null);
+    }
+  };
+
   // Load agency memberships for privacy settings
   const loadAgencyMemberships = async () => {
     setLoadingAgencies(true);
@@ -333,6 +949,13 @@ export default function SettingsPage() {
   useEffect(() => {
     if (selectedTab === "credentials" && credentials.length === 0) {
       loadCredentials();
+    }
+  }, [selectedTab]);
+
+  // Load agencies when My Agencies tab is selected
+  useEffect(() => {
+    if (selectedTab === "agencies" && connectedAgencies.length === 0) {
+      loadConnectedAgencies();
     }
   }, [selectedTab]);
 
@@ -476,7 +1099,23 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <NavBar />
+      {/* Minimal Header with Back Button */}
+      <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto max-w-7xl px-4 md:px-6 py-4">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="flex items-center gap-2 text-slate-400 hover:text-slate-100 transition-colors group"
+            >
+              <svg className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              <span className="text-sm font-medium">Back to Dashboard</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
       <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8">
         {/* Header */}
         <div className="mb-6">
@@ -489,6 +1128,7 @@ export default function SettingsPage() {
           {[
             { key: "account", label: "Account" },
             { key: "profile", label: "Community Profile" },
+            { key: "agencies", label: "My Agencies" },
             { key: "credentials", label: "Credentials" },
             { key: "preferences", label: "Preferences" },
             { key: "billing", label: "Billing" },
@@ -626,6 +1266,144 @@ export default function SettingsPage() {
                   {saving ? "Saving..." : "Save Profile"}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {selectedTab === "agencies" && (
+          <div className="max-w-2xl space-y-6">
+            {/* Connect to Agency */}
+            <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/5 to-purple-500/5 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100">Connect to Agency</h3>
+                  <p className="text-sm text-slate-400">Enter the invite code provided by your agency</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  placeholder="Enter code (e.g., ACME-1234)"
+                  className="flex-1 px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-400 uppercase tracking-wider font-mono"
+                  maxLength={20}
+                />
+                <button
+                  onClick={handleConnectToAgency}
+                  disabled={connectingToAgency || !inviteCode.trim()}
+                  className="px-6 py-3 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {connectingToAgency ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Connect
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Connected Agencies List */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-4">Your Agencies</h3>
+
+              {loadingConnectedAgencies ? (
+                <div className="text-center py-8 text-slate-400">Loading agencies...</div>
+              ) : connectedAgencies.length === 0 ? (
+                <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-8 text-center">
+                  <div className="w-14 h-14 rounded-full bg-slate-700 flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-7 h-7 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-slate-300 mb-2">No agencies connected yet</p>
+                  <p className="text-xs text-slate-500">Get an invite code from your agency to connect and sync your data.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {connectedAgencies.map((agency) => (
+                    <div key={agency.id} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                            <span className="text-violet-400 font-bold text-sm">
+                              {agency.organizations?.name?.charAt(0) || "A"}
+                            </span>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-semibold text-slate-100">
+                              {agency.organizations?.name || "Agency"}
+                            </h4>
+                            <p className="text-xs text-slate-500">
+                              Connected {agency.joined_at ? new Date(agency.joined_at).toLocaleDateString() : "recently"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-medium">
+                            Active
+                          </span>
+                          <button
+                            onClick={() => handleDisconnectFromAgency(agency.id, agency.organizations?.name || "this agency")}
+                            disabled={disconnectingAgency === agency.id}
+                            className="text-xs text-rose-400 hover:text-rose-300 transition-colors disabled:opacity-50"
+                          >
+                            {disconnectingAgency === agency.id ? "Disconnecting..." : "Disconnect"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Info Box */}
+            <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-5">
+              <h4 className="text-sm font-semibold text-blue-400 mb-2">How Agency Connections Work</h4>
+              <ul className="space-y-2 text-sm text-slate-300">
+                <li className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>You can connect to <strong className="text-slate-100">multiple agencies</strong> simultaneously</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Control what data each agency sees in <strong className="text-slate-100">Privacy & Data</strong> settings</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Disconnect anytime - <strong className="text-slate-100">you're always in control</strong></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Your debrief content and wellness details are <strong className="text-slate-100">never shared</strong></span>
+                </li>
+              </ul>
             </div>
           </div>
         )}
@@ -919,88 +1697,7 @@ export default function SettingsPage() {
         )}
 
         {selectedTab === "billing" && (
-          <div className="max-w-2xl space-y-6">
-            <div className="rounded-xl border border-violet-500/50 bg-gradient-to-br from-violet-500/10 to-purple-500/10 p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-100">Current Plan</h3>
-                  <p className="text-sm text-slate-400 mt-1">
-                    {userData?.subscription_tier === "trial" ? "Free Trial" :
-                     userData?.subscription_tier === "basic" ? "Basic Plan" :
-                     userData?.subscription_tier === "professional" ? "Professional Plan" :
-                     "Free Plan"}
-                  </p>
-                </div>
-                {userData?.subscription_tier === "trial" && userData?.trial_ends_at && (
-                  <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium">
-                    Ends {new Date(userData.trial_ends_at).toLocaleDateString()}
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div className="text-center p-3 rounded-lg bg-slate-800/50">
-                  <p className="text-xs text-slate-400">Monthly</p>
-                  <p className="text-xl font-bold text-violet-400">
-                    {userData?.subscription_tier === "professional" ? "$29" :
-                     userData?.subscription_tier === "basic" ? "$19" : "$0"}
-                  </p>
-                </div>
-                <div className="text-center p-3 rounded-lg bg-slate-800/50">
-                  <p className="text-xs text-slate-400">Debriefs</p>
-                  <p className="text-xl font-bold text-teal-400">Unlimited</p>
-                </div>
-                <div className="text-center p-3 rounded-lg bg-slate-800/50">
-                  <p className="text-xs text-slate-400">CEU Tracking</p>
-                  <p className="text-xl font-bold text-emerald-400">Included</p>
-                </div>
-              </div>
-
-              <button className="w-full px-4 py-2 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors">
-                Upgrade Plan
-              </button>
-            </div>
-
-            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
-              <h3 className="text-lg font-semibold text-slate-100 mb-4">Payment Method</h3>
-              <div className="flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-7 rounded bg-slate-700 flex items-center justify-center text-xs text-slate-400">
-                    VISA
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-200">•••• 4242</p>
-                    <p className="text-xs text-slate-500">Expires 12/25</p>
-                  </div>
-                </div>
-                <button className="text-sm text-teal-400 hover:text-teal-300">Update</button>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
-              <h3 className="text-lg font-semibold text-slate-100 mb-4">Billing History</h3>
-              <div className="space-y-3">
-                {[
-                  { date: "Jan 1, 2025", amount: "$29.00", status: "Paid" },
-                  { date: "Dec 1, 2024", amount: "$29.00", status: "Paid" },
-                  { date: "Nov 1, 2024", amount: "$29.00", status: "Paid" }
-                ].map((invoice, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-300">{invoice.date}</span>
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 text-xs">
-                        {invoice.status}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-slate-100">{invoice.amount}</span>
-                      <button className="text-sm text-teal-400 hover:text-teal-300">Download</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <BillingTab userData={userData} showMessage={showMessage} />
         )}
 
         {selectedTab === "privacy" && (

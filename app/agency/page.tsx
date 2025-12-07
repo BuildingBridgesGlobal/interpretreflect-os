@@ -112,11 +112,7 @@ export default function AgencyDashboard() {
   const [allCredentials, setAllCredentials] = useState<Credential[]>([]);
   const [stats, setStats] = useState<AgencyStats | null>(null);
   const [selectedTab, setSelectedTab] = useState<TabType>("roster");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
   const [credentialFilter, setCredentialFilter] = useState<"all" | "active" | "expiring" | "expired">("all");
-  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
 
   // New state for assignments, teams, and settings
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -155,6 +151,19 @@ export default function AgencyDashboard() {
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "upcoming" | "completed">("upcoming");
   const [interpreterSearch, setInterpreterSearch] = useState("");
   const [downloadingReport, setDownloadingReport] = useState<string | null>(null);
+
+  // Invite code state
+  interface InviteCode {
+    id: string;
+    code: string;
+    expires_at: string;
+    current_uses: number;
+    max_uses: number;
+    is_active: boolean;
+  }
+  const [inviteCode, setInviteCode] = useState<InviteCode | null>(null);
+  const [loadingInviteCode, setLoadingInviteCode] = useState(false);
+  const [inviteCodeCopied, setInviteCodeCopied] = useState(false);
 
   // Remove member state
   const [showRemoveMemberModal, setShowRemoveMemberModal] = useState(false);
@@ -271,6 +280,13 @@ export default function AgencyDashboard() {
     loadAgencyData();
   }, []);
 
+  // Fetch invite code when Settings tab is selected
+  useEffect(() => {
+    if (selectedTab === "settings" && !inviteCode && !loadingInviteCode) {
+      fetchInviteCode();
+    }
+  }, [selectedTab]);
+
   /**
    * SECURITY: All data is fetched through the secure API endpoint
    * The API validates the session token and only returns data for the user's organization
@@ -329,56 +345,6 @@ export default function AgencyDashboard() {
     }
   };
 
-  /**
-   * SECURITY: Invitations go through the secure API endpoint
-   * The API validates the session and only allows invites to the user's own organization
-   */
-  const handleInvite = async () => {
-    if (!inviteEmail || !organization) return;
-    setInviting(true);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/signin");
-        return;
-      }
-
-      // SECURITY: Call API with Authorization header
-      const response = await fetch("/api/agency", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "invite",
-          email: inviteEmail,
-          role: "member",
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send invitation");
-      }
-
-      // Show appropriate message based on whether email was sent
-      if (data.emailSent) {
-        alert(`Invitation email sent to ${inviteEmail}! They'll receive a link to join ${organization?.name}.`);
-      } else {
-        alert(`Invitation created for ${inviteEmail}. Note: Email service not configured - please share the invite link manually.`);
-      }
-      setInviteEmail("");
-      setShowInviteModal(false);
-    } catch (err: any) {
-      console.error("Error sending invitation:", err);
-      alert(err.message || "Failed to send invitation. Please try again.");
-    } finally {
-      setInviting(false);
-    }
-  };
 
   /**
    * Create a new assignment
@@ -486,6 +452,46 @@ export default function AgencyDashboard() {
     } catch (err: any) {
       console.error("Error creating team:", err);
       alert(err.message || "Failed to create team. Please try again.");
+    }
+  };
+
+  /**
+   * Fetch the agency's invite code (or create one if none exists)
+   */
+  const fetchInviteCode = async () => {
+    setLoadingInviteCode(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch("/api/agency", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "get_invite_code" }),
+      });
+
+      const data = await response.json();
+      if (response.ok && data.inviteCode) {
+        setInviteCode(data.inviteCode);
+      }
+    } catch (err) {
+      console.error("Error fetching invite code:", err);
+    } finally {
+      setLoadingInviteCode(false);
+    }
+  };
+
+  /**
+   * Copy invite code to clipboard
+   */
+  const handleCopyInviteCode = () => {
+    if (inviteCode?.code) {
+      navigator.clipboard.writeText(inviteCode.code);
+      setInviteCodeCopied(true);
+      setTimeout(() => setInviteCodeCopied(false), 2000);
     }
   };
 
@@ -690,10 +696,13 @@ export default function AgencyDashboard() {
             <p className="mt-1 text-sm text-slate-400">Manage your team, credentials, and compliance</p>
           </div>
           <button
-            onClick={() => setShowInviteModal(true)}
-            className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm"
+            onClick={() => setSelectedTab("settings")}
+            className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm flex items-center gap-2"
           >
-            Invite Team Member
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+            </svg>
+            Get Invite Code
           </button>
         </div>
 
@@ -1451,6 +1460,85 @@ export default function AgencyDashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
+            {/* Interpreter Invite Code Section */}
+            <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-purple-500/5 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100">Interpreter Invite Code</h3>
+                  <p className="text-sm text-slate-400">Share this code with interpreters to connect them to your agency</p>
+                </div>
+              </div>
+
+              {loadingInviteCode ? (
+                <div className="flex items-center gap-3 py-4">
+                  <div className="w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm text-slate-400">Loading invite code...</span>
+                </div>
+              ) : inviteCode ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 px-5 py-4 rounded-lg bg-slate-900 border border-slate-700">
+                      <p className="text-3xl font-bold font-mono tracking-[0.2em] text-violet-300 text-center">
+                        {inviteCode.code}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleCopyInviteCode}
+                      className="px-4 py-4 rounded-lg border border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100 transition-colors"
+                      title="Copy code"
+                    >
+                      {inviteCodeCopied ? (
+                        <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="text-sm text-slate-500 text-center">
+                    <span className="text-slate-400 font-medium">{inviteCode.current_uses}</span> interpreter{inviteCode.current_uses !== 1 ? 's' : ''} have used this code
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-700">
+                    <h4 className="text-sm font-medium text-slate-300 mb-2">How it works:</h4>
+                    <ol className="space-y-2 text-sm text-slate-400">
+                      <li className="flex items-start gap-2">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-medium">1</span>
+                        <span>Share this code with your interpreters</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-medium">2</span>
+                        <span>They enter the code in <strong className="text-slate-300">Settings → My Agencies</strong></span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center text-xs font-medium">3</span>
+                        <span>They appear in your roster automatically</span>
+                      </li>
+                    </ol>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-slate-400">No invite code available. Please try again.</p>
+                  <button
+                    onClick={fetchInviteCode}
+                    className="mt-2 text-sm text-violet-400 hover:text-violet-300"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Organization Info */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-4">Organization Settings</h3>
@@ -1619,91 +1707,6 @@ export default function AgencyDashboard() {
               </a>
             </div>
           </motion.div>
-        )}
-
-        {/* Invite Modal */}
-        {showInviteModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-lg"
-            >
-              <h2 className="text-lg font-semibold text-slate-100 mb-2">Invite Interpreters</h2>
-              <p className="text-sm text-slate-400 mb-6">
-                Share this link with interpreters to have them join your organization.
-              </p>
-
-              {/* Invite Link Section */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-slate-300 mb-2">Your Interpreter Invite Link</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={typeof window !== 'undefined' ? `${window.location.origin}/start?org=${organization?.id}` : ''}
-                    readOnly
-                    className="flex-1 px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 font-mono text-sm focus:outline-none"
-                  />
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/start?org=${organization?.id}`);
-                      setInviteLinkCopied(true);
-                      setTimeout(() => setInviteLinkCopied(false), 2000);
-                    }}
-                    className="px-4 py-3 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors whitespace-nowrap"
-                  >
-                    {inviteLinkCopied ? "Copied!" : "Copy Link"}
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500 mt-2">
-                  When interpreters use this link to sign up, they&apos;ll automatically join {organization?.name}.
-                </p>
-              </div>
-
-              {/* Divider */}
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-700"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-slate-900 text-slate-500">or send by email</span>
-                </div>
-              </div>
-
-              {/* Email Invite Section */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Send invite via email
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="interpreter@example.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500"
-                  />
-                </div>
-                <button
-                  onClick={handleInvite}
-                  disabled={!inviteEmail || inviting}
-                  className="w-full px-4 py-3 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {inviting ? "Sending..." : "Send Email Invite"}
-                </button>
-              </div>
-
-              {/* Close Button */}
-              <div className="mt-6 pt-4 border-t border-slate-800">
-                <button
-                  onClick={() => setShowInviteModal(false)}
-                  className="w-full px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  Done
-                </button>
-              </div>
-            </motion.div>
-          </div>
         )}
 
         {/* Remove Member Confirmation Modal */}

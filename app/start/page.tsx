@@ -251,10 +251,10 @@ function StartPageContent() {
             </span>
           </a>
           <h1 className="text-2xl font-semibold text-slate-100 mb-2">
-            {organizationName ? "Join your team" : "Start your 7-day free trial"}
+            {organizationName ? "Join your team" : "Create your free account"}
           </h1>
           <p className="text-slate-400 text-sm">
-            {organizationName ? "Create your account to get started" : "No credit card required"}
+            {organizationName ? "Create your account to get started" : "Get started with the Basic plan - free forever"}
           </p>
         </div>
 
@@ -339,7 +339,7 @@ function StartPageContent() {
                 ? "Creating account..."
                 : organizationName
                   ? "Join team & start"
-                  : "Create account & start trial"}
+                  : "Create free account"}
             </button>
           </form>
 
@@ -367,8 +367,8 @@ function StartPageContent() {
         {/* Trust Indicators */}
         {!organizationName && (
           <div className="mt-8 text-center space-y-2 text-xs text-slate-500">
-            <p>7-day free trial - No credit card required</p>
-            <p>Cancel anytime - Your data stays private</p>
+            <p>Basic plan is free forever - No credit card required</p>
+            <p>Upgrade to Pro anytime for CEU workshops</p>
           </div>
         )}
       </div>

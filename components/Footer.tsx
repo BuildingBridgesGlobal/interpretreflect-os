@@ -7,30 +7,30 @@ export const Footer: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
           <div className="max-w-sm">
             <p className="text-xs font-semibold tracking-[0.16em] uppercase text-slate-400">InterpretReflect</p>
-            <p className="mt-2 text-sm text-slate-300">The operating system for interpreters, focused on wellbeing, skills, and growth. Built with interpreters, educators, and mental-health experts.</p>
+            <p className="mt-2 text-sm text-slate-300">The operating system for interpreters. AI-powered prep and debriefs with Elya. RID-approved CEU workshops. Wellness tracking and skill development.</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-8 text-sm">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Product</p>
               <ul className="mt-3 space-y-2 text-slate-300">
-                <li><a href="#os-preview" className="hover:text-teal-300">Dashboard</a></li>
-                <li><a href="#features" className="hover:text-teal-300">OS Features</a></li>
+                <li><a href="#interpreter-os" className="hover:text-teal-300">Elya AI</a></li>
+                <li><a href="#features" className="hover:text-teal-300">Features</a></li>
                 <li><a href="#pricing" className="hover:text-teal-300">Pricing</a></li>
               </ul>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">For</p>
               <ul className="mt-3 space-y-2 text-slate-300">
-                <li><a href="#teams-programs" className="hover:text-teal-300">Programs & Cohorts</a></li>
-                <li><a href="#teams-programs" className="hover:text-teal-300">Agencies & Colleges</a></li>
-                <li><a href="#science" className="hover:text-teal-300">Research & Approach</a></li>
+                <li><a href="/" className="hover:text-teal-300">Interpreters</a></li>
+                <li><a href="/for-agencies" className="hover:text-teal-300">Agencies</a></li>
+                <li><a href="#science" className="hover:text-teal-300">Research</a></li>
               </ul>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Support</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Get Started</p>
               <ul className="mt-3 space-y-2 text-slate-300">
-                <li><a href="/start" className="hover:text-teal-300">Get started</a></li>
-                <li><a href="#testimonials" className="hover:text-teal-300">Stories</a></li>
+                <li><a href="/start" className="hover:text-teal-300">Create free account</a></li>
+                <li><a href="/signin" className="hover:text-teal-300">Sign in</a></li>
               </ul>
             </div>
           </div>

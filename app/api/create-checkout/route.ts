@@ -6,6 +6,22 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 const supabase = supabaseAdmin;
 
+// Price mapping for tiers
+function getPriceIdForTier(tier: string, cycle: string): string | null {
+  const priceMap: Record<string, Record<string, string | undefined>> = {
+    growth: {
+      monthly: process.env.STRIPE_PRICE_GROWTH_MONTHLY,
+      yearly: process.env.STRIPE_PRICE_GROWTH_YEARLY,
+    },
+    pro: {
+      monthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
+      yearly: process.env.STRIPE_PRICE_PRO_YEARLY,
+    },
+  };
+
+  return priceMap[tier]?.[cycle] || null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Get auth token from header
@@ -24,11 +40,24 @@ export async function POST(req: NextRequest) {
 
     // Get request body
     const body = await req.json();
-    const { price_id, mode, tier, cycle, apply_student_discount } = body;
+    let { price_id, mode, tier, cycle, apply_student_discount } = body;
+
+    // If tier/cycle provided, look up price_id
+    if (tier && cycle && !price_id) {
+      price_id = getPriceIdForTier(tier, cycle);
+      mode = "subscription";
+
+      if (!price_id) {
+        return NextResponse.json(
+          { error: `No price found for tier: ${tier}, cycle: ${cycle}` },
+          { status: 400 }
+        );
+      }
+    }
 
     if (!price_id || !mode) {
       return NextResponse.json(
-        { error: "Missing required fields: price_id, mode" },
+        { error: "Missing required fields: either (tier, cycle) or (price_id, mode)" },
         { status: 400 }
       );
     }
@@ -83,19 +112,23 @@ export async function POST(req: NextRequest) {
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
       metadata: {
-        supabase_user_id: user.id,
-        tier,
-        cycle,
+        user_id: user.id,
+        supabase_user_id: user.id, // legacy compatibility
+        tier: tier || "",
+        cycle: cycle || "",
         student_discount_applied: apply_student_discount ? "true" : "false",
       },
-      subscription_data: {
-        metadata: {
-          supabase_user_id: user.id,
-          tier,
-          cycle,
-          student_discount_applied: apply_student_discount ? "true" : "false",
+      ...(mode === "subscription" ? {
+        subscription_data: {
+          metadata: {
+            user_id: user.id,
+            supabase_user_id: user.id,
+            tier: tier || "",
+            cycle: cycle || "",
+            student_discount_applied: apply_student_discount ? "true" : "false",
+          },
         },
-      },
+      } : {}),
     });
 
     return NextResponse.json({ url: session.url });

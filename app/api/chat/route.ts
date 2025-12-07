@@ -308,7 +308,7 @@ export async function POST(req: NextRequest) {
       // Profile info
       if (userContext.profile) {
         contextSummary += `**Name**: ${userContext.profile.full_name || "Not set"}\n`;
-        contextSummary += `**Subscription**: ${userContext.profile.subscription_tier || "trial"}\n`;
+        contextSummary += `**Subscription**: ${userContext.profile.subscription_tier || "basic"}\n`;
         contextSummary += `**Member Since**: ${userContext.profile.created_at ? new Date(userContext.profile.created_at).toLocaleDateString() : "Unknown"}\n\n`;
       }
 

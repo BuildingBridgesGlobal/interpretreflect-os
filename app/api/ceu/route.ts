@@ -35,6 +35,34 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const action = searchParams.get("action");
 
+    // Get user's credit balance
+    if (action === "credits") {
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from("profiles")
+        .select("monthly_credits, topup_credits, credits_reset_at, subscription_tier")
+        .eq("id", userId)
+        .single();
+
+      if (profileError) {
+        console.error("Error fetching credits:", profileError);
+        return NextResponse.json(
+          { error: "Failed to fetch credits" },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        credits: {
+          monthly: profile?.monthly_credits || 0,
+          topup: profile?.topup_credits || 0,
+          total: (profile?.monthly_credits || 0) + (profile?.topup_credits || 0),
+          reset_at: profile?.credits_reset_at,
+          tier: profile?.subscription_tier || "free",
+        },
+      });
+    }
+
     // Get CEU dashboard data using the optimized database function
     if (action === "dashboard") {
       const { data: dashboardData, error: dashboardError } = await supabaseAdmin

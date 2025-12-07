@@ -11,32 +11,32 @@ const lifecyclePhases = [
     phase: "Before",
     label: "Assignment Prep",
     items: [
-      "Research participants and context",
+      "AI-powered prep with Elya",
       "Build domain mental models",
-      "Generate vocabulary by field",
+      "Generate field-specific vocabulary",
       "Coordinate with team interpreters",
     ],
     color: "teal",
   },
   {
-    phase: "During",
-    label: "In the Field",
+    phase: "After",
+    label: "Growth & Reflection",
     items: [
-      "Quick reference materials",
-      "Team handoff coordination",
-      "Real-time support access",
-      "Assignment notes capture",
+      "Debrief sessions with Elya AI",
+      "Process emotional intensity",
+      "Pattern recognition over time",
+      "Structured journaling prompts",
     ],
     color: "violet",
   },
   {
-    phase: "After",
-    label: "Growth & Reflection",
+    phase: "Learn",
+    label: "CEU Workshops",
     items: [
-      "Structured debriefs",
-      "Pattern recognition across assignments",
-      "CEU-ready evidence",
-      "Skill development tracking",
+      "RID-approved workshops",
+      "Professional Studies CEUs",
+      "Interactive skill modules",
+      "Certificates on completion",
     ],
     color: "amber",
   },
@@ -44,10 +44,10 @@ const lifecyclePhases = [
     phase: "Always",
     label: "Career Infrastructure",
     items: [
-      "Portable credential vault",
-      "Professional development path",
+      "RID compliance tracking",
+      "Wellness check-ins",
+      "Skill development path",
       "Burnout drift monitoring",
-      "Support when you need it",
     ],
     color: "emerald",
   },
@@ -104,28 +104,28 @@ export const InterpreterOS: React.FC<InterpreterOSProps> = ({
         <div className="mt-12 rounded-2xl border border-slate-800 bg-slate-900/60 p-6 md:p-8">
           <div className="grid gap-8 md:grid-cols-2 items-center">
             <div>
-              <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-400">Think of it like this</p>
+              <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-400">Meet Elya</p>
               <h3 className="mt-2 text-2xl md:text-3xl font-semibold text-slate-50">
-                Your AI-powered career assistant.
+                Your AI companion for interpreting work.
               </h3>
               <p className="mt-3 text-base text-slate-300">
-                InterpretReflect doesn't replace you or compete with your employers. It removes friction so you can focus on what you do best: interpreting.
+                Elya helps you prep for assignments, debrief after tough sessions, and process the emotional weight of the work. Think of her as a knowledgeable colleague who's always available.
               </p>
               <p className="mt-3 text-base text-slate-300">
-                <span className="text-slate-100 font-medium">We handle the cognitive overhead</span> of preparation, coordination, credentials, and professional growth so you can focus entirely on the interpretation itself.
+                <span className="text-slate-100 font-medium">Start free with the Basic plan.</span> Upgrade to Pro when you're ready for CEU workshops and unlimited features.
               </p>
             </div>
             <div className="space-y-3">
               <div className="rounded-xl bg-slate-950/60 border border-slate-800/50 p-4">
-                <p className="text-sm text-slate-400 uppercase tracking-wide">Without an OS</p>
+                <p className="text-sm text-slate-400 uppercase tracking-wide">Without InterpretReflect</p>
                 <p className="mt-2 text-base text-slate-300">
-                  Prep scattered across notes, emails, and your head. Credentials re-uploaded to every platform. Growth tracked nowhere. Burnout invisible until it's too late.
+                  Prep scattered across notes and your head. CEUs tracked in spreadsheets. No one to debrief with after hard assignments. Burnout invisible until crisis.
                 </p>
               </div>
               <div className="rounded-xl bg-teal-500/10 border border-teal-500/30 p-4">
                 <p className="text-sm text-teal-300 uppercase tracking-wide">With InterpretReflect</p>
                 <p className="mt-2 text-base text-slate-200">
-                  One system that knows your history, prepares you for assignments, tracks your growth, and catches drift before it becomes burnout. You just show up and do great work.
+                  AI-powered prep and debriefs. CEU workshops with automatic tracking. Wellness check-ins that catch drift early. You focus on interpreting, we handle the rest.
                 </p>
               </div>
             </div>

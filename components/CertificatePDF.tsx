@@ -12,6 +12,7 @@ type CertificateData = {
   ceu_value: number;
   rid_category: string;
   rid_subcategory?: string;
+  knowledge_level?: "little_none" | "some" | "extensive";
   issued_at: string;
   completed_at?: string;
   time_spent_minutes?: number;
@@ -19,6 +20,8 @@ type CertificateData = {
   learning_objectives_achieved?: { id: string; objective: string; verb?: string }[];
   user_name?: string;
   user_email?: string;
+  rid_member_number?: string;
+  presenter?: string;
 };
 
 type Props = {
@@ -130,6 +133,11 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
                 <p className="text-2xl font-serif text-gray-800 border-b-2 border-gray-300 inline-block px-8 py-2">
                   {certificate.user_name || "Participant"}
                 </p>
+                {certificate.rid_member_number && (
+                  <p className="text-gray-600 text-sm mt-2">
+                    RID Member #{certificate.rid_member_number}
+                  </p>
+                )}
               </div>
 
               {/* Achievement */}
@@ -146,7 +154,7 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
               </div>
 
               {/* CEU Details */}
-              <div className="flex justify-center gap-12 mb-6">
+              <div className="flex justify-center gap-8 mb-6 flex-wrap">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-teal-600">
                     {certificate.ceu_value}
@@ -157,7 +165,19 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
                   <div className="text-lg font-medium text-gray-800">
                     {certificate.rid_category}
                   </div>
-                  <div className="text-sm text-gray-600">RID Category</div>
+                  {certificate.rid_subcategory && (
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {certificate.rid_subcategory}
+                    </div>
+                  )}
+                  <div className="text-sm text-gray-600">Content Area</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-medium text-gray-800">
+                    {certificate.knowledge_level === "little_none" ? "Little/None" :
+                     certificate.knowledge_level === "extensive" ? "Extensive" : "Some"}
+                  </div>
+                  <div className="text-sm text-gray-600">Knowledge Level</div>
                 </div>
                 {certificate.assessment_score && (
                   <div className="text-center">
@@ -188,13 +208,22 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
 
               {/* Footer */}
               <div className="mt-auto">
+                {/* Presenter Section */}
+                <div className="text-center mb-4 pb-4 border-b border-gray-200">
+                  <p className="text-sm text-gray-600 mb-1">Presenter</p>
+                  <p className="text-gray-800 font-medium">
+                    {certificate.presenter || "Sarah Wheeler, MA"}
+                  </p>
+                  <p className="text-xs text-gray-500">Founder, Building Bridges Global LLC</p>
+                </div>
+
                 <div className="flex justify-between items-end px-8">
                   <div className="text-center">
                     <div className="text-gray-800 font-medium mb-1">
                       {formatDate(certificate.issued_at)}
                     </div>
                     <div className="text-xs text-gray-500 border-t border-gray-300 pt-1 px-4">
-                      Date of Issue
+                      Date of Completion
                     </div>
                   </div>
 
@@ -203,13 +232,13 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
                       {certificate.certificate_number}
                     </div>
                     <div className="text-xs text-gray-500 border-t border-gray-300 pt-1 px-4">
-                      Certificate Number
+                      Certificate ID
                     </div>
                   </div>
 
                   <div className="text-center">
                     <div className="text-gray-800 font-medium mb-1">
-                      RID Sponsor #2309
+                      RID CMP Sponsor #2309
                     </div>
                     <div className="text-xs text-gray-500 border-t border-gray-300 pt-1 px-4">
                       Approved Provider
@@ -218,7 +247,7 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
                 </div>
 
                 <div className="text-center mt-4 text-xs text-gray-400">
-                  Building Bridges Global • InterpretReflect Platform • www.interpretreflect.com
+                  Building Bridges Global LLC • InterpretReflect Platform • www.interpretreflect.com
                 </div>
               </div>
             </div>
