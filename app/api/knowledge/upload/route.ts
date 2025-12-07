@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-// @ts-ignore - pdf-parse has no default export but works at runtime
-import pdfParse from "pdf-parse";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+// pdf-parse doesn't have proper ESM exports, use dynamic require
+const pdfParse = require("pdf-parse");
 
 const supabase = supabaseAdmin;
 
