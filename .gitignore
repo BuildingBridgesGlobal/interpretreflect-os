@@ -21,5 +21,13 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?.next/
+*.sw?
+
+# Next.js build output
+.next/
+out/
+
+# Vercel
+.vercel
+
 nul
