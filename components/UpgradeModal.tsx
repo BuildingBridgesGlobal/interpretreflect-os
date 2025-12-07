@@ -9,7 +9,7 @@ type UpgradeModalProps = {
 };
 
 export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
-  const [selectedTier, setSelectedTier] = useState<"basic" | "pro">("basic");
+  const [selectedTier, setSelectedTier] = useState<"growth" | "pro">("growth");
   const [selectedCycle, setSelectedCycle] = useState<"monthly" | "yearly">("monthly");
   const [isStudent, setIsStudent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -94,13 +94,13 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
   };
 
   const prices = {
-    basic: { monthly: 12, yearly: 120 },
-    pro: { monthly: 25, yearly: 250 },
+    growth: { monthly: 15, yearly: 150 },
+    pro: { monthly: 30, yearly: 300 },
   };
 
   const currentPrice = prices[selectedTier][selectedCycle];
   const monthlySavings = selectedCycle === "yearly"
-    ? selectedTier === "basic" ? 24 : 50
+    ? selectedTier === "growth" ? 30 : 60
     : 0;
 
   return (
@@ -133,26 +133,31 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => setSelectedTier("basic")}
+                onClick={() => setSelectedTier("growth")}
                 className={`p-4 rounded-lg border transition-all ${
-                  selectedTier === "basic"
+                  selectedTier === "growth"
                     ? "border-teal-400 bg-teal-500/10"
                     : "border-slate-700 bg-slate-800/50 hover:border-slate-600"
                 }`}
               >
-                <div className="text-lg font-semibold text-slate-50">Basic</div>
-                <div className="text-sm text-slate-400">Essential tools</div>
+                <div className="text-lg font-semibold text-slate-50">Growth</div>
+                <div className="text-sm text-slate-400">Unlimited Elya + Insights</div>
+                <div className="text-xs text-teal-400 mt-1">$15/mo</div>
               </button>
               <button
                 onClick={() => setSelectedTier("pro")}
-                className={`p-4 rounded-lg border transition-all ${
+                className={`p-4 rounded-lg border transition-all relative ${
                   selectedTier === "pro"
                     ? "border-teal-400 bg-teal-500/10"
                     : "border-slate-700 bg-slate-800/50 hover:border-slate-600"
                 }`}
               >
+                <div className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs font-semibold px-2 py-0.5 rounded">
+                  CEU
+                </div>
                 <div className="text-lg font-semibold text-slate-50">Pro</div>
-                <div className="text-sm text-slate-400">Advanced features</div>
+                <div className="text-sm text-slate-400">Growth + 4 CEU credits/mo</div>
+                <div className="text-xs text-teal-400 mt-1">$30/mo</div>
               </button>
             </div>
           </div>
@@ -228,7 +233,7 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             <div className="flex justify-between items-center mb-2">
               <span className="text-slate-300">Plan:</span>
               <span className="text-slate-50 font-semibold">
-                {selectedTier === "basic" ? "Basic" : "Pro"} ({selectedCycle === "monthly" ? "Monthly" : "Yearly"})
+                {selectedTier === "growth" ? "Growth" : "Pro"} ({selectedCycle === "monthly" ? "Monthly" : "Yearly"})
               </span>
             </div>
             <div className="flex justify-between items-center">
