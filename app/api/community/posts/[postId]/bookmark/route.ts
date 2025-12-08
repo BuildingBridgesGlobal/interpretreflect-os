@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
@@ -9,16 +10,11 @@ export async function POST(
   { params }: { params: { postId: string } }
 ) {
   try {
-    const body = await req.json();
-    const { user_id } = body;
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
     const postId = params.postId;
-
-    if (!user_id) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     // Insert bookmark
     const { error: bookmarkError } = await supabase
@@ -59,16 +55,11 @@ export async function DELETE(
   { params }: { params: { postId: string } }
 ) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
     const postId = params.postId;
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     // Delete bookmark
     const { error: deleteError } = await supabase

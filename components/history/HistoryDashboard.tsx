@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import PerformanceTimeline from "./PerformanceTimeline";
 import DebriefLog from "./DebriefLog";
 import PatternAnalysis from "./PatternAnalysis";
@@ -18,7 +19,14 @@ export function HistoryDashboard({ userId }: HistoryDashboardProps) {
   useEffect(() => {
     async function fetchInsights() {
       try {
-        const res = await fetch(`/api/insights?userId=${userId}`);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const res = await fetch("/api/insights", {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
         const data = await res.json();
         setInsights(data);
       } catch (error) {

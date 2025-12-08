@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // GET - Fetch conversations for a user, or messages for a specific conversation
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
-    const conversationId = searchParams.get("conversation_id");
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
+    const { searchParams } = new URL(req.url);
+    const conversationId = searchParams.get("conversation_id");
 
     // If conversation_id provided, fetch messages for that conversation
     if (conversationId) {
@@ -175,9 +173,13 @@ export async function GET(req: NextRequest) {
 // POST - Send a new message or create a conversation
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const sender_id = user!.id;
+
     const body = await req.json();
     const {
-      sender_id,
       recipient_id, // For DMs
       conversation_id, // For existing conversations
       content,
@@ -186,13 +188,6 @@ export async function POST(req: NextRequest) {
       group_name,
       member_ids
     } = body;
-
-    if (!sender_id) {
-      return NextResponse.json(
-        { error: "sender_id is required" },
-        { status: 400 }
-      );
-    }
 
     // Creating a new group chat
     if (create_group) {
@@ -463,18 +458,22 @@ export async function POST(req: NextRequest) {
 // PUT - Update group (rename, add members, leave group)
 export async function PUT(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
+
     const body = await req.json();
     const {
-      user_id,
       conversation_id,
       action, // 'rename', 'add_member', 'leave', 'remove_member'
       group_name,
       member_id
     } = body;
 
-    if (!user_id || !conversation_id || !action) {
+    if (!conversation_id || !action) {
       return NextResponse.json(
-        { error: "user_id, conversation_id, and action are required" },
+        { error: "conversation_id and action are required" },
         { status: 400 }
       );
     }

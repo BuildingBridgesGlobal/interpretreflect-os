@@ -64,6 +64,25 @@ type UserDrillStats = {
   total_practice_minutes: number;
 };
 
+type ScenarioDrill = {
+  id: string;
+  slug: string;
+  title: string;
+  subtitle: string;
+  category: string;
+  difficulty_base: string;
+  ecci_focus: string[];
+  estimated_duration_minutes: number;
+  play_count: number;
+  avg_score: number | null;
+  is_featured: boolean;
+  user_progress: {
+    unlocked_difficulties: string[];
+    best_scores: Record<string, number>;
+    total_completions: number;
+  } | null;
+};
+
 export default function SkillsLibraryPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -75,6 +94,7 @@ export default function SkillsLibraryPage() {
   const [activeTab, setActiveTab] = useState<"learn" | "drill">("learn");
   const [drillCategories, setDrillCategories] = useState<DrillCategory[]>([]);
   const [userDrillStats, setUserDrillStats] = useState<UserDrillStats | null>(null);
+  const [scenarioDrills, setScenarioDrills] = useState<ScenarioDrill[]>([]);
 
   useEffect(() => {
     loadData();
@@ -215,6 +235,21 @@ export default function SkillsLibraryPage() {
 
     if (statsData) {
       setUserDrillStats(statsData);
+    }
+
+    // Load scenario drills
+    try {
+      const scenarioResponse = await fetch("/api/drills/scenario", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      if (scenarioResponse.ok) {
+        const scenarioData = await scenarioResponse.json();
+        setScenarioDrills(scenarioData.scenarios || []);
+      }
+    } catch (err) {
+      console.error("Failed to load scenario drills:", err);
     }
 
     setLoading(false);
@@ -569,6 +604,93 @@ export default function SkillsLibraryPage() {
                 </div>
               </div>
             </div>
+
+            {/* Scenario Drills Section */}
+            {scenarioDrills.length > 0 && (
+              <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-purple-500/10 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-violet-400">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-100">Scenario Drills</h2>
+                      <p className="text-sm text-slate-400">Interactive branching scenarios under time pressure</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {scenarioDrills.map((drill) => {
+                    const hasProgress = drill.user_progress && drill.user_progress.total_completions > 0;
+                    const bestScore = drill.user_progress?.best_scores
+                      ? Math.max(...Object.values(drill.user_progress.best_scores).filter(v => typeof v === 'number'), 0)
+                      : null;
+
+                    return (
+                      <div
+                        key={drill.id}
+                        onClick={() => router.push(`/skills/drill/${drill.slug}`)}
+                        className="rounded-lg border border-slate-700 bg-slate-800/50 p-4 hover:border-violet-500/50 hover:bg-slate-800 transition-all cursor-pointer group"
+                      >
+                        <div className="flex items-start gap-4">
+                          {/* Category Badge */}
+                          <div className="flex-shrink-0">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-700 text-slate-300 capitalize">
+                              {drill.category}
+                            </span>
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-slate-100 group-hover:text-violet-400 transition-colors">
+                                {drill.title}
+                              </h3>
+                            </div>
+                            {drill.subtitle && (
+                              <p className="text-sm text-slate-400 mb-2">{drill.subtitle}</p>
+                            )}
+
+                            {/* Meta */}
+                            <div className="flex items-center gap-4 text-xs text-slate-500">
+                              <span>{drill.estimated_duration_minutes} min</span>
+                              <span>{drill.ecci_focus?.length || 0} skills assessed</span>
+                              {hasProgress && bestScore && bestScore > 0 && (
+                                <span className="text-emerald-400">Best: {bestScore}%</span>
+                              )}
+                              {drill.user_progress?.total_completions && drill.user_progress.total_completions > 0 && (
+                                <span className="text-violet-400">
+                                  {drill.user_progress.total_completions} {drill.user_progress.total_completions === 1 ? 'completion' : 'completions'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Arrow */}
+                          <div className="flex-shrink-0 text-slate-500 group-hover:text-violet-400 group-hover:translate-x-1 transition-all">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Timer Info */}
+                <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Timed decisions simulate real-world pressure. Debrief with Elya after each scenario.</span>
+                </div>
+              </div>
+            )}
 
             {/* Quick Practice */}
             <button

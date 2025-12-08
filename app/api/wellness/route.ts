@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // GET - Get wellness check-ins for a user
 export async function GET(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
     const limit = searchParams.get("limit") || "30"; // Default to last 30 check-ins
     const days = searchParams.get("days"); // Get check-ins from last N days
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     let query = supabase
       .from("wellness_checkins")
@@ -173,9 +171,13 @@ export async function GET(req: NextRequest) {
 // POST - Create or update a wellness check-in (rate limited to once per day)
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
+
     const body = await req.json();
     const {
-      user_id,
       feeling,
       hours_worked_this_week,
       rest_days_this_month,
@@ -186,9 +188,9 @@ export async function POST(req: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!user_id || !feeling) {
+    if (!feeling) {
       return NextResponse.json(
-        { error: "Missing required fields: user_id, feeling" },
+        { error: "Missing required field: feeling" },
         { status: 400 }
       );
     }
@@ -294,13 +296,17 @@ export async function POST(req: NextRequest) {
 // DELETE - Delete a wellness check-in
 export async function DELETE(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
     const checkinId = searchParams.get("checkin_id");
-    const userId = searchParams.get("user_id");
 
-    if (!checkinId || !userId) {
+    if (!checkinId) {
       return NextResponse.json(
-        { error: "checkin_id and user_id are required" },
+        { error: "checkin_id is required" },
         { status: 400 }
       );
     }

@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // POST - Create or get existing team chat for an assignment
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { assignment_id, user_id, member_user_ids, assignment_title } = body;
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
 
-    if (!assignment_id || !user_id) {
+    const body = await req.json();
+    const { assignment_id, member_user_ids, assignment_title } = body;
+
+    if (!assignment_id) {
       return NextResponse.json(
-        { error: "assignment_id and user_id are required" },
+        { error: "assignment_id is required" },
         { status: 400 }
       );
     }
@@ -131,13 +137,17 @@ export async function POST(req: NextRequest) {
 // GET - Get team chat for an assignment
 export async function GET(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
     const assignmentId = searchParams.get("assignment_id");
-    const userId = searchParams.get("user_id");
 
-    if (!assignmentId || !userId) {
+    if (!assignmentId) {
       return NextResponse.json(
-        { error: "assignment_id and user_id are required" },
+        { error: "assignment_id is required" },
         { status: 400 }
       );
     }

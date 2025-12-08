@@ -74,12 +74,16 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Check if we only want pending (not yet submitted) certificates
+    const onlyPending = searchParams.get("pending") === "true";
+
     // Fetch certificates within date range with user profile info
-    const { data: certificates, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("ceu_certificates")
       .select(`
         id,
         certificate_number,
+        activity_code,
         title,
         ceu_value,
         rid_category,
@@ -89,6 +93,8 @@ export async function GET(req: NextRequest) {
         completed_at,
         issued_at,
         assessment_score,
+        rid_submitted_at,
+        rid_submission_batch,
         user_id,
         profiles!inner (
           id,
@@ -101,6 +107,13 @@ export async function GET(req: NextRequest) {
       .gte("issued_at", `${startDate}T00:00:00`)
       .lte("issued_at", `${endDate}T23:59:59`)
       .order("issued_at", { ascending: true });
+
+    // Filter to only pending if requested
+    if (onlyPending) {
+      query = query.is("rid_submitted_at", null);
+    }
+
+    const { data: certificates, error } = await query;
 
     if (error) {
       console.error("Error fetching certificates:", error);
@@ -135,11 +148,12 @@ export async function GET(req: NextRequest) {
       const lastName = nameParts.slice(1).join(" ") || nameParts[0] || "";
 
       return {
+        id: cert.id,
         rid_member_number: profile?.rid_member_number || "",
         last_name: lastName,
         first_name: firstName,
         email: profile?.email || "",
-        activity_number: activityNumber,
+        activity_code: cert.activity_code || activityNumber || "",
         activity_title: cert.title,
         ceu_value: cert.ceu_value,
         rid_category: cert.rid_category,
@@ -148,6 +162,8 @@ export async function GET(req: NextRequest) {
         certificate_number: cert.certificate_number,
         sponsor_number: cert.sponsor_number || "2309",
         assessment_score: cert.assessment_score || "",
+        rid_submitted_at: cert.rid_submitted_at || null,
+        rid_submission_batch: cert.rid_submission_batch || "",
       };
     });
 
@@ -168,7 +184,7 @@ export async function GET(req: NextRequest) {
       "Last Name",
       "First Name",
       "Email",
-      "Activity Number",
+      "Activity Code",
       "Activity Title",
       "CEU Value",
       "RID Category",
@@ -184,7 +200,7 @@ export async function GET(req: NextRequest) {
       record.last_name,
       record.first_name,
       record.email,
-      record.activity_number,
+      record.activity_code,
       `"${record.activity_title.replace(/"/g, '""')}"`,
       record.ceu_value,
       record.rid_category,
@@ -234,6 +250,67 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { action, start_date, end_date } = body;
+
+    // Mark certificates as submitted to RID
+    if (action === "mark_submitted") {
+      const { certificate_ids, batch_id } = body;
+
+      if (!certificate_ids || !Array.isArray(certificate_ids) || certificate_ids.length === 0) {
+        return NextResponse.json(
+          { error: "certificate_ids array is required" },
+          { status: 400 }
+        );
+      }
+
+      const { authorized, userId } = await verifyAdminAccess(req);
+      if (!authorized || !userId) {
+        return NextResponse.json(
+          { error: "Unauthorized" },
+          { status: 401 }
+        );
+      }
+
+      // Use the database function to mark as submitted
+      const { data: count, error } = await supabaseAdmin.rpc(
+        "mark_certificates_rid_submitted",
+        {
+          p_certificate_ids: certificate_ids,
+          p_submitted_by: userId,
+          p_batch_id: batch_id || null,
+        }
+      );
+
+      if (error) {
+        console.error("Error marking certificates as submitted:", error);
+        // Fallback to direct update if function doesn't exist
+        const batchIdValue = batch_id || new Date().toISOString().slice(0, 7); // YYYY-MM
+        const { error: updateError } = await supabaseAdmin
+          .from("ceu_certificates")
+          .update({
+            rid_submitted_at: new Date().toISOString(),
+            rid_submitted_by: userId,
+            rid_submission_batch: batchIdValue,
+            updated_at: new Date().toISOString(),
+          })
+          .in("id", certificate_ids)
+          .is("rid_submitted_at", null);
+
+        if (updateError) {
+          console.error("Fallback update also failed:", updateError);
+          return NextResponse.json(
+            { error: "Failed to mark certificates as submitted" },
+            { status: 500 }
+          );
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Marked ${certificate_ids.length} certificates as submitted to RID`,
+        batch_id: batch_id || new Date().toISOString().slice(0, 7),
+        count: count || certificate_ids.length,
+      });
+    }
 
     if (action === "summary") {
       // Get summary stats for the date range

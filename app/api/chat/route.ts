@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -12,6 +13,298 @@ const openai = new OpenAI({
 });
 
 const supabase = supabaseAdmin;
+
+// ============================================================================
+// OMNIPOTENT ELYA - Memory System
+// ============================================================================
+
+// Fetch user's persistent memories
+async function getUserMemories(userId: string) {
+  try {
+    const { data: memories } = await supabase
+      .from("elya_user_memories")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("times_reinforced", { ascending: false });
+    return memories || [];
+  } catch {
+    return [];
+  }
+}
+
+// Fetch user's skill observations (struggles/strengths)
+async function getSkillObservations(userId: string) {
+  try {
+    const { data: observations } = await supabase
+      .from("elya_skill_observations")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_resolved", false)
+      .order("last_observed_at", { ascending: false })
+      .limit(20);
+    return observations || [];
+  } catch {
+    return [];
+  }
+}
+
+// Fetch active recommendations for the user
+async function getActiveRecommendations(userId: string) {
+  try {
+    const { data: recommendations } = await supabase
+      .from("elya_recommendations")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .lte("show_after", new Date().toISOString())
+      .order("priority", { ascending: false })
+      .limit(5);
+    return recommendations || [];
+  } catch {
+    return [];
+  }
+}
+
+// Fetch user's growth timeline (recent significant events)
+async function getGrowthTimeline(userId: string) {
+  try {
+    const { data: events } = await supabase
+      .from("elya_growth_timeline")
+      .select("*")
+      .eq("user_id", userId)
+      .order("event_date", { ascending: false })
+      .limit(10);
+    return events || [];
+  } catch {
+    return [];
+  }
+}
+
+// Extract memories from the conversation using Claude
+async function extractAndStoreMemories(
+  userId: string,
+  userMessage: string,
+  elyaResponse: string,
+  conversationContext: string
+) {
+  try {
+    // Use a quick Claude call to extract any learnable facts
+    const extractionPrompt = `Analyze this conversation excerpt and extract any NEW facts about the user that should be remembered permanently. Only extract CONCRETE, SPECIFIC facts - not opinions or temporary states.
+
+User message: "${userMessage}"
+Elya's response: "${elyaResponse}"
+Context: ${conversationContext}
+
+Extract facts in this JSON format. Return an empty array if nothing notable:
+[
+  {
+    "memory_type": "personal_fact|work_preference|skill_strength|skill_challenge|goal|learning_style|communication_pref|emotional_pattern|career_milestone|relationship|preference|context",
+    "memory_key": "short_unique_key_like_this",
+    "memory_value": "The actual fact to remember",
+    "confidence": 0.8
+  }
+]
+
+Examples of what TO extract:
+- "I've been interpreting for 5 years" → {"memory_type": "personal_fact", "memory_key": "years_experience", "memory_value": "5 years of interpreting experience", "confidence": 1.0}
+- "I struggle with medical terminology" → {"memory_type": "skill_challenge", "memory_key": "medical_terminology_difficulty", "memory_value": "Struggles with medical terminology", "confidence": 0.9}
+- "I work mostly with pediatric patients" → {"memory_type": "work_preference", "memory_key": "primary_patient_population", "memory_value": "Works mostly with pediatric patients", "confidence": 0.9}
+
+Examples of what NOT to extract:
+- "I'm feeling tired today" (temporary state)
+- "That sounds interesting" (not a fact)
+- Generic statements without specific info
+
+Return ONLY the JSON array, nothing else:`;
+
+    const extraction = await anthropic.messages.create({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: extractionPrompt }],
+    });
+
+    const extractedText = (extraction.content[0] as any)?.text || "[]";
+
+    // Parse the JSON safely
+    let memories: any[] = [];
+    try {
+      // Clean up the response - remove markdown code blocks if present
+      const cleaned = extractedText.replace(/```json\n?|\n?```/g, "").trim();
+      memories = JSON.parse(cleaned);
+    } catch {
+      return;
+    }
+
+    // Store each extracted memory
+    for (const memory of memories) {
+      if (memory.memory_type && memory.memory_key && memory.memory_value) {
+        await supabase.rpc("upsert_user_memory", {
+          p_user_id: userId,
+          p_memory_type: memory.memory_type,
+          p_memory_key: memory.memory_key,
+          p_memory_value: memory.memory_value,
+          p_confidence: memory.confidence || 0.8,
+          p_source_type: "conversation",
+        });
+      }
+    }
+  } catch (error) {
+    // Memory extraction is non-critical - don't fail the main request
+    console.error("Memory extraction error:", error);
+  }
+}
+
+// Detect skill struggles/strengths from conversation
+async function detectAndRecordSkillObservation(
+  userId: string,
+  userMessage: string,
+  conversationContext: any
+) {
+  try {
+    // Check for skill-related keywords in the message
+    const skillIndicators = {
+      struggle: [
+        "struggle", "difficult", "hard time", "challenging", "confused",
+        "don't understand", "can't seem to", "trouble with", "lost", "stuck"
+      ],
+      strength: [
+        "good at", "comfortable with", "confident", "excel at", "strong",
+        "natural at", "easy for me", "skilled in"
+      ]
+    };
+
+    const lowerMessage = userMessage.toLowerCase();
+
+    // Quick detection - if no indicators, skip the expensive API call
+    const hasStruggleIndicator = skillIndicators.struggle.some(i => lowerMessage.includes(i));
+    const hasStrengthIndicator = skillIndicators.strength.some(i => lowerMessage.includes(i));
+
+    if (!hasStruggleIndicator && !hasStrengthIndicator) {
+      return null;
+    }
+
+    // Use Claude to extract specific skill observations
+    const detectionPrompt = `Analyze this message for specific INTERPRETING skill observations. Only extract if the user is explicitly discussing a skill they struggle with or excel at.
+
+Message: "${userMessage}"
+Context: ${conversationContext?.type || 'general chat'}
+
+If you find a skill observation, return JSON:
+{
+  "found": true,
+  "skill_domain": "category like 'medical_terminology', 'nervous_system_regulation', 'legal_procedure', etc.",
+  "skill_concept": "specific concept like 'cardiology_terms', 'pre_assignment_grounding', etc.",
+  "observation_type": "struggle|strength|interest|improvement",
+  "evidence": "brief quote or paraphrase proving this observation",
+  "severity": 1-5
+}
+
+If no clear skill observation, return: {"found": false}
+
+Return ONLY JSON:`;
+
+    const detection = await anthropic.messages.create({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 500,
+      messages: [{ role: "user", content: detectionPrompt }],
+    });
+
+    const detectedText = (detection.content[0] as any)?.text || '{"found": false}';
+
+    let observation: any;
+    try {
+      const cleaned = detectedText.replace(/```json\n?|\n?```/g, "").trim();
+      observation = JSON.parse(cleaned);
+    } catch {
+      return null;
+    }
+
+    if (observation.found && observation.skill_domain && observation.skill_concept) {
+      const { data: obsResult } = await supabase.rpc("record_skill_observation", {
+        p_user_id: userId,
+        p_skill_domain: observation.skill_domain,
+        p_skill_concept: observation.skill_concept,
+        p_observation_type: observation.observation_type,
+        p_evidence: observation.evidence,
+        p_severity: observation.severity || 3,
+        p_source_type: "conversation",
+      });
+
+      // Generate recommendation if it's a struggle
+      if (observation.observation_type === "struggle" && obsResult) {
+        await generateRecommendationForSkillGap(userId, observation, obsResult);
+      }
+
+      return observation;
+    }
+    return null;
+  } catch (error) {
+    console.error("Skill detection error:", error);
+    return null;
+  }
+}
+
+// Generate proactive recommendation based on skill gaps
+async function generateRecommendationForSkillGap(
+  userId: string,
+  observation: any,
+  observationId: string
+) {
+  try {
+    // Find modules that address this skill gap
+    const { data: matchingModules } = await supabase.rpc("find_modules_for_skill_gap", {
+      p_skill_domain: observation.skill_domain,
+      p_skill_concept: observation.skill_concept,
+    });
+
+    if (matchingModules && matchingModules.length > 0) {
+      const topModule = matchingModules[0];
+
+      // Check if user already completed this module
+      const { data: existing } = await supabase
+        .from("user_module_progress")
+        .select("status")
+        .eq("user_id", userId)
+        .eq("module_id", topModule.module_id)
+        .single();
+
+      if (existing?.status === "completed") {
+        return; // Already completed
+      }
+
+      // Check for existing active recommendation
+      const { data: existingRec } = await supabase
+        .from("elya_recommendations")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("target_id", topModule.module_id)
+        .eq("status", "active")
+        .single();
+
+      if (existingRec) {
+        return; // Already recommended
+      }
+
+      // Create the recommendation
+      await supabase.from("elya_recommendations").insert({
+        user_id: userId,
+        recommendation_type: "skill_module",
+        title: `Recommended: ${topModule.module_title}`,
+        description: `Based on your conversation about ${observation.skill_domain.replace(/_/g, " ")}, this module could help strengthen your skills.`,
+        based_on_observations: [observationId],
+        reasoning: `You mentioned difficulty with ${observation.skill_concept.replace(/_/g, " ")}. This module directly addresses that.`,
+        target_type: "skill_module",
+        target_id: topModule.module_id,
+        target_url: `/skills/${topModule.module_code}`,
+        priority: observation.severity >= 4 ? 4 : 3,
+        relevance_score: 0.9,
+      });
+    }
+  } catch (error) {
+    console.error("Recommendation generation error:", error);
+  }
+}
 
 // Helper function to get full user context
 async function getUserContext(userId: string) {
@@ -129,6 +422,24 @@ async function getUserContext(userId: string) {
     .order("updated_at", { ascending: false })
     .limit(20);
 
+  // Get scenario drill attempts (for Elya to know their performance under pressure)
+  const { data: scenarioDrillAttempts } = await supabase
+    .from("user_scenario_attempts")
+    .select(`
+      *,
+      scenario:scenario_drills (
+        title,
+        subtitle,
+        category,
+        ecci_focus,
+        scoring_rubric
+      )
+    `)
+    .eq("user_id", userId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(10);
+
   // Get organization memberships (agencies the user belongs to)
   const { data: organizationMemberships } = await supabase
     .from("organization_members")
@@ -203,6 +514,14 @@ async function getUserContext(userId: string) {
     ? Math.round(weekAssignments.reduce((sum: number, a: any) => sum + (a.duration_minutes || 60), 0) / 60)
     : 0;
 
+  // OMNIPOTENT ELYA: Fetch persistent memory data
+  const [memories, skillObservations, recommendations, growthTimeline] = await Promise.all([
+    getUserMemories(userId),
+    getSkillObservations(userId),
+    getActiveRecommendations(userId),
+    getGrowthTimeline(userId),
+  ]);
+
   return {
     profile,
     assignments,
@@ -218,6 +537,12 @@ async function getUserContext(userId: string) {
     hoursWorkedThisWeek,
     organizationMemberships,
     agencyAssignments,
+    scenarioDrillAttempts,
+    // OMNIPOTENT ELYA: Persistent memory
+    memories,
+    skillObservations,
+    recommendations,
+    growthTimeline,
   };
 }
 
@@ -264,7 +589,12 @@ async function saveChatMessage(userId: string, role: string, content: string, co
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, userId, context } = await req.json();
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
+    const { messages, context } = await req.json();
 
     if (!messages || messages.length === 0) {
       return NextResponse.json(
@@ -278,6 +608,9 @@ export async function POST(req: NextRequest) {
 
     // Determine if this is a Skill Reflection session
     const isSkillReflectionMode = context?.type === "skill_reflection";
+
+    // Determine if this is a Scenario Debrief session
+    const isScenarioDebriefMode = context?.type === "scenario_debrief" || context?.debrief === "scenario";
 
     // Get full user context
     const userContext = await getUserContext(userId);
@@ -310,6 +643,94 @@ export async function POST(req: NextRequest) {
         contextSummary += `**Name**: ${userContext.profile.full_name || "Not set"}\n`;
         contextSummary += `**Subscription**: ${userContext.profile.subscription_tier || "basic"}\n`;
         contextSummary += `**Member Since**: ${userContext.profile.created_at ? new Date(userContext.profile.created_at).toLocaleDateString() : "Unknown"}\n\n`;
+      }
+
+      // ============================================================
+      // OMNIPOTENT ELYA: Persistent Memory About This User
+      // ============================================================
+      if (userContext.memories && userContext.memories.length > 0) {
+        contextSummary += `## 🧠 WHAT YOU REMEMBER ABOUT THIS USER (Persistent Memory)\n\n`;
+        contextSummary += `These are facts you've learned about this user across all conversations. Reference them naturally:\n\n`;
+
+        // Group memories by type
+        const memoryGroups: Record<string, any[]> = {};
+        userContext.memories.forEach((m: any) => {
+          if (!memoryGroups[m.memory_type]) memoryGroups[m.memory_type] = [];
+          memoryGroups[m.memory_type].push(m);
+        });
+
+        const typeLabels: Record<string, string> = {
+          personal_fact: "Personal Facts",
+          work_preference: "Work Preferences",
+          skill_strength: "Strengths",
+          skill_challenge: "Challenges/Growth Areas",
+          goal: "Goals",
+          learning_style: "Learning Style",
+          communication_pref: "Communication Preferences",
+          emotional_pattern: "Emotional Patterns",
+          career_milestone: "Career Milestones",
+          relationship: "Important Relationships",
+          preference: "Preferences",
+          context: "Other Context",
+        };
+
+        Object.entries(memoryGroups).forEach(([type, mems]) => {
+          contextSummary += `**${typeLabels[type] || type}**:\n`;
+          mems.forEach((m: any) => {
+            const reinforced = m.times_reinforced > 1 ? ` (confirmed ${m.times_reinforced}x)` : "";
+            contextSummary += `- ${m.memory_value}${reinforced}\n`;
+          });
+          contextSummary += `\n`;
+        });
+      }
+
+      // OMNIPOTENT ELYA: Skill Observations (struggles and strengths)
+      if (userContext.skillObservations && userContext.skillObservations.length > 0) {
+        contextSummary += `## 📊 SKILL OBSERVATIONS (Where They Need Support)\n\n`;
+
+        const struggles = userContext.skillObservations.filter((o: any) => o.observation_type === "struggle");
+        const strengths = userContext.skillObservations.filter((o: any) => o.observation_type === "strength");
+
+        if (struggles.length > 0) {
+          contextSummary += `**Areas they're working on** (opportunities to recommend relevant training):\n`;
+          struggles.forEach((o: any) => {
+            const occurrences = o.occurrence_count > 1 ? ` (${o.occurrence_count}x)` : "";
+            contextSummary += `- ${o.skill_domain.replace(/_/g, " ")}: ${o.skill_concept.replace(/_/g, " ")}${occurrences}\n`;
+            contextSummary += `  Evidence: "${o.evidence.substring(0, 100)}..."\n`;
+          });
+          contextSummary += `\n`;
+        }
+
+        if (strengths.length > 0) {
+          contextSummary += `**Strengths** (celebrate and build on these):\n`;
+          strengths.forEach((o: any) => {
+            contextSummary += `- ${o.skill_domain.replace(/_/g, " ")}: ${o.skill_concept.replace(/_/g, " ")}\n`;
+          });
+          contextSummary += `\n`;
+        }
+      }
+
+      // OMNIPOTENT ELYA: Active Recommendations to Surface
+      if (userContext.recommendations && userContext.recommendations.length > 0) {
+        contextSummary += `## 💡 RECOMMENDATIONS TO SURFACE\n\n`;
+        contextSummary += `Based on your observations, you should proactively recommend:\n\n`;
+        userContext.recommendations.forEach((r: any) => {
+          contextSummary += `- **${r.title}** (Priority: ${r.priority}/5)\n`;
+          contextSummary += `  ${r.description}\n`;
+          contextSummary += `  Why: ${r.reasoning}\n`;
+          if (r.target_url) contextSummary += `  Link: ${r.target_url}\n`;
+          contextSummary += `\n`;
+        });
+      }
+
+      // OMNIPOTENT ELYA: Growth Timeline
+      if (userContext.growthTimeline && userContext.growthTimeline.length > 0) {
+        contextSummary += `## 🌱 GROWTH JOURNEY (Recent Milestones)\n\n`;
+        userContext.growthTimeline.slice(0, 5).forEach((e: any) => {
+          const date = new Date(e.event_date).toLocaleDateString();
+          contextSummary += `- [${date}] ${e.title}${e.description ? `: ${e.description}` : ""}\n`;
+        });
+        contextSummary += `\n`;
       }
 
       // Organization/Agency Memberships
@@ -554,6 +975,73 @@ export async function POST(req: NextRequest) {
         }
         contextSummary += `\n`;
       }
+
+      // Scenario Drill Performance (pressure training)
+      if (userContext.scenarioDrillAttempts && userContext.scenarioDrillAttempts.length > 0) {
+        contextSummary += `## 🎯 SCENARIO DRILL PERFORMANCE (Pressure Training)\n\n`;
+        contextSummary += `These are interactive branching scenarios completed under time pressure.\n\n`;
+
+        userContext.scenarioDrillAttempts.slice(0, 5).forEach((attempt: any) => {
+          if (attempt.scenario) {
+            const date = new Date(attempt.completed_at).toLocaleDateString();
+            contextSummary += `**${attempt.scenario.title}** (${attempt.scenario.category}) - ${date}\n`;
+            contextSummary += `- Score: ${attempt.total_score}% on ${attempt.difficulty} difficulty\n`;
+            contextSummary += `- Timeouts: ${attempt.timeouts_count} (pressure moments where they froze)\n`;
+
+            // Show category breakdown
+            if (attempt.scores && typeof attempt.scores === 'object') {
+              const scoreEntries = Object.entries(attempt.scores as Record<string, number>);
+              const weakest = scoreEntries.sort(([,a], [,b]) => a - b).slice(0, 2);
+              const strongest = scoreEntries.sort(([,a], [,b]) => b - a).slice(0, 2);
+
+              if (strongest.length > 0) {
+                contextSummary += `- Strengths: ${strongest.map(([k, v]) => `${k.replace(/_/g, ' ')} (${v}/20)`).join(', ')}\n`;
+              }
+              if (weakest.length > 0) {
+                contextSummary += `- Growth areas: ${weakest.map(([k, v]) => `${k.replace(/_/g, ' ')} (${v}/20)`).join(', ')}\n`;
+              }
+            }
+
+            if (attempt.ending_id) {
+              contextSummary += `- Ending reached: ${attempt.ending_id.replace(/_/g, ' ')}\n`;
+            }
+            contextSummary += `\n`;
+          }
+        });
+
+        // Aggregate patterns
+        const allScores = userContext.scenarioDrillAttempts.map((a: any) => a.percentage_score || a.total_score);
+        const avgScore = allScores.reduce((sum: number, s: number) => sum + s, 0) / allScores.length;
+        const totalTimeouts = userContext.scenarioDrillAttempts.reduce((sum: number, a: any) => sum + (a.timeouts_count || 0), 0);
+
+        contextSummary += `**Patterns across ${userContext.scenarioDrillAttempts.length} scenarios:**\n`;
+        contextSummary += `- Average score: ${Math.round(avgScore)}%\n`;
+        contextSummary += `- Total timeouts: ${totalTimeouts} (these are moments where time pressure caused hesitation)\n`;
+
+        // Find recurring weak areas
+        const categoryTotals: Record<string, { sum: number; count: number }> = {};
+        userContext.scenarioDrillAttempts.forEach((a: any) => {
+          if (a.scores && typeof a.scores === 'object') {
+            Object.entries(a.scores as Record<string, number>).forEach(([cat, score]) => {
+              if (!categoryTotals[cat]) categoryTotals[cat] = { sum: 0, count: 0 };
+              categoryTotals[cat].sum += score;
+              categoryTotals[cat].count += 1;
+            });
+          }
+        });
+
+        const categoryAverages = Object.entries(categoryTotals)
+          .map(([cat, { sum, count }]) => ({ cat, avg: sum / count }))
+          .sort((a, b) => a.avg - b.avg);
+
+        if (categoryAverages.length > 0) {
+          const weakestCategory = categoryAverages[0];
+          if (weakestCategory.avg < 15) {
+            contextSummary += `⚠️ **Recurring gap**: ${weakestCategory.cat.replace(/_/g, ' ')} (avg ${Math.round(weakestCategory.avg)}/20) - Consider recommending targeted training\n`;
+          }
+        }
+        contextSummary += `\n`;
+      }
     }
 
     // Convert messages to Claude format
@@ -603,6 +1091,10 @@ You are not just answering questions - you are the central intelligence that:
    - **Free write session themes** - Recurring topics they've been processing emotionally
    - **Agency affiliations** - Which agencies/organizations they work with
    - **Agency assignments** - Work assigned to them by their agency (different from self-created assignments)
+   - **🧠 PERSISTENT MEMORY**: Facts you've learned about them across ALL conversations (see "WHAT YOU REMEMBER" section)
+   - **📊 SKILL OBSERVATIONS**: Where they struggle and excel (see "SKILL OBSERVATIONS" section)
+   - **💡 RECOMMENDATIONS**: Proactive suggestions to surface (see "RECOMMENDATIONS TO SURFACE" section)
+   - **🌱 GROWTH TIMELINE**: Their professional journey milestones
 
 2. **AGENCY ASSIGNMENT AWARENESS**:
    - You can see when the user's agency has assigned them work
@@ -612,7 +1104,12 @@ You are not just answering questions - you are the central intelligence that:
    - Track their agency assignment status and help them stay compliant
    - Notice new agency assignments and proactively mention them: "I see your agency just added a medical consult for you on Thursday!"
 
-3. **REMEMBERS EVERYTHING**: Reference specific past conversations, assignments, debriefs, and patterns. You should proactively mention relevant context without being asked.
+3. **REMEMBERS EVERYTHING** (Omnipotent Memory):
+   - You have PERSISTENT MEMORY that carries across all conversations - you don't forget!
+   - When you learn something about the user (their name, experience level, preferences, struggles), it's stored permanently
+   - Reference your memories naturally: "I remember you mentioned you've been interpreting for 5 years..." or "You've told me before that cardiology is challenging for you..."
+   - Your memories get stronger when facts are confirmed multiple times
+   - Use memories to personalize every interaction - they should feel like you truly KNOW them
 
 4. **ASSIGNMENT PREP MASTER** (with Knowledge Base):
    - **ACCESS PROFESSIONAL KNOWLEDGE**: You have access to professional interpreter books, research papers, and educational materials. Use this knowledge naturally in your responses without academic citations
@@ -667,6 +1164,19 @@ You are not just answering questions - you are the central intelligence that:
    - Suggest Free Write or self-care when appropriate
    - Notice workload intensity and proactively check in
    - Reference Free Write themes they've been processing
+
+11. **PROACTIVE SKILL RECOMMENDATIONS** (Use the RECOMMENDATIONS section):
+   - When you see recommendations in your context, PROACTIVELY surface them naturally
+   - Don't wait to be asked - weave recommendations into conversation: "By the way, based on what you mentioned about struggling with medical terminology, there's a module that could really help..."
+   - Connect recommendations to their current situation or upcoming assignments
+   - Celebrate when they complete recommended modules
+   - Track which recommendations they've accepted or dismissed
+
+12. **GROWTH AWARENESS** (Use the GROWTH JOURNEY section):
+   - Reference their growth timeline to celebrate progress
+   - Compare where they are now vs. where they started
+   - Acknowledge milestones: "Look how far you've come - you've earned 3 CEUs and completed the whole NSM series!"
+   - Use their growth journey to motivate and encourage them
 
 ## PREP WORKFLOW - HOW TO PREPARE FOR ASSIGNMENTS
 
@@ -1021,12 +1531,124 @@ This is their reflection space - follow their lead on where they want to go. If 
 
 Remember: You're helping them see how this module fits into their real work and growth as an interpreter.`;
 
+    // Scenario Debrief Mode: Help process scenario drill performance
+    const scenarioDebriefSystemPrompt = `You are Elya, the AI mentor within InterpretReflect. Right now, you're in **Scenario Debrief** mode - helping the user process and learn from the branching scenario drill they just completed.
+
+## CURRENT DATE AND TIME
+
+**Right now it is: ${currentDateTime}**
+
+## THEIR RECENT SCENARIO PERFORMANCE
+
+${userContext?.scenarioDrillAttempts && userContext.scenarioDrillAttempts.length > 0 ? (() => {
+  const mostRecent = userContext.scenarioDrillAttempts[0];
+  if (!mostRecent.scenario) return 'No recent scenario data available.';
+
+  let scenarioContext = `**Scenario**: ${mostRecent.scenario.title}\n`;
+  scenarioContext += `**Category**: ${mostRecent.scenario.category}\n`;
+  scenarioContext += `**Difficulty**: ${mostRecent.difficulty}\n`;
+  scenarioContext += `**Score**: ${mostRecent.total_score}%\n`;
+  scenarioContext += `**Timeouts**: ${mostRecent.timeouts_count} (moments where time pressure caused hesitation)\n`;
+  scenarioContext += `**Ending Reached**: ${mostRecent.ending_id?.replace(/_/g, ' ') || 'unknown'}\n\n`;
+
+  if (mostRecent.scores && typeof mostRecent.scores === 'object') {
+    scenarioContext += `**Category Breakdown (out of 20 each)**:\n`;
+    const scores = mostRecent.scores as Record<string, number>;
+    Object.entries(scores)
+      .sort(([,a], [,b]) => b - a)
+      .forEach(([category, score]) => {
+        const label = score >= 16 ? '✅' : score >= 12 ? '⚠️' : '❌';
+        scenarioContext += `${label} ${category.replace(/_/g, ' ')}: ${score}/20\n`;
+      });
+  }
+
+  if (mostRecent.decisions_made && Array.isArray(mostRecent.decisions_made)) {
+    scenarioContext += `\n**Decisions Made**: ${mostRecent.decisions_made.length} decision points\n`;
+    const timedOutDecisions = mostRecent.decisions_made.filter((d: any) => d.timed_out);
+    if (timedOutDecisions.length > 0) {
+      scenarioContext += `**Timed Out On**: ${timedOutDecisions.length} decision(s) - these are moments to discuss\n`;
+    }
+  }
+
+  return scenarioContext;
+})() : 'No recent scenario data available.'}
+
+${contextSummary}
+
+## YOUR ROLE IN SCENARIO DEBRIEF
+
+You are helping them **learn from** and **grow from** this pressure training experience. This means:
+
+1. **CELEBRATE EFFORT**: They just put themselves under time pressure to train. That takes courage.
+
+2. **ACKNOWLEDGE PRESSURE**: The timer and pulsing screen create real stress. This is intentional - interpreters face time pressure constantly. Normalize that it's hard.
+
+3. **ANALYZE DECISIONS**:
+   - What did their score reveal about their instincts?
+   - Where did their strengths shine?
+   - What patterns emerge in their weaker areas?
+
+4. **TIMEOUT MOMENTS ARE GOLD**:
+   - If they timed out on any decisions, these are the most valuable learning moments
+   - Timeouts simulate "freezing" under pressure - it happens in real interpreting
+   - Help them think through: "What would you do differently with more time to think?"
+   - These moments reveal where they need more practice
+
+5. **CONNECT TO REAL WORK**:
+   - How does this scenario relate to their actual assignments?
+   - What situations might they face where these decisions matter?
+   - Reference their upcoming assignments if relevant
+
+6. **RECOMMEND NEXT STEPS**:
+   - Suggest trying again at a different difficulty
+   - Recommend relevant training modules based on weak areas
+   - Encourage them to practice the scenario again to improve
+
+## HOW TO RESPOND
+
+Start by acknowledging their effort, then dive into the learning:
+
+**Opening**: "You just completed [Scenario Name] on [Difficulty] - that's not easy. The timer adds real pressure. Let's talk about how it went."
+
+**Then explore**:
+- "I noticed you scored high in [strength area] - that's a real instinct you can trust."
+- "Your [weak area] was lower - let's think about what was happening in those moments."
+- "You timed out on [X] decision(s). Those pressure moments are where the real learning is - what was going through your mind?"
+
+**Close with growth**:
+- "Want to try it again? Sometimes a second attempt with fresh eyes reveals new insights."
+- "There's a training module on [relevant topic] that might help strengthen that area."
+- "Your next [assignment type] assignment is coming up - how might you apply what you learned here?"
+
+## ECCI FRAMEWORK CATEGORIES
+
+The scoring categories map to the ECCI Framework for interpreter competency:
+- **linguistic_accuracy**: Accurate message transfer between languages
+- **role_space_management**: Maintaining appropriate interpreter role boundaries
+- **equipartial_fidelity**: Equal treatment and faithful message rendition
+- **interaction_management**: Facilitating smooth communication flow
+- **cultural_competence**: Understanding and conveying cultural context
+
+Help them understand what each score means in practical terms.
+
+## INCLUSIVE LANGUAGE
+
+Use modality-neutral language:
+- "I understand" not "I hear you"
+- "It seems like" not "sounds like"
+- "Express" not "speak"
+- "Interpret" or "render" instead of "speak"
+
+Remember: This is pressure training. You're helping them build the skills to stay calm and make good decisions when it really matters.`;
+
     // Choose the appropriate system prompt
     let finalSystemPrompt;
     if (isFreeWriteMode) {
       finalSystemPrompt = freeWriteSystemPrompt;
     } else if (isSkillReflectionMode) {
       finalSystemPrompt = skillReflectionSystemPrompt;
+    } else if (isScenarioDebriefMode) {
+      finalSystemPrompt = scenarioDebriefSystemPrompt;
     } else {
       finalSystemPrompt = systemPrompt;
     }
@@ -1163,11 +1785,20 @@ Remember: You're helping them see how this module fits into their real work and 
           await saveChatMessage(userId, "elya", followUpText, "dashboard");
         }
 
+        // OMNIPOTENT ELYA: Extract memories from tool use conversation too
+        if (userId && userMessage && followUpText) {
+          Promise.all([
+            extractAndStoreMemories(userId, userMessage, followUpText, "dashboard"),
+            detectAndRecordSkillObservation(userId, userMessage, context),
+          ]).catch(err => console.error("Background memory processing error:", err));
+        }
+
         return NextResponse.json({
           response: followUpText,
           usage: followUpMessage.usage,
           contextLoaded: !!userContext,
           assignmentCreated: createResult.success,
+          memoryEnabled: true,
         });
       }
     }
@@ -1181,11 +1812,24 @@ Remember: You're helping them see how this module fits into their real work and 
       await saveChatMessage(userId, "elya", responseText, messageContext);
     }
 
+    // ============================================================
+    // OMNIPOTENT ELYA: Extract & Store Memories (async, non-blocking)
+    // ============================================================
+    // We do this after returning the response so we don't slow down the UX
+    if (userId && userMessage && responseText && !isFreeWriteMode) {
+      // Fire-and-forget: Extract memories and detect skill observations
+      Promise.all([
+        extractAndStoreMemories(userId, userMessage, responseText, messageContext),
+        detectAndRecordSkillObservation(userId, userMessage, context),
+      ]).catch(err => console.error("Background memory processing error:", err));
+    }
+
     return NextResponse.json({
       response: responseText,
       reply: responseText, // Also include as 'reply' for compatibility
       usage: message.usage,
       contextLoaded: !!userContext,
+      memoryEnabled: true, // Flag that omnipotent memory is active
     });
   } catch (error: any) {
     console.error("Claude API error:", error);

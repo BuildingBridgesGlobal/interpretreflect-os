@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // POST - Send connection request
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { requester_id, addressee_id } = body;
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const requester_id = user!.id;
 
-    if (!requester_id || !addressee_id) {
+    const body = await req.json();
+    const { addressee_id } = body;
+
+    if (!addressee_id) {
       return NextResponse.json(
-        { error: "requester_id and addressee_id are required" },
+        { error: "addressee_id is required" },
         { status: 400 }
       );
     }
@@ -73,12 +79,17 @@ export async function POST(req: NextRequest) {
 // PUT - Accept or decline connection request
 export async function PUT(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { connection_id, user_id, action } = body; // action: 'accept' or 'decline'
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
 
-    if (!connection_id || !user_id || !action) {
+    const body = await req.json();
+    const { connection_id, action } = body; // action: 'accept' or 'decline'
+
+    if (!connection_id || !action) {
       return NextResponse.json(
-        { error: "connection_id, user_id, and action are required" },
+        { error: "connection_id and action are required" },
         { status: 400 }
       );
     }
@@ -143,17 +154,14 @@ export async function PUT(req: NextRequest) {
 // GET - Get user's connections
 export async function GET(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
     const status = searchParams.get("status") || "accepted";
     const type = searchParams.get("type"); // 'pending_received', 'pending_sent', 'accepted'
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     let query = supabase
       .from("connections")
@@ -232,13 +240,17 @@ export async function GET(req: NextRequest) {
 // DELETE - Remove connection or cancel request
 export async function DELETE(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
     const connectionId = searchParams.get("connection_id");
-    const userId = searchParams.get("user_id");
 
-    if (!connectionId || !userId) {
+    if (!connectionId) {
       return NextResponse.json(
-        { error: "connection_id and user_id are required" },
+        { error: "connection_id is required" },
         { status: 400 }
       );
     }

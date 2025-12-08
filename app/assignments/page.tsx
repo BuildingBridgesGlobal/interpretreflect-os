@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
+import GoogleCalendarSync, { SyncToCalendarButton } from "@/components/GoogleCalendarSync";
 
 type Assignment = {
   id: string;
@@ -24,6 +25,7 @@ type Assignment = {
   completed?: boolean;
   team_members?: any[];
   free_write_sessions?: FreeWriteSession[];
+  google_calendar_synced?: boolean;
 };
 
 type FreeWriteSession = {
@@ -70,12 +72,35 @@ function AssignmentsPageContent() {
   const [teamEmails, setTeamEmails] = useState<string[]>([""]);
   const [teamRoles, setTeamRoles] = useState<string[]>(["team"]);
 
+  const [calendarMessage, setCalendarMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   useEffect(() => {
     // Check for tab parameter from URL (for redirects from /history)
     const tab = searchParams.get('tab');
     if (tab === 'past') {
       setSelectedTab('past');
     }
+
+    // Check for calendar connection result
+    const calendarConnected = searchParams.get('calendar_connected');
+    const calendarName = searchParams.get('calendar_name');
+    const calendarError = searchParams.get('calendar_error');
+
+    if (calendarConnected === 'true') {
+      setCalendarMessage({
+        type: 'success',
+        text: `Google Calendar connected${calendarName ? ` (${decodeURIComponent(calendarName)})` : ''}! Your assignments will now sync.`
+      });
+      // Clear URL params
+      window.history.replaceState({}, '', '/assignments');
+    } else if (calendarError) {
+      setCalendarMessage({
+        type: 'error',
+        text: `Calendar connection failed: ${decodeURIComponent(calendarError)}`
+      });
+      window.history.replaceState({}, '', '/assignments');
+    }
+
     loadData();
   }, [searchParams]);
 
@@ -422,12 +447,15 @@ function AssignmentsPageContent() {
       <NavBar />
       <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8 relative">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-400">Assignments</h1>
             <p className="mt-1 text-sm text-slate-300">Manage your interpreting assignments and reflections</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Google Calendar Sync */}
+            <GoogleCalendarSync onSyncComplete={loadData} />
+
             {templates.length > 0 && (
               <button
                 onClick={() => setShowTemplates(true)}
@@ -444,6 +472,38 @@ function AssignmentsPageContent() {
             </button>
           </div>
         </div>
+
+        {/* Calendar Connection Message */}
+        {calendarMessage && (
+          <div
+            className={`mb-4 p-4 rounded-lg flex items-center justify-between ${
+              calendarMessage.type === 'success'
+                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                : 'bg-red-500/10 border border-red-500/30 text-red-400'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {calendarMessage.type === 'success' ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              )}
+              <span className="text-sm">{calendarMessage.text}</span>
+            </div>
+            <button
+              onClick={() => setCalendarMessage(null)}
+              className="text-current hover:opacity-70"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="mb-6 flex gap-2 border-b border-slate-800">
@@ -610,7 +670,7 @@ function AssignmentsPageContent() {
 
                     {/* Prep Status - Upcoming Tab */}
                     {selectedTab === "upcoming" && (
-                      <div className="mt-3 flex items-center gap-2">
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
                         <span className={`px-2 py-1 rounded-md text-xs font-medium ${
                           assignment.prep_status === 'completed'
                             ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
@@ -622,6 +682,12 @@ function AssignmentsPageContent() {
                            assignment.prep_status === 'in_progress' ? 'Prep In Progress' :
                            'Prep Pending'}
                         </span>
+                        {/* Calendar Sync Status */}
+                        <SyncToCalendarButton
+                          assignmentId={assignment.id}
+                          isSynced={assignment.google_calendar_synced}
+                          onSync={loadData}
+                        />
                       </div>
                     )}
 

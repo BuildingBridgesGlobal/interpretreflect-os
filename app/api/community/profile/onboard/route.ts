@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
@@ -14,9 +15,13 @@ const supabase = supabaseAdmin;
  */
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
+
     const body = await req.json();
     const {
-      user_id,
       display_name,
       bio,
       is_deaf_interpreter,
@@ -27,9 +32,9 @@ export async function POST(req: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!user_id || !display_name) {
+    if (!display_name) {
       return NextResponse.json(
-        { error: "user_id and display_name are required" },
+        { error: "display_name is required" },
         { status: 400 }
       );
     }

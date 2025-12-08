@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // GET - Fetch drills by category or get random drills
 export async function GET(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
     const categoryCode = searchParams.get("category");
     const count = parseInt(searchParams.get("count") || "5");
-    const userId = searchParams.get("user_id");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     let query = supabase
       .from("drills")

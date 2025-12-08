@@ -1,24 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // POST - Create assignment(s) from a template
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
+
     const body = await req.json();
     const {
       template_id,
-      user_id,
       date, // Required: when to start the assignment
       time, // Optional: override template time
       title, // Optional: override template title
       recurrence_end_date, // For recurring templates
     } = body;
 
-    if (!template_id || !user_id || !date) {
+    if (!template_id || !date) {
       return NextResponse.json(
-        { error: "Missing required fields: template_id, user_id, date" },
+        { error: "Missing required fields: template_id, date" },
         { status: 400 }
       );
     }

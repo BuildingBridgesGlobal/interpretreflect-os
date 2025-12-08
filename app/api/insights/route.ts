@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 export async function GET(request: NextRequest) {
   try {
-    // Get user ID from query params or auth header
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 }
-      );
-    }
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(request);
+    if (authError) return authError;
+    const userId = user!.id;
 
     // Fetch user's recent debriefs (last 30 days)
     const { data: recentDebriefs, error: debriefsError } = await supabase

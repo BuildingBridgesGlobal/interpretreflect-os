@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import AdminNavBar from "@/components/AdminNavBar";
+import CEUAdminDashboard from "@/components/admin/CEUAdminDashboard";
 
 type Organization = {
   id: string;
@@ -45,7 +46,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [userData, setUserData] = useState<any>(null);
-  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials" | "agencies">("overview");
+  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials" | "agencies" | "ceu">("overview");
 
   // Agency management state
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -500,6 +501,7 @@ export default function AdminPage() {
         <div className="mb-6 flex gap-2 border-b border-slate-800 overflow-x-auto">
           {[
             { key: "overview", label: "Overview" },
+            { key: "ceu", label: "CEU Management" },
             { key: "agencies", label: "Agencies" },
             { key: "pipeline", label: "Pipeline Health" },
             { key: "competency", label: "Competency Growth" },
@@ -599,6 +601,11 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* CEU Management Tab */}
+        {selectedView === "ceu" && (
+          <CEUAdminDashboard />
         )}
 
         {/* Agencies Tab */}

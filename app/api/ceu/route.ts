@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { sendCertificateEmail } from "@/lib/email";
 
 // Helper to verify auth and get user ID from session token
 async function verifyAuthAndGetUser(req: NextRequest): Promise<string | null> {
@@ -385,27 +386,9 @@ export async function POST(req: NextRequest) {
         .eq("user_id", userId)
         .eq("module_id", module_id);
 
-      // If passed, issue certificate
-      let certificate: any = null;
-      if (passed) {
-        const certificateResult = await issueCertificate(userId, module, attempt.id);
-        if (certificateResult.success && certificateResult.certificate) {
-          const issuedCert = certificateResult.certificate;
-          certificate = issuedCert;
-
-          // Link certificate to progress and attempt
-          await supabaseAdmin
-            .from("user_module_progress")
-            .update({ certificate_id: issuedCert.id })
-            .eq("user_id", userId)
-            .eq("module_id", module_id);
-
-          await supabaseAdmin
-            .from("module_assessment_attempts")
-            .update({ certificate_id: issuedCert.id })
-            .eq("id", attempt.id);
-        }
-      }
+      // NOTE: Certificate is NOT issued here - it's issued after evaluation is complete
+      // The evaluation is required by RID before certificate can be issued
+      // See POST action "issue_certificate_after_evaluation" for certificate issuance
 
       // Build feedback
       const feedback = questions.map((q: any) => ({
@@ -426,10 +409,134 @@ export async function POST(req: NextRequest) {
         passThreshold: module.assessment_pass_threshold || 80,
         attemptNumber,
         feedback,
-        certificate,
+        certificate: null, // Certificate issued after evaluation, not here
         message: passed
-          ? `Congratulations! You passed with ${score}%. Your CEU certificate has been issued.`
+          ? `Congratulations! You passed with ${score}%! Complete the evaluation to receive your CEU certificate.`
           : `You scored ${score}%. You need ${module.assessment_pass_threshold || 80}% to pass. You can retake the assessment.`,
+      });
+    }
+
+    // Issue certificate after evaluation is complete (RID requirement)
+    if (action === "issue_certificate_after_evaluation") {
+      const { module_id, evaluation_id } = body;
+
+      if (!module_id) {
+        return NextResponse.json(
+          { error: "module_id is required" },
+          { status: 400 }
+        );
+      }
+
+      // Get module
+      const { data: module, error: moduleError } = await supabaseAdmin
+        .from("skill_modules")
+        .select("*")
+        .eq("id", module_id)
+        .single();
+
+      if (moduleError || !module) {
+        return NextResponse.json(
+          { error: "Module not found" },
+          { status: 404 }
+        );
+      }
+
+      if (!module.ceu_eligible) {
+        return NextResponse.json(
+          { error: "This module is not CEU eligible" },
+          { status: 400 }
+        );
+      }
+
+      // Check user's progress - must have passed assessment AND completed evaluation
+      const { data: progress, error: progressError } = await supabaseAdmin
+        .from("user_module_progress")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("module_id", module_id)
+        .single();
+
+      if (progressError || !progress) {
+        return NextResponse.json(
+          { error: "Module progress not found" },
+          { status: 400 }
+        );
+      }
+
+      // Must have passed the assessment
+      if (!progress.assessment_passed) {
+        return NextResponse.json(
+          { error: "Assessment must be passed before certificate can be issued" },
+          { status: 400 }
+        );
+      }
+
+      // Check if certificate already issued
+      if (progress.certificate_id) {
+        // Certificate already exists - fetch and return it
+        const { data: existingCert } = await supabaseAdmin
+          .from("ceu_certificates")
+          .select("*")
+          .eq("id", progress.certificate_id)
+          .single();
+
+        return NextResponse.json({
+          success: true,
+          certificate: existingCert,
+          message: "Certificate already issued for this module",
+        });
+      }
+
+      // Get the latest passed assessment attempt
+      const { data: passedAttempt } = await supabaseAdmin
+        .from("module_assessment_attempts")
+        .select("id, score")
+        .eq("user_id", userId)
+        .eq("module_id", module_id)
+        .eq("passed", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      // Issue the certificate
+      const result = await issueCertificate(userId, module, passedAttempt?.id);
+      if (!result.success) {
+        return NextResponse.json(
+          { error: result.error },
+          { status: 500 }
+        );
+      }
+
+      // Link certificate to progress and attempt
+      await supabaseAdmin
+        .from("user_module_progress")
+        .update({
+          certificate_id: result.certificate.id,
+          status: "completed",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId)
+        .eq("module_id", module_id);
+
+      if (passedAttempt) {
+        await supabaseAdmin
+          .from("module_assessment_attempts")
+          .update({ certificate_id: result.certificate.id })
+          .eq("id", passedAttempt.id);
+      }
+
+      // Link evaluation to certificate if provided
+      if (evaluation_id) {
+        await supabaseAdmin
+          .from("ceu_evaluations")
+          .update({ certificate_id: result.certificate.id })
+          .eq("id", evaluation_id);
+      }
+
+      return NextResponse.json({
+        success: true,
+        certificate: result.certificate,
+        message: "CEU certificate issued successfully!",
       });
     }
 
@@ -575,6 +682,9 @@ async function issueCertificate(
         return { success: false, error: "Certificate issued but fetch failed" };
       }
 
+      // Send certificate email (don't block on failure)
+      await sendCertificateEmailForUser(userId, certificate, module);
+
       return { success: true, certificate };
     }
 
@@ -630,9 +740,54 @@ async function issueCertificate(
       return { success: false, error: "Failed to issue certificate" };
     }
 
+    // Send certificate email (don't block on failure)
+    await sendCertificateEmailForUser(userId, certificate, module);
+
     return { success: true, certificate };
   } catch (error: any) {
     console.error("Certificate issuance error:", error);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Helper function to send certificate email after successful issuance
+ */
+async function sendCertificateEmailForUser(userId: string, certificate: any, module: any) {
+  try {
+    // Get user profile for email
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", userId)
+      .single();
+
+    if (!profile?.email) {
+      console.warn("No email found for user, skipping certificate email");
+      return;
+    }
+
+    const completionDate = new Date(certificate.completed_at || certificate.issued_at).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    await sendCertificateEmail({
+      to: profile.email,
+      userName: profile.full_name || "Interpreter",
+      certificateNumber: certificate.certificate_number,
+      moduleTitle: certificate.title || module.title,
+      ceuValue: parseFloat(certificate.ceu_value || module.ceu_value),
+      ridCategory: certificate.rid_category || module.rid_category || "Professional Studies",
+      activityCode: certificate.activity_code || module.activity_code,
+      completionDate,
+      verificationUrl: `https://interpretreflect.com/verify/${certificate.certificate_number}`,
+    });
+
+    console.log(`Certificate email sent to ${profile.email} for certificate ${certificate.certificate_number}`);
+  } catch (err) {
+    console.error("Failed to send certificate email:", err);
+    // Don't throw - email failure shouldn't break certificate issuance
   }
 }

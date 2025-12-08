@@ -46,6 +46,7 @@ type Props = {
   passThreshold: number;
   onComplete: (passed: boolean, certificate?: any) => void;
   onBack: () => void;
+  accessToken?: string;
 };
 
 export default function AssessmentQuiz({
@@ -56,6 +57,7 @@ export default function AssessmentQuiz({
   passThreshold,
   onComplete,
   onBack,
+  accessToken,
 }: Props) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -297,6 +299,7 @@ export default function AssessmentQuiz({
                 issued_at: result.certificate.issued_at || new Date().toISOString(),
               }}
               onClose={() => setShowCertificate(false)}
+              accessToken={accessToken}
             />
           )}
         </AnimatePresence>

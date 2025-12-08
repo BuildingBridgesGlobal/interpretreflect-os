@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 import { motion } from "framer-motion";
+import CEUGrievanceForm from "@/components/CEUGrievanceForm";
 
 interface CEUSummary {
   professional_studies_earned: number;
@@ -106,6 +107,8 @@ export default function CEUDashboard() {
     topup: 0,
     total: 0,
   });
+  const [showGrievanceForm, setShowGrievanceForm] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCEUData();
@@ -118,6 +121,9 @@ export default function CEUDashboard() {
         router.push("/signin");
         return;
       }
+
+      // Store user ID for grievance form
+      setUserId(session.user.id);
 
       // Check user's subscription tier
       const { data: profile, error: profileError } = await supabase
@@ -700,12 +706,23 @@ export default function CEUDashboard() {
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-100 mb-2">CEU Dashboard</h1>
-          <p className="text-slate-400">
-            Track your continuing education units for your RID certification cycle
-            {cycle && ` (${cycle.year})`}
-          </p>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-100 mb-2">CEU Dashboard</h1>
+            <p className="text-slate-400">
+              Track your continuing education units for your RID certification cycle
+              {cycle && ` (${cycle.year})`}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowGrievanceForm(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600 hover:text-slate-200 transition-colors text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Report Issue
+          </button>
         </div>
 
         {/* Quick Stats */}
@@ -1377,6 +1394,17 @@ export default function CEUDashboard() {
           </div>
         </div>
       </main>
+
+      {/* Grievance Form Modal */}
+      {showGrievanceForm && userId && (
+        <CEUGrievanceForm
+          userId={userId}
+          onClose={() => setShowGrievanceForm(false)}
+          onSuccess={() => {
+            // Could show a toast notification here
+          }}
+        />
+      )}
     </div>
   );
 }

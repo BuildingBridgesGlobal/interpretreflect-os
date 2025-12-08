@@ -185,14 +185,20 @@ export default function AssignmentDetailPage() {
     setInviting(memberUserId);
 
     try {
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       // 1. Add team member to assignment
       const response = await fetch("/api/assignments/team", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           assignment_id: assignmentId,
           user_id: memberUserId,
-          invited_by: user.id,
           role: "team"
         })
       });
@@ -482,13 +488,6 @@ export default function AssignmentDetailPage() {
                     View Debrief
                   </button>
                 )}
-
-                <button
-                  onClick={() => {/* TODO: Add to calendar */}}
-                  className="px-4 py-3 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors text-left font-medium"
-                >
-                  Add to Calendar
-                </button>
 
                 <button
                   onClick={() => {/* TODO: Share assignment */}}

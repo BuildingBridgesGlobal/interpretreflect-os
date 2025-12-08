@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // GET - Fetch feed posts
 export async function GET(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
     const postType = searchParams.get("post_type");
     const domain = searchParams.get("domain");
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     // Build query for posts with author info from community_profiles
     let query = supabase
@@ -135,18 +133,22 @@ export async function GET(req: NextRequest) {
 // POST - Create new post
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
+
     const body = await req.json();
     const {
-      user_id,
       content,
       post_type = "general",
       ecci_domains = [],
       setting_tags = []
     } = body;
 
-    if (!user_id || !content) {
+    if (!content) {
       return NextResponse.json(
-        { error: "user_id and content are required" },
+        { error: "content is required" },
         { status: 400 }
       );
     }

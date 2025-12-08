@@ -1,26 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // GET - Search for users by name, domain, specialty, or mentor status
 export async function GET(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
     const query = searchParams.get("q") || "";
     const domain = searchParams.get("domain");
     const specialty = searchParams.get("specialty");
     const mentorsOnly = searchParams.get("mentors_only") === "true";
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     // Build search query
     let searchQuery = supabase

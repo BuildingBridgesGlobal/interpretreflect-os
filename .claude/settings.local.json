@@ -21,7 +21,19 @@
       "Bash(find:*)",
       "Bash(for version in 20250127000002 20250128000001 20250128000002)",
       "Bash(do npx supabase migration repair --status applied $version)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(git reset:*)",
+      "Bash(tasklist:*)",
+      "Bash(for version in 20250128000001 20250128000002 20250128_dashboard_features 20250128_interpreteros_schema 20250128_interpreteros_schema_v2 20250129_assignment_participants 20250129_assignments_table 20250129_drill_seed_data 20250129_drill_system 20250129_fix_billing_prices 20250129_safe_billing_prices_migration 20250130_knowledge_base 20250130_seed_module_1_1 20250130_seed_module_1_2 20250130_seed_module_1_3 20250130_seed_module_1_4 20250130_seed_module_1_5 20250130_seed_module_1_6 20250130_skills_module_system 20250130_team_assignments 20250131_add_admin_role 20250131_assignment_templates 20250201_community_system 20250201_credentials_and_organizations 20250201_credentials_and_organizations_safe 20250201_wellness_checkins)",
+      "Bash(do echo \"Repairing $version...\")",
+      "Bash(ls:*)",
+      "Bash(timeout 120 npx tsc:*)",
+      "Bash(echo:*)",
+      "Bash(cmd /c \"taskkill /F /PID 131804\")",
+      "Bash(powershell -Command \"Stop-Process -Id 131804 -Force\")",
+      "Bash(timeout /t 2 /nobreak)",
+      "Bash(cmd /c \"taskkill /F /PID 112576\")",
+      "Bash(powershell -Command \"Stop-Process -Id 112576 -Force\")"
     ],
     "deny": [],
     "ask": []

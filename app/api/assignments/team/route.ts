@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // GET - Get team members for an assignment
 export async function GET(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+
     const { searchParams } = new URL(req.url);
     const assignmentId = searchParams.get("assignment_id");
 
@@ -13,6 +18,34 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         { error: "assignment_id is required" },
         { status: 400 }
+      );
+    }
+
+    // Verify user has access to this assignment (is owner or team member)
+    const { data: assignment } = await supabase
+      .from("assignments")
+      .select("user_id")
+      .eq("id", assignmentId)
+      .single();
+
+    const { data: teamMembership } = await supabase
+      .from("assignment_team_members")
+      .select("id")
+      .eq("assignment_id", assignmentId)
+      .eq("user_id", user!.id)
+      .single();
+
+    if (!assignment && !teamMembership) {
+      return NextResponse.json(
+        { error: "Assignment not found" },
+        { status: 404 }
+      );
+    }
+
+    if (assignment?.user_id !== user!.id && !teamMembership) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 403 }
       );
     }
 
@@ -88,18 +121,22 @@ export async function GET(req: NextRequest) {
 // POST - Invite a team member to an assignment
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const invitedBy = user!.id;
+
     const body = await req.json();
     const {
       assignment_id,
-      user_id,
-      invited_by,
+      user_id, // The user being invited
       role = "team"
     } = body;
 
     // Validate required fields
-    if (!assignment_id || !user_id || !invited_by) {
+    if (!assignment_id || !user_id) {
       return NextResponse.json(
-        { error: "Missing required fields: assignment_id, user_id, invited_by" },
+        { error: "Missing required fields: assignment_id, user_id" },
         { status: 400 }
       );
     }
@@ -115,6 +152,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Assignment not found" },
         { status: 404 }
+      );
+    }
+
+    // Only assignment owner can invite team members
+    if (assignment.user_id !== invitedBy) {
+      return NextResponse.json(
+        { error: "Only assignment owner can invite team members" },
+        { status: 403 }
       );
     }
 
@@ -149,7 +194,7 @@ export async function POST(req: NextRequest) {
         user_id,
         role,
         status: "invited",
-        invited_by,
+        invited_by: invitedBy,
         invited_at: new Date().toISOString()
       })
       .select()
@@ -193,27 +238,31 @@ export async function POST(req: NextRequest) {
 // PUT - Update team member status (accept/decline invitation)
 export async function PUT(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const body = await req.json();
     const {
       team_member_id,
-      user_id,
       status, // "confirmed" or "declined"
       role
     } = body;
 
-    if (!team_member_id || !user_id) {
+    if (!team_member_id) {
       return NextResponse.json(
-        { error: "Missing required fields: team_member_id, user_id" },
+        { error: "Missing required field: team_member_id" },
         { status: 400 }
       );
     }
 
-    // Verify the team member belongs to this user
+    // Verify the team member belongs to the authenticated user
     const { data: existingMember, error: fetchError } = await supabase
       .from("assignment_team_members")
       .select("*")
       .eq("id", team_member_id)
-      .eq("user_id", user_id)
+      .eq("user_id", userId)
       .single();
 
     if (fetchError || !existingMember) {
@@ -264,13 +313,17 @@ export async function PUT(req: NextRequest) {
 // DELETE - Remove a team member from assignment
 export async function DELETE(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const removedBy = user!.id;
+
     const { searchParams } = new URL(req.url);
     const teamMemberId = searchParams.get("team_member_id");
-    const removedBy = searchParams.get("removed_by");
 
-    if (!teamMemberId || !removedBy) {
+    if (!teamMemberId) {
       return NextResponse.json(
-        { error: "team_member_id and removed_by are required" },
+        { error: "team_member_id is required" },
         { status: 400 }
       );
     }

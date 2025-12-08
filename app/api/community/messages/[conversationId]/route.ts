@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
@@ -9,16 +10,11 @@ export async function GET(
   { params }: { params: { conversationId: string } }
 ) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
     const conversationId = params.conversationId;
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     // Verify user is participant in this conversation
     const { data: conversation } = await supabase

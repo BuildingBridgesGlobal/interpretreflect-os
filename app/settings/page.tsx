@@ -511,6 +511,7 @@ export default function SettingsPage() {
   // Account form states
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [ridMemberNumber, setRidMemberNumber] = useState("");
 
   // Credentials states
   const [credentials, setCredentials] = useState<Credential[]>([]);
@@ -599,6 +600,7 @@ export default function SettingsPage() {
         // Account
         setFullName(profileData.full_name || "");
         setEmail(session.user.email || "");
+        setRidMemberNumber(profileData.rid_member_number || "");
         // Community Profile
         setBio(profileData.bio || "");
         setLinkedinUrl(profileData.linkedin_url || "");
@@ -637,6 +639,7 @@ export default function SettingsPage() {
       .from("profiles")
       .update({
         full_name: fullName,
+        rid_member_number: ridMemberNumber || null,
         updated_at: new Date().toISOString()
       })
       .eq("id", session.user.id);
@@ -1187,6 +1190,21 @@ export default function SettingsPage() {
                     className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-800 text-slate-400 cursor-not-allowed"
                   />
                   <p className="text-xs text-slate-500 mt-1">Email cannot be changed</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    RID Member Number
+                    <span className="ml-2 text-xs text-violet-400 font-normal">(For CEU Certificates)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={ridMemberNumber}
+                    onChange={(e) => setRidMemberNumber(e.target.value)}
+                    placeholder="e.g., 12345"
+                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Your Registry of Interpreters for the Deaf member number - appears on CEU certificates</p>
                 </div>
 
                 <button

@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // GET - Fetch connection/mentorship suggestions based on ECCI gaps
 export async function GET(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
     const type = searchParams.get("type") || "connections"; // 'connections' or 'mentors'
     const limit = parseInt(searchParams.get("limit") || "5");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     // Get user's community profile (includes weak/strong domains)
     const { data: userProfile } = await supabase

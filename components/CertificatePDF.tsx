@@ -6,12 +6,14 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
 type CertificateData = {
+  id?: string;
   certificate_number: string;
   title: string;
   description?: string;
   ceu_value: number;
   rid_category: string;
   rid_subcategory?: string;
+  activity_code?: string;
   knowledge_level?: "little_none" | "some" | "extensive";
   issued_at: string;
   completed_at?: string;
@@ -22,23 +24,67 @@ type CertificateData = {
   user_email?: string;
   rid_member_number?: string;
   presenter?: string;
+  instructor_name?: string;
+  instructor_credentials?: string;
+  pdf_storage_path?: string;
 };
 
 type Props = {
   certificate: CertificateData;
   onClose: () => void;
+  accessToken?: string;
 };
 
-export default function CertificatePDF({ certificate, onClose }: Props) {
+export default function CertificatePDF({ certificate, onClose, accessToken }: Props) {
   const certificateRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const downloadPDF = async () => {
-    if (!certificateRef.current) return;
-
     setDownloading(true);
+    setDownloadError(null);
 
     try {
+      // First try to get server-generated PDF if certificate has ID and accessToken
+      if (certificate.id && accessToken) {
+        try {
+          const response = await fetch("/api/ceu/certificate-pdf", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ certificate_id: certificate.id }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.pdf_url) {
+              // Download from signed URL
+              const pdfResponse = await fetch(data.pdf_url);
+              const blob = await pdfResponse.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `CEU-Certificate-${certificate.certificate_number}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              a.remove();
+              setDownloading(false);
+              return;
+            }
+          }
+        } catch (serverError) {
+          console.warn("Server PDF generation failed, falling back to client-side:", serverError);
+        }
+      }
+
+      // Fallback to client-side generation
+      if (!certificateRef.current) {
+        throw new Error("Certificate preview not available");
+      }
+
       const canvas = await html2canvas(certificateRef.current, {
         scale: 2,
         backgroundColor: "#ffffff",
@@ -59,7 +105,7 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
       pdf.save(`CEU-Certificate-${certificate.certificate_number}.pdf`);
     } catch (error) {
       console.error("Error generating PDF:", error);
-      alert("Failed to generate PDF. Please try again.");
+      setDownloadError("Failed to generate PDF. Please try again.");
     }
 
     setDownloading(false);
@@ -172,13 +218,14 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
                   )}
                   <div className="text-sm text-gray-600">Content Area</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-lg font-medium text-gray-800">
-                    {certificate.knowledge_level === "little_none" ? "Little/None" :
-                     certificate.knowledge_level === "extensive" ? "Extensive" : "Some"}
+                {certificate.activity_code && (
+                  <div className="text-center">
+                    <div className="text-lg font-medium text-gray-800 font-mono">
+                      {certificate.activity_code}
+                    </div>
+                    <div className="text-sm text-gray-600">Activity Code</div>
                   </div>
-                  <div className="text-sm text-gray-600">Knowledge Level</div>
-                </div>
+                )}
                 {certificate.assessment_score && (
                   <div className="text-center">
                     <div className="text-lg font-medium text-gray-800">
@@ -212,9 +259,11 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
                 <div className="text-center mb-4 pb-4 border-b border-gray-200">
                   <p className="text-sm text-gray-600 mb-1">Presenter</p>
                   <p className="text-gray-800 font-medium">
-                    {certificate.presenter || "Sarah Wheeler, MA"}
+                    {certificate.instructor_name || certificate.presenter || "Sarah Wheeler, MA"}
                   </p>
-                  <p className="text-xs text-gray-500">Founder, Building Bridges Global LLC</p>
+                  <p className="text-xs text-gray-500">
+                    {certificate.instructor_credentials || "Founder, Building Bridges Global LLC"}
+                  </p>
                 </div>
 
                 <div className="flex justify-between items-end px-8">
@@ -246,13 +295,25 @@ export default function CertificatePDF({ certificate, onClose }: Props) {
                   </div>
                 </div>
 
-                <div className="text-center mt-4 text-xs text-gray-400">
-                  Building Bridges Global LLC • InterpretReflect Platform • www.interpretreflect.com
+                <div className="text-center mt-4 space-y-1">
+                  <div className="text-xs text-gray-500">
+                    Verify at: <span className="font-mono text-gray-600">interpretreflect.com/verify/{certificate.certificate_number}</span>
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Building Bridges Global LLC • InterpretReflect Platform • www.interpretreflect.com
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Error display */}
+        {downloadError && (
+          <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-sm">
+            {downloadError}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3 justify-end">

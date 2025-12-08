@@ -6,6 +6,9 @@ import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 import { motion, AnimatePresence } from "framer-motion";
 import AssessmentQuiz from "@/components/AssessmentQuiz";
+import VideoPlayer from "@/components/VideoPlayer";
+import CEUInfoGate from "@/components/CEUInfoGate";
+import CEUEvaluation from "@/components/CEUEvaluation";
 
 type ContentBlock = {
   type: string;
@@ -69,6 +72,11 @@ type UserProgress = {
   started_at: string | null;
   completed_at: string | null;
   time_spent_seconds: number;
+  // CEU compliance fields
+  wants_ceu: boolean;
+  video_completed: boolean;
+  evaluation_completed: boolean;
+  evaluation_id: string | null;
 };
 
 type ReflectionMessage = {
@@ -94,6 +102,12 @@ export default function ModulePage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sectionStartTime = useRef<number>(Date.now());
 
+  // CEU compliance state
+  const [showCEUGate, setShowCEUGate] = useState(false);
+  const [showEvaluation, setShowEvaluation] = useState(false);
+  const [wantsCeu, setWantsCeu] = useState(true);
+  const [accessToken, setAccessToken] = useState<string | undefined>();
+
   useEffect(() => {
     loadData();
   }, [moduleCode]);
@@ -116,6 +130,7 @@ export default function ModulePage() {
     }
 
     setUser(session.user);
+    setAccessToken(session.access_token);
 
     // Load module with series data (including CEU fields)
     const { data: moduleData } = await (supabase as any)
@@ -499,7 +514,8 @@ export default function ModulePage() {
       updated_at: new Date().toISOString()
     };
 
-    if (passed) {
+    // Don't mark fully complete until evaluation is done (if user wants CEU)
+    if (passed && !wantsCeu) {
       updates.status = "completed";
       updates.completed_at = new Date().toISOString();
     }
@@ -520,10 +536,14 @@ export default function ModulePage() {
       setProgress(updatedProgress);
     }
 
-    // Navigate back to skills page on completion
-    if (passed) {
-      router.push("/skills?completed=true&ceu=" + (module?.ceu_value || 0));
+    // If passed and user wants CEU, show evaluation form
+    if (passed && wantsCeu) {
+      setShowEvaluation(true);
+    } else if (passed) {
+      // User doesn't want CEU, navigate directly to skills
+      router.push("/skills?completed=true");
     }
+    // If failed, AssessmentQuiz handles retry UI
   };
 
   const renderSection = () => {
@@ -548,6 +568,7 @@ export default function ModulePage() {
           passThreshold={module.assessment_pass_threshold || 80}
           onComplete={handleAssessmentComplete}
           onBack={() => setCurrentSection("application")}
+          accessToken={accessToken}
         />
       );
     }
@@ -725,6 +746,30 @@ export default function ModulePage() {
           </motion.div>
         )}
 
+        {/* Video Player for modules with video content */}
+        {currentSection === "concept" && module.has_video && module.video_url && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="mb-8"
+          >
+            <VideoPlayer
+              videoUrl={module.video_url}
+              title={module.title}
+              duration={module.duration_minutes}
+              onComplete={() => {
+                console.log("Video completed for module:", module.module_code);
+              }}
+              onProgress={(percent) => {
+                if (percent >= 90) {
+                  console.log("Video 90% watched for module:", module.module_code);
+                }
+              }}
+            />
+          </motion.div>
+        )}
+
         <motion.div
           className="max-w-2xl"
           variants={containerVariants}
@@ -750,11 +795,51 @@ export default function ModulePage() {
 
     const currentIndex = sectionOrder.indexOf(currentSection);
 
+    // Check if next section is assessment - show CEU gate first
+    if (currentSection === "application" && module?.ceu_eligible && module?.assessment_questions) {
+      // Show CEU info gate before assessment
+      setShowCEUGate(true);
+      return;
+    }
+
     if (currentIndex < sectionOrder.length - 1) {
       setCurrentSection(sectionOrder[currentIndex + 1]);
     } else {
       // Module complete
       router.push("/skills");
+    }
+  };
+
+  // Handler when CEU gate is completed
+  const handleCEUGateComplete = async (wantsCeuCredit: boolean) => {
+    setShowCEUGate(false);
+    setWantsCeu(wantsCeuCredit);
+
+    // Update progress with wants_ceu preference
+    if (progress) {
+      await (supabase as any)
+        .from("user_module_progress")
+        .update({
+          wants_ceu: wantsCeuCredit,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", progress.id);
+    }
+
+    // Proceed to assessment
+    setCurrentSection("assessment");
+  };
+
+  // Handler when evaluation is completed and certificate is issued
+  const handleEvaluationComplete = async (certificate?: any) => {
+    setShowEvaluation(false);
+
+    if (certificate) {
+      // Certificate was successfully issued - navigate to CEU dashboard
+      router.push("/ceu?new_certificate=" + certificate.certificate_number);
+    } else {
+      // Fallback - just go to skills
+      router.push("/skills?completed=true&ceu=" + (module?.ceu_value || 0));
     }
   };
 
@@ -797,8 +882,42 @@ export default function ModulePage() {
     ? [...baseSectionProgress, { key: "assessment", label: "CEU Quiz", completed: progress?.assessment_completed || false }]
     : baseSectionProgress;
 
+  // Render evaluation form if showing
+  if (showEvaluation && progress && module) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <NavBar />
+        <div className="container mx-auto max-w-5xl px-4 md:px-6 py-6 md:py-8">
+          <CEUEvaluation
+            userId={user.id}
+            moduleId={module.id}
+            moduleTitle={module.title}
+            progressId={progress.id}
+            ceuValue={module.ceu_value || 0}
+            accessToken={accessToken}
+            onComplete={handleEvaluationComplete}
+            onBack={() => setShowEvaluation(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950">
+      {/* CEU Info Gate Modal */}
+      <AnimatePresence>
+        {showCEUGate && user && module && (
+          <CEUInfoGate
+            userId={user.id}
+            moduleId={module.id}
+            moduleTitle={module.title}
+            ceuValue={module.ceu_value || 0}
+            onComplete={handleCEUGateComplete}
+            onCancel={() => setShowCEUGate(false)}
+          />
+        )}
+      </AnimatePresence>
       <NavBar />
       <motion.div
         initial={{ opacity: 0 }}

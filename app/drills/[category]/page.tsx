@@ -108,12 +108,18 @@ export default function DrillSessionPage() {
     const currentDrill = drills[currentIndex];
 
     try {
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
       // Submit the attempt
       const response = await fetch("/api/drills/attempts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
-          user_id: user.id,
           drill_id: currentDrill.id,
           user_answer: selectedAnswer,
           confidence_level: confidence,

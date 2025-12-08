@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // POST - Submit a drill attempt
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
+
     const body = await req.json();
     const {
-      user_id,
       drill_id,
       session_id,
       user_answer,
@@ -16,9 +21,9 @@ export async function POST(req: NextRequest) {
       response_time_seconds
     } = body;
 
-    if (!user_id || !drill_id || !user_answer) {
+    if (!drill_id || !user_answer) {
       return NextResponse.json(
-        { error: "Missing required fields: user_id, drill_id, user_answer" },
+        { error: "Missing required fields: drill_id, user_answer" },
         { status: 400 }
       );
     }

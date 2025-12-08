@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+
     const body = await req.json();
     const {
-      user_id,
       title,
       assignment_type,
       date,
@@ -24,10 +28,13 @@ export async function POST(req: NextRequest) {
       recurrence_end_date,
     } = body;
 
+    // Use authenticated user's ID
+    const user_id = user!.id;
+
     // Validate required fields
-    if (!user_id || !title || !assignment_type || !date) {
+    if (!title || !assignment_type || !date) {
       return NextResponse.json(
-        { error: "Missing required fields: user_id, title, assignment_type, date" },
+        { error: "Missing required fields: title, assignment_type, date" },
         { status: 400 }
       );
     }

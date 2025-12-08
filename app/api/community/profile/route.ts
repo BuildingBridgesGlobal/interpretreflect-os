@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { validateAuth } from "@/lib/apiAuth";
 
 const supabase = supabaseAdmin;
 
 // GET - Get user's community profile
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("user_id");
-    const viewUserId = searchParams.get("view_user_id"); // If viewing another user's profile
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
+    const { searchParams } = new URL(req.url);
+    const viewUserId = searchParams.get("view_user_id"); // If viewing another user's profile
 
     const targetUserId = viewUserId || userId;
 
@@ -122,9 +120,13 @@ export async function GET(req: NextRequest) {
 // POST - Create community profile
 export async function POST(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
+
     const body = await req.json();
     const {
-      user_id,
       display_name,
       bio,
       // New fields
@@ -143,9 +145,9 @@ export async function POST(req: NextRequest) {
       seeking_mentor
     } = body;
 
-    if (!user_id || !display_name) {
+    if (!display_name) {
       return NextResponse.json(
-        { error: "user_id and display_name are required" },
+        { error: "display_name is required" },
         { status: 400 }
       );
     }
@@ -215,9 +217,13 @@ export async function POST(req: NextRequest) {
 // PUT - Update community profile
 export async function PUT(req: NextRequest) {
   try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const user_id = user!.id;
+
     const body = await req.json();
     const {
-      user_id,
       display_name,
       bio,
       // New fields
@@ -236,13 +242,6 @@ export async function PUT(req: NextRequest) {
       certifications,
       seeking_mentor
     } = body;
-
-    if (!user_id) {
-      return NextResponse.json(
-        { error: "user_id is required" },
-        { status: 400 }
-      );
-    }
 
     // Build update object with only provided fields
     const updates: any = {};
