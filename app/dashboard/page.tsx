@@ -119,12 +119,20 @@ function DashboardPageContent() {
         setRecentAssignments(recentData);
       }
 
-      // Fetch CEU summary
+      // Fetch CEU summary (requires auth token)
       try {
-        const ceuResponse = await fetch('/api/ceu?action=summary');
-        if (ceuResponse.ok) {
-          const ceuData = await ceuResponse.json();
-          setCeuSummary(ceuData);
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (currentSession?.access_token) {
+          const ceuResponse = await fetch('/api/ceu?action=summary', {
+            headers: {
+              'Authorization': `Bearer ${currentSession.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (ceuResponse.ok) {
+            const ceuData = await ceuResponse.json();
+            setCeuSummary(ceuData);
+          }
         }
       } catch (error) {
         console.error('Error fetching CEU summary:', error);
