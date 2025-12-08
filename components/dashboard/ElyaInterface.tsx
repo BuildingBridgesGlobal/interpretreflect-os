@@ -482,14 +482,15 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
     }
   };
 
-  // Save mood and end conversation
+  // Save mood and end conversation with AI-generated title and tags
   const saveMoodAndEndConversation = async (moodEmoji: string | null) => {
     setSavingMood(true);
 
     // Find the sentiment for this mood
     const moodData = MOOD_EMOJIS.find(m => m.emoji === moodEmoji);
 
-    if (conversationId) {
+    if (conversationId && messages.length > 1) {
+      // First, save the basic mood data immediately
       await supabase
         .from("elya_conversations")
         .update({
@@ -499,6 +500,11 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
           ended_at: new Date().toISOString()
         })
         .eq("id", conversationId);
+
+      // Then, generate AI title and tags asynchronously (don't block UI)
+      generateTitleAndTags(conversationId, messages).catch(err => {
+        console.error("Error generating title/tags:", err);
+      });
     }
 
     // Reset state
@@ -509,6 +515,32 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
     setWellnessSubmitted(false);
     setShowMoodPicker(false);
     setSavingMood(false);
+  };
+
+  // Generate AI title and tags for conversation
+  const generateTitleAndTags = async (convoId: string, convoMessages: Message[]) => {
+    try {
+      const response = await fetch("/api/conversation/generate-metadata", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: convoId,
+          messages: convoMessages.map(m => ({
+            role: m.role,
+            content: m.content
+          })),
+          mode: mode
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate metadata");
+      }
+
+      // The API will update the database directly
+    } catch (error) {
+      console.error("Error generating conversation metadata:", error);
+    }
   };
 
   const confirmNewConversation = async () => {
