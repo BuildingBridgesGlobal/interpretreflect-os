@@ -87,6 +87,16 @@ export default function NavBar() {
                 Dashboard
               </Link>
               <Link
+                href="/journal"
+                className={`text-sm font-medium transition-colors ${
+                  isActive("/journal")
+                    ? "text-teal-400"
+                    : "text-slate-300 hover:text-teal-300"
+                }`}
+              >
+                Journal
+              </Link>
+              <Link
                 href="/assignments"
                 className={`text-sm font-medium transition-colors ${
                   isActive("/assignments") || pathname?.startsWith("/assignments")

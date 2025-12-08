@@ -148,6 +148,15 @@ const postDebriefFeelings = [
   { id: "drained", label: "Drained", emoji: "🔋", color: "rose", description: "Tired" },
 ] as const;
 
+// Mood emoji options for journal (spec requirement)
+const MOOD_EMOJIS = [
+  { emoji: "😤", label: "Frustrated", sentiment: "difficult" },
+  { emoji: "😢", label: "Sad", sentiment: "difficult" },
+  { emoji: "😐", label: "Neutral", sentiment: "neutral" },
+  { emoji: "😊", label: "Happy", sentiment: "joyful" },
+  { emoji: "🌟", label: "Amazing", sentiment: "joyful" },
+] as const;
+
 export default function ElyaInterface({ userData, preFillMessage, onMessageSent, recentAssignments = [], initialMode = "chat" }: ElyaInterfaceProps) {
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<ElyaMode>(initialMode);
@@ -163,6 +172,8 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
   const [showWellnessPrompt, setShowWellnessPrompt] = useState(false);
   const [wellnessSubmitted, setWellnessSubmitted] = useState(false);
   const [submittingWellness, setSubmittingWellness] = useState(false);
+  const [showMoodPicker, setShowMoodPicker] = useState(false);
+  const [savingMood, setSavingMood] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -463,7 +474,41 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
   };
 
   const startNewConversation = () => {
-    setShowNewChatModal(true);
+    // Only show mood picker if there's a meaningful conversation (more than just opening message)
+    if (messages.length > 1 && conversationId) {
+      setShowMoodPicker(true);
+    } else {
+      setShowNewChatModal(true);
+    }
+  };
+
+  // Save mood and end conversation
+  const saveMoodAndEndConversation = async (moodEmoji: string | null) => {
+    setSavingMood(true);
+
+    // Find the sentiment for this mood
+    const moodData = MOOD_EMOJIS.find(m => m.emoji === moodEmoji);
+
+    if (conversationId) {
+      await supabase
+        .from("elya_conversations")
+        .update({
+          is_active: false,
+          mood_emoji: moodEmoji,
+          sentiment: moodData?.sentiment || null,
+          ended_at: new Date().toISOString()
+        })
+        .eq("id", conversationId);
+    }
+
+    // Reset state
+    setConversationId(null);
+    setSelectedAssignment(null);
+    setMessages([{ role: "elya", content: OPENING_MESSAGE, timestamp: new Date() }]);
+    setShowWellnessPrompt(false);
+    setWellnessSubmitted(false);
+    setShowMoodPicker(false);
+    setSavingMood(false);
   };
 
   const confirmNewConversation = async () => {
@@ -825,6 +870,55 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Mood Picker Modal */}
+      {showMoodPicker && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-slate-900 rounded-xl border border-slate-700 max-w-md w-full p-6 shadow-2xl"
+          >
+            <div className="text-center mb-6">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full overflow-hidden shadow-lg shadow-violet-500/20">
+                <img src="/elya.jpg" alt="Elya" className="w-full h-full object-cover" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">How did this feel?</h3>
+              <p className="text-sm text-slate-400">
+                Before we start fresh, take a moment to reflect on this conversation.
+              </p>
+            </div>
+
+            {/* Mood Emoji Options */}
+            <div className="flex justify-center gap-3 mb-6">
+              {MOOD_EMOJIS.map(({ emoji, label }) => (
+                <motion.button
+                  key={emoji}
+                  onClick={() => saveMoodAndEndConversation(emoji)}
+                  disabled={savingMood}
+                  className="flex flex-col items-center gap-2 p-3 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-700 hover:border-violet-500/50 transition-all group disabled:opacity-50"
+                  whileHover={{ scale: 1.05, y: -2 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <span className="text-3xl group-hover:scale-110 transition-transform">{emoji}</span>
+                  <span className="text-xs text-slate-400 group-hover:text-slate-300">{label}</span>
+                </motion.button>
+              ))}
+            </div>
+
+            {/* Skip Button */}
+            <div className="text-center">
+              <button
+                onClick={() => saveMoodAndEndConversation(null)}
+                disabled={savingMood}
+                className="text-sm text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50"
+              >
+                {savingMood ? "Saving..." : "Skip and start new chat"}
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>
