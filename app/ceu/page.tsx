@@ -109,6 +109,16 @@ export default function CEUDashboard() {
   });
   const [showGrievanceForm, setShowGrievanceForm] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [durationFilter, setDurationFilter] = useState<"all" | "under10" | "under30" | "deepDive">("all");
+
+  // Filter workshops by duration
+  const filteredWorkshops = availableWorkshops.filter((workshop) => {
+    if (durationFilter === "all") return true;
+    if (durationFilter === "under10") return workshop.duration_minutes <= 10;
+    if (durationFilter === "under30") return workshop.duration_minutes <= 30;
+    if (durationFilter === "deepDive") return workshop.duration_minutes > 30;
+    return true;
+  });
 
   useEffect(() => {
     loadCEUData();
@@ -1028,9 +1038,37 @@ export default function CEUDashboard() {
               </div>
             </div>
 
+            {/* Duration Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-400 mr-2">Filter by time:</span>
+              {[
+                { key: "all", label: "All" },
+                { key: "under10", label: "Under 10 min" },
+                { key: "under30", label: "Under 30 min" },
+                { key: "deepDive", label: "Deep Dive (30+)" },
+              ].map((filter) => (
+                <button
+                  key={filter.key}
+                  onClick={() => setDurationFilter(filter.key as typeof durationFilter)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    durationFilter === filter.key
+                      ? "bg-teal-500 text-slate-900"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+              {durationFilter !== "all" && (
+                <span className="ml-2 text-xs text-slate-500">
+                  ({filteredWorkshops.length} workshop{filteredWorkshops.length !== 1 ? "s" : ""})
+                </span>
+              )}
+            </div>
+
             {/* Workshop Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableWorkshops.map((workshop) => {
+              {filteredWorkshops.map((workshop) => {
                 // Check if user has progress on this workshop
                 const progress = moduleProgress.find(p => p.skill_modules?.module_code === workshop.module_code);
                 const isCompleted = progress?.status === "completed";
@@ -1118,6 +1156,19 @@ export default function CEUDashboard() {
             </div>
 
             {/* No workshops fallback */}
+            {filteredWorkshops.length === 0 && availableWorkshops.length > 0 && (
+              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-8 text-center">
+                <p className="text-slate-400">
+                  No workshops match this filter. Try a different duration.
+                </p>
+                <button
+                  onClick={() => setDurationFilter("all")}
+                  className="mt-3 text-sm text-teal-400 hover:text-teal-300"
+                >
+                  Show all workshops
+                </button>
+              </div>
+            )}
             {availableWorkshops.length === 0 && (
               <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-12 text-center">
                 <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
