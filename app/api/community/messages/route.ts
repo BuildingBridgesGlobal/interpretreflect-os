@@ -75,6 +75,8 @@ export async function GET(req: NextRequest) {
           id,
           is_group,
           group_name,
+          conversation_type,
+          assignment_id,
           created_at,
           updated_at
         )
@@ -135,10 +137,24 @@ export async function GET(req: NextRequest) {
         // For DMs, get the other participant
         const otherParticipants = allParticipants?.filter(p => p.user_id !== userId) || [];
 
+        // Get assignment details if this is a teaming conversation
+        let assignment: { id: string; title: string; date: string; time: string; setting: string; location_type: string; assignment_type: string } | null = null;
+        if (conv.assignment_id) {
+          const { data: assignmentData } = await supabase
+            .from("assignments")
+            .select("id, title, date, time, setting, location_type, assignment_type")
+            .eq("id", conv.assignment_id)
+            .single();
+          assignment = assignmentData;
+        }
+
         return {
           id: conv.id,
           is_group: conv.is_group,
           group_name: conv.group_name,
+          conversation_type: conv.conversation_type || "personal",
+          assignment_id: conv.assignment_id || null,
+          assignment: assignment,
           participants: otherParticipants.map((p: any) => ({
             user_id: p.user_id,
             display_name: p.community_profiles?.display_name || "Unknown",

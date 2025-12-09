@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -524,6 +524,8 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [ridMemberNumber, setRidMemberNumber] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
 
   // Password change states
   const [currentPassword, setCurrentPassword] = useState("");
@@ -545,9 +547,46 @@ export default function SettingsPage() {
   });
 
   // Community Profile form states
+  const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isDeafInterpreter, setIsDeafInterpreter] = useState(false);
+  const [yearsExperience, setYearsExperience] = useState<number | null>(null);
+  const [settingsWorkIn, setSettingsWorkIn] = useState<string[]>([]);
+  const [offerSupportIn, setOfferSupportIn] = useState<string[]>([]);
+  const [seekingGuidanceIn, setSeekingGuidanceIn] = useState<string[]>([]);
   const [openToMentoring, setOpenToMentoring] = useState(false);
+  const [lookingForMentor, setLookingForMentor] = useState(false);
+  const [isSearchable, setIsSearchable] = useState(true);
+  const [communityProfileExists, setCommunityProfileExists] = useState(false);
+  const [loadingCommunityProfile, setLoadingCommunityProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Community Affiliations state
+  interface CommunityAffiliation {
+    id: string;
+    name: string;
+    short_code: string;
+    category: "identity" | "background" | "specialty";
+    aligned_org: string | null;
+    description: string | null;
+  }
+  interface UserAffiliation {
+    id: string;
+    affiliation_id: string;
+    visible_in_community: boolean;
+    affiliation?: CommunityAffiliation;
+  }
+  const [allAffiliations, setAllAffiliations] = useState<{
+    identity: CommunityAffiliation[];
+    background: CommunityAffiliation[];
+    specialty: CommunityAffiliation[];
+  }>({ identity: [], background: [], specialty: [] });
+  const [userAffiliations, setUserAffiliations] = useState<UserAffiliation[]>([]);
+  const [loadingAffiliations, setLoadingAffiliations] = useState(false);
+  const [togglingAffiliation, setTogglingAffiliation] = useState<string | null>(null);
 
   // Preferences
   const [emailNotifications, setEmailNotifications] = useState(true);
@@ -619,10 +658,8 @@ export default function SettingsPage() {
         setFullName(profileData.full_name || "");
         setEmail(session.user.email || "");
         setRidMemberNumber(profileData.rid_member_number || "");
-        // Community Profile
-        setBio(profileData.bio || "");
-        setLinkedinUrl(profileData.linkedin_url || "");
-        setOpenToMentoring(profileData.open_to_mentoring || false);
+        setCity(profileData.city || "");
+        setState(profileData.state || "");
         // Preferences
         setEmailNotifications(profileData.email_notifications ?? true);
         setWeeklyReports(profileData.weekly_reports ?? true);
@@ -633,10 +670,119 @@ export default function SettingsPage() {
         setDataSharing(profileData.data_sharing || "anonymous");
       }
 
+      // Load community profile from API
+      try {
+        const response = await fetch("/api/community/profile", {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+          if (data.needs_setup) {
+            setDisplayName(data.suggested_display_name || profile?.full_name || "");
+            setCommunityProfileExists(false);
+          } else if (data.profile) {
+            const cp = data.profile;
+            setDisplayName(cp.display_name || "");
+            setBio(cp.bio || "");
+            setAvatarUrl(cp.avatar_url || null);
+            setIsDeafInterpreter(cp.is_deaf_interpreter || false);
+            setYearsExperience(cp.years_experience || null);
+            setSettingsWorkIn(cp.settings_work_in || cp.specialties || []);
+            setOfferSupportIn(cp.offer_support_in || cp.strong_domains || []);
+            setSeekingGuidanceIn(cp.seeking_guidance_in || cp.weak_domains || []);
+            setOpenToMentoring(cp.open_to_mentoring || false);
+            setLookingForMentor(cp.looking_for_mentor || cp.seeking_mentor || false);
+            setIsSearchable(cp.is_searchable !== false);
+            setCommunityProfileExists(true);
+          }
+        } else {
+          console.error("Community profile API error:", data);
+        }
+      } catch (err) {
+        console.error("Error loading community profile:", err);
+      }
+
+      // Load affiliations
+      try {
+        setLoadingAffiliations(true);
+        const affResponse = await fetch("/api/community/affiliations?include_user=true", {
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (affResponse.ok) {
+          const affData = await affResponse.json();
+          setAllAffiliations(affData.grouped || { identity: [], background: [], specialty: [] });
+          setUserAffiliations(affData.userAffiliations || []);
+        }
+      } catch (err) {
+        console.error("Error loading affiliations:", err);
+      } finally {
+        setLoadingAffiliations(false);
+      }
+
       setLoading(false);
     };
     loadUserData();
   }, [router]);
+
+  // Toggle affiliation selection
+  const handleToggleAffiliation = async (affiliationId: string) => {
+    setTogglingAffiliation(affiliationId);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      showMessage("error", "Session expired");
+      setTogglingAffiliation(null);
+      return;
+    }
+
+    const isSelected = userAffiliations.some(ua => ua.affiliation_id === affiliationId);
+
+    try {
+      if (isSelected) {
+        // Remove affiliation
+        const response = await fetch(`/api/community/affiliations?affiliation_id=${affiliationId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+        if (response.ok) {
+          setUserAffiliations(prev => prev.filter(ua => ua.affiliation_id !== affiliationId));
+        } else {
+          const data = await response.json();
+          showMessage("error", data.error || "Failed to remove affiliation");
+        }
+      } else {
+        // Add affiliation
+        const response = await fetch("/api/community/affiliations", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ affiliation_id: affiliationId, visible_in_community: true })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          // Find the affiliation details from allAffiliations
+          const allAffs = [...allAffiliations.identity, ...allAffiliations.background, ...allAffiliations.specialty];
+          const affDetails = allAffs.find(a => a.id === affiliationId);
+          setUserAffiliations(prev => [...prev, {
+            id: data.userAffiliation?.id || affiliationId,
+            affiliation_id: affiliationId,
+            visible_in_community: true,
+            affiliation: affDetails
+          }]);
+        } else {
+          const data = await response.json();
+          showMessage("error", data.error || "Failed to add affiliation");
+        }
+      }
+    } catch (err) {
+      console.error("Toggle affiliation error:", err);
+      showMessage("error", "Failed to update affiliation");
+    } finally {
+      setTogglingAffiliation(null);
+    }
+  };
 
   // Helper to show save feedback
   const showMessage = (type: "success" | "error", text: string) => {
@@ -658,6 +804,8 @@ export default function SettingsPage() {
       .update({
         full_name: fullName,
         rid_member_number: ridMemberNumber || null,
+        city: city || null,
+        state: state || null,
         updated_at: new Date().toISOString()
       })
       .eq("id", session.user.id);
@@ -711,6 +859,11 @@ export default function SettingsPage() {
   };
 
   const handleSaveProfile = async () => {
+    if (!displayName.trim()) {
+      showMessage("error", "Display name is required");
+      return;
+    }
+
     setSaving(true);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -719,22 +872,122 @@ export default function SettingsPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        bio,
-        linkedin_url: linkedinUrl,
-        open_to_mentoring: openToMentoring,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", session.user.id);
+    const profileData = {
+      display_name: displayName.trim(),
+      bio: bio.trim() || null,
+      is_deaf_interpreter: isDeafInterpreter,
+      years_experience: yearsExperience,
+      settings_work_in: settingsWorkIn,
+      offer_support_in: offerSupportIn,
+      seeking_guidance_in: seekingGuidanceIn,
+      open_to_mentoring: openToMentoring,
+      looking_for_mentor: lookingForMentor,
+      is_searchable: isSearchable,
+    };
 
-    setSaving(false);
-    if (error) {
-      showMessage("error", "Failed to save. Please try again.");
+    try {
+      const response = await fetch("/api/community/profile", {
+        method: communityProfileExists ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(profileData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save profile");
+      }
+
+      setCommunityProfileExists(true);
+      showMessage("success", communityProfileExists ? "Profile updated!" : "Profile created!");
+    } catch (error: any) {
       console.error("Save error:", error);
+      showMessage("error", error.message || "Failed to save profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle avatar upload
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      showMessage("error", "Invalid file type. Use JPEG, PNG, GIF, or WebP.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      showMessage("error", "File too large. Maximum size is 2MB.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        showMessage("error", "Please sign in to upload avatar");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/community/profile/upload-avatar", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to upload avatar");
+
+      setAvatarUrl(data.url);
+      showMessage("success", "Avatar uploaded!");
+    } catch (error: any) {
+      showMessage("error", error.message || "Failed to upload avatar");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  // Handle avatar removal
+  const handleRemoveAvatar = async () => {
+    setUploadingAvatar(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch("/api/community/profile/upload-avatar", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to remove avatar");
+      }
+
+      setAvatarUrl(null);
+      showMessage("success", "Avatar removed");
+    } catch (error: any) {
+      showMessage("error", error.message || "Failed to remove avatar");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  // Toggle item in array helper
+  const toggleArrayItem = (array: string[], item: string, setter: (arr: string[]) => void) => {
+    if (array.includes(item)) {
+      setter(array.filter((i) => i !== item));
     } else {
-      showMessage("success", "Profile saved!");
+      setter([...array, item]);
     }
   };
 
@@ -1249,19 +1502,49 @@ export default function SettingsPage() {
                   <p className="text-xs text-slate-500 mt-1">Email cannot be changed</p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    RID Member Number
-                    <span className="ml-2 text-xs text-violet-400 font-normal">(For CEU Certificates)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={ridMemberNumber}
-                    onChange={(e) => setRidMemberNumber(e.target.value)}
-                    placeholder="e.g., 12345"
-                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Your Registry of Interpreters for the Deaf member number - appears on CEU certificates</p>
+                {/* RID CEU Information Section */}
+                <div className="border-t border-slate-700 pt-4 mt-4">
+                  <h4 className="text-sm font-medium text-violet-400 mb-3">RID CEU Information</h4>
+                  <p className="text-xs text-slate-400 mb-4">Required for processing RID Continuing Education Units</p>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        RID Member Number
+                      </label>
+                      <input
+                        type="text"
+                        value={ridMemberNumber}
+                        onChange={(e) => setRidMemberNumber(e.target.value)}
+                        placeholder="e.g., 12345"
+                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">City</label>
+                        <input
+                          type="text"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          placeholder="e.g., Denver"
+                          className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">State</label>
+                        <input
+                          type="text"
+                          value={state}
+                          onChange={(e) => setState(e.target.value.toUpperCase())}
+                          placeholder="e.g., CO"
+                          maxLength={2}
+                          className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400 uppercase"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <button
@@ -1324,38 +1607,177 @@ export default function SettingsPage() {
 
         {selectedTab === "profile" && (
           <div className="max-w-2xl space-y-6">
+            {/* Profile Picture */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-4">Profile Picture</h3>
+              <div className="flex items-center gap-6">
+                <div className="relative">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Avatar"
+                      className="w-20 h-20 rounded-full object-cover border-2 border-teal-500/50"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center">
+                      <span className="text-2xl font-bold text-white">
+                        {displayName.charAt(0).toUpperCase() || "?"}
+                      </span>
+                    </div>
+                  )}
+                  {uploadingAvatar && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors disabled:opacity-50 text-sm"
+                  >
+                    Upload Photo
+                  </button>
+                  {avatarUrl && (
+                    <button
+                      onClick={handleRemoveAvatar}
+                      disabled={uploadingAvatar}
+                      className="px-4 py-2 text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 text-sm"
+                    >
+                      Remove Photo
+                    </button>
+                  )}
+                  <p className="text-xs text-slate-500">Max 2MB. JPEG, PNG, GIF, or WebP.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Basic Information */}
             <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
               <h3 className="text-lg font-semibold text-slate-100 mb-2">Community Profile</h3>
               <p className="text-sm text-slate-300 mb-4">This information is visible to other interpreters in the Community tab</p>
 
               <div className="space-y-4">
                 <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Display Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="How you want to be known in the community"
+                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  />
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Bio</label>
                   <textarea
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
                     rows={4}
-                    placeholder="Tell other interpreters about yourself, your specialties, and what you're passionate about..."
+                    maxLength={500}
+                    placeholder="Tell other interpreters about yourself..."
                     className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Max 500 characters</p>
+                  <p className="text-xs text-slate-500 mt-1">{bio.length}/500 characters</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">LinkedIn Profile (Optional)</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Years of Experience</label>
                   <input
-                    type="url"
-                    value={linkedinUrl}
-                    onChange={(e) => setLinkedinUrl(e.target.value)}
-                    placeholder="https://linkedin.com/in/yourprofile"
+                    type="number"
+                    value={yearsExperience ?? ""}
+                    onChange={(e) => setYearsExperience(e.target.value ? parseInt(e.target.value) : null)}
+                    placeholder="e.g., 5"
+                    min="0"
+                    max="60"
                     className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
                   />
                 </div>
+              </div>
+            </div>
 
+            {/* Settings I Work In */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">Settings I Work In</h3>
+              <p className="text-sm text-slate-400 mb-4">Select the settings where you typically interpret</p>
+              <div className="flex flex-wrap gap-2">
+                {["Medical", "Legal", "Educational", "Mental Health", "VRS/VRI", "Conference", "Community", "Religious", "Government", "Business", "Performing Arts", "DeafBlind", "Platform", "Emergency"].map((setting) => (
+                  <button
+                    key={setting}
+                    onClick={() => toggleArrayItem(settingsWorkIn, setting, setSettingsWorkIn)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      settingsWorkIn.includes(setting)
+                        ? "bg-teal-600 text-white"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    {setting}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Areas I Can Offer Support */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">Areas I Can Offer Support</h3>
+              <p className="text-sm text-slate-400 mb-4">Topics where you feel confident helping others</p>
+              <div className="flex flex-wrap gap-2">
+                {["Medical Terminology", "Legal Terminology", "Educational Settings", "Mental Health", "Technical/IT", "Business/Finance", "Government/Civic", "Religious/Spiritual", "Performing Arts", "DeafBlind Interpreting", "Trilingual/Multilingual", "CDI Work"].map((domain) => (
+                  <button
+                    key={domain}
+                    onClick={() => toggleArrayItem(offerSupportIn, domain, setOfferSupportIn)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      offerSupportIn.includes(domain)
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    {domain}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Areas I'm Seeking Guidance */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">Areas I&apos;m Seeking Guidance</h3>
+              <p className="text-sm text-slate-400 mb-4">Topics where you&apos;d appreciate help from others</p>
+              <div className="flex flex-wrap gap-2">
+                {["Medical Terminology", "Legal Terminology", "Educational Settings", "Mental Health", "Technical/IT", "Business/Finance", "Government/Civic", "Religious/Spiritual", "Performing Arts", "DeafBlind Interpreting", "Trilingual/Multilingual", "CDI Work"].map((domain) => (
+                  <button
+                    key={domain}
+                    onClick={() => toggleArrayItem(seekingGuidanceIn, domain, setSeekingGuidanceIn)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      seekingGuidanceIn.includes(domain)
+                        ? "bg-amber-600 text-white"
+                        : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    }`}
+                  >
+                    {domain}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Mentoring */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-4">Mentoring</h3>
+              <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/50">
                   <div>
-                    <p className="text-sm font-medium text-slate-100">Open to Mentoring</p>
-                    <p className="text-xs text-slate-400">Show up in mentor recommendations for other interpreters</p>
+                    <p className="text-sm font-medium text-slate-100">Open to Mentoring Others</p>
+                    <p className="text-xs text-slate-400">Show a mentor badge on your profile</p>
                   </div>
                   <button
                     onClick={() => setOpenToMentoring(!openToMentoring)}
@@ -1371,14 +1793,187 @@ export default function SettingsPage() {
                   </button>
                 </div>
 
+                <div className="flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/50">
+                  <div>
+                    <p className="text-sm font-medium text-slate-100">Looking for a Mentor</p>
+                    <p className="text-xs text-slate-400">Help mentors find you in the Mentors tab</p>
+                  </div>
+                  <button
+                    onClick={() => setLookingForMentor(!lookingForMentor)}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      lookingForMentor ? "bg-teal-500" : "bg-slate-700"
+                    }`}
+                  >
+                    <div
+                      className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-transform ${
+                        lookingForMentor ? "translate-x-7" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Community Affiliations */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100">Community Affiliations</h3>
+                  <p className="text-sm text-slate-400">Select tags that represent your identity, background, and specialties. These help others find and connect with you.</p>
+                </div>
+                {loadingAffiliations && (
+                  <div className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                )}
+              </div>
+
+              {/* Identity Affiliations */}
+              {allAffiliations.identity.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-purple-400 mb-2 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Identity
+                  </h4>
+                  <p className="text-xs text-slate-500 mb-3">RID-aligned member section identities</p>
+                  <div className="flex flex-wrap gap-2">
+                    {allAffiliations.identity.map((aff) => {
+                      const isSelected = userAffiliations.some(ua => ua.affiliation_id === aff.id);
+                      const isToggling = togglingAffiliation === aff.id;
+                      return (
+                        <button
+                          key={aff.id}
+                          onClick={() => handleToggleAffiliation(aff.id)}
+                          disabled={isToggling}
+                          title={aff.description || aff.name}
+                          className={`px-3 py-1.5 text-sm rounded-full transition-all flex items-center gap-1.5 ${
+                            isSelected
+                              ? "bg-purple-500/30 text-purple-200 border border-purple-500/50 hover:bg-purple-500/40"
+                              : "bg-slate-800 text-slate-400 border border-slate-700 hover:border-purple-500/30 hover:text-purple-300"
+                          } ${isToggling ? "opacity-50" : ""}`}
+                        >
+                          {isToggling && <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+                          {isSelected && !isToggling && <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
+                          {aff.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Background Affiliations */}
+              {allAffiliations.background.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium text-blue-400 mb-2 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    Background
+                  </h4>
+                  <p className="text-xs text-slate-500 mb-3">Professional journey and heritage</p>
+                  <div className="flex flex-wrap gap-2">
+                    {allAffiliations.background.map((aff) => {
+                      const isSelected = userAffiliations.some(ua => ua.affiliation_id === aff.id);
+                      const isToggling = togglingAffiliation === aff.id;
+                      return (
+                        <button
+                          key={aff.id}
+                          onClick={() => handleToggleAffiliation(aff.id)}
+                          disabled={isToggling}
+                          title={aff.description || aff.name}
+                          className={`px-3 py-1.5 text-sm rounded-full transition-all flex items-center gap-1.5 ${
+                            isSelected
+                              ? "bg-blue-500/30 text-blue-200 border border-blue-500/50 hover:bg-blue-500/40"
+                              : "bg-slate-800 text-slate-400 border border-slate-700 hover:border-blue-500/30 hover:text-blue-300"
+                          } ${isToggling ? "opacity-50" : ""}`}
+                        >
+                          {isToggling && <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+                          {isSelected && !isToggling && <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
+                          {aff.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Specialty Affiliations */}
+              {allAffiliations.specialty.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-teal-400 mb-2 flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    </svg>
+                    Practice Areas
+                  </h4>
+                  <p className="text-xs text-slate-500 mb-3">Specialty interpreting settings</p>
+                  <div className="flex flex-wrap gap-2">
+                    {allAffiliations.specialty.map((aff) => {
+                      const isSelected = userAffiliations.some(ua => ua.affiliation_id === aff.id);
+                      const isToggling = togglingAffiliation === aff.id;
+                      return (
+                        <button
+                          key={aff.id}
+                          onClick={() => handleToggleAffiliation(aff.id)}
+                          disabled={isToggling}
+                          title={aff.description || aff.name}
+                          className={`px-3 py-1.5 text-sm rounded-full transition-all flex items-center gap-1.5 ${
+                            isSelected
+                              ? "bg-teal-500/30 text-teal-200 border border-teal-500/50 hover:bg-teal-500/40"
+                              : "bg-slate-800 text-slate-400 border border-slate-700 hover:border-teal-500/30 hover:text-teal-300"
+                          } ${isToggling ? "opacity-50" : ""}`}
+                        >
+                          {isToggling && <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />}
+                          {isSelected && !isToggling && <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
+                          {aff.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {!loadingAffiliations && allAffiliations.identity.length === 0 && allAffiliations.background.length === 0 && allAffiliations.specialty.length === 0 && (
+                <p className="text-sm text-slate-500 italic">No affiliations available yet.</p>
+              )}
+            </div>
+
+            {/* Privacy */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-4">Community Privacy</h3>
+              <div className="flex items-center justify-between p-4 rounded-lg border border-slate-700 bg-slate-800/50">
+                <div>
+                  <p className="text-sm font-medium text-slate-100">Appear in Community Search</p>
+                  <p className="text-xs text-slate-400">Others can find you in the Discover and Mentors tabs</p>
+                </div>
                 <button
-                  onClick={handleSaveProfile}
-                  disabled={saving}
-                  className="px-6 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50"
+                  onClick={() => setIsSearchable(!isSearchable)}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${
+                    isSearchable ? "bg-teal-500" : "bg-slate-700"
+                  }`}
                 >
-                  {saving ? "Saving..." : "Save Profile"}
+                  <div
+                    className={`absolute w-4 h-4 bg-white rounded-full top-1 transition-transform ${
+                      isSearchable ? "translate-x-7" : "translate-x-1"
+                    }`}
+                  />
                 </button>
               </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleSaveProfile}
+                disabled={saving || !displayName.trim()}
+                className="px-8 py-3 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {saving && (
+                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                )}
+                {saving ? "Saving..." : communityProfileExists ? "Save Changes" : "Create Profile"}
+              </button>
             </div>
           </div>
         )}

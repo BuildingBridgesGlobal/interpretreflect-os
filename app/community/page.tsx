@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 import EssenceProfileOnboarding from "@/components/community/EssenceProfileOnboarding";
@@ -220,6 +221,7 @@ interface CommunityProfile {
   strong_domains: string[] | null;
   open_to_mentoring: boolean | null;
   offer_support_in?: string[] | null;
+  avatar_url?: string | null;
 }
 
 interface Post {
@@ -231,11 +233,13 @@ interface Post {
   setting_tags: string[];
   is_edited: boolean;
   created_at: string;
+  image_url?: string;
   author: {
     display_name: string;
     years_experience: number | string;
     strong_domains: string[];
     open_to_mentoring: boolean;
+    avatar_url?: string | null;
   };
   likes_count: number;
   comments_count: number;
@@ -252,6 +256,16 @@ interface Connection {
   user: CommunityProfile;
 }
 
+interface Assignment {
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  setting: string;
+  location_type: string;
+  assignment_type: string;
+}
+
 interface Conversation {
   id: string;
   name: string | null;
@@ -260,6 +274,9 @@ interface Conversation {
   participants: { user_id: string | null; display_name: string; avatar: string }[];
   last_message?: { content: string; created_at: string | null; sender_name: string };
   unread_count: number;
+  conversation_type?: 'personal' | 'mentoring' | 'teaming';
+  assignment_id?: string | null;
+  assignment?: Assignment | null;
 }
 
 interface Message {
@@ -281,6 +298,7 @@ interface Comment {
   author: {
     display_name: string;
     years_experience: string | number | null;
+    avatar_url?: string | null;
   };
   likes_count: number;
   liked_by_user: boolean;
@@ -392,8 +410,10 @@ export default function CommunityPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [postFilter, setPostFilter] = useState<string | null>(null);
+  const [feedSort, setFeedSort] = useState<"recent" | "top" | "following">("recent");
   const [showMyPosts, setShowMyPosts] = useState(false);
   const [showFriendsFeed, setShowFriendsFeed] = useState(false);
+  const [showSavedPosts, setShowSavedPosts] = useState(false);
 
   // Connections State
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -409,10 +429,15 @@ export default function CommunityPage() {
   const [showMessagesPanel, setShowMessagesPanel] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [showNewPostModal, setShowNewPostModal] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [newPostContent, setNewPostContent] = useState("");
   const [newPostType, setNewPostType] = useState<keyof typeof POST_TYPES>("general");
   const [newPostSettings, setNewPostSettings] = useState<string[]>([]);
   const [submittingPost, setSubmittingPost] = useState(false);
+  const [newPostImage, setNewPostImage] = useState<File | null>(null);
+  const [newPostImagePreview, setNewPostImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [newMessageText, setNewMessageText] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
 
@@ -434,8 +459,14 @@ export default function CommunityPage() {
 
   // Animation States
   const [animatingLikes, setAnimatingLikes] = useState<Set<string>>(new Set());
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [loadingDiscover, setLoadingDiscover] = useState(false);
+
+  // Search State
+  const [discoverSearch, setDiscoverSearch] = useState("");
+  const [mentorSearch, setMentorSearch] = useState("");
+  const [mentorSpecialtyFilter, setMentorSpecialtyFilter] = useState<string | null>(null);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [contentReady, setContentReady] = useState(false);
 
@@ -448,6 +479,10 @@ export default function CommunityPage() {
   const [submittingComment, setSubmittingComment] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Avatar Upload State
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // ============================================
   // DATA LOADING
@@ -463,10 +498,20 @@ export default function CommunityPage() {
 
       const params = new URLSearchParams({ user_id: userId });
       if (postFilter) params.append("post_type", postFilter);
+
+      // Add sort parameter
+      params.append("sort", feedSort);
+
       if (showMyPosts) {
         params.append("author_id", userId);
       } else if (showFriendsFeed && connections.length > 0) {
         // Get all friend IDs from connections
+        const friendIds = connections.map(c => c.user?.user_id).filter(Boolean);
+        if (friendIds.length > 0) {
+          params.append("author_ids", friendIds.join(","));
+        }
+      } else if (feedSort === "following" && connections.length > 0) {
+        // For "following" sort, filter by friend IDs
         const friendIds = connections.map(c => c.user?.user_id).filter(Boolean);
         if (friendIds.length > 0) {
           params.append("author_ids", friendIds.join(","));
@@ -486,7 +531,7 @@ export default function CommunityPage() {
     } finally {
       setLoadingPosts(false);
     }
-  }, [userId, postFilter, showMyPosts, showFriendsFeed, connections]);
+  }, [userId, postFilter, feedSort, showMyPosts, showFriendsFeed, connections]);
 
   // Load connections
   const loadConnections = useCallback(async () => {
@@ -796,6 +841,98 @@ export default function CommunityPage() {
   };
 
   // Create new post
+  // Handle image selection
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      alert("Invalid file type. Please upload JPEG, PNG, GIF, or WebP images.");
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image too large. Maximum size is 5MB.");
+      return;
+    }
+
+    setNewPostImage(file);
+
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file);
+    setNewPostImagePreview(previewUrl);
+  };
+
+  // Remove selected image
+  const handleRemoveImage = () => {
+    if (newPostImagePreview) {
+      URL.revokeObjectURL(newPostImagePreview);
+    }
+    setNewPostImage(null);
+    setNewPostImagePreview(null);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
+    }
+  };
+
+  // Handle avatar upload
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      alert("Invalid file type. Please use JPEG, PNG, GIF, or WebP.");
+      return;
+    }
+
+    // Validate size (2MB max)
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File too large. Maximum size is 2MB.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("Session expired. Please sign in again.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/community/profile/upload-avatar", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (response.ok && data.url) {
+        // Update local state
+        setCommunityProfile((prev: any) => prev ? { ...prev, avatar_url: data.url } : prev);
+      } else {
+        alert(data.error || "Failed to upload avatar");
+      }
+    } catch (error) {
+      console.error("Avatar upload error:", error);
+      alert("Failed to upload avatar");
+    } finally {
+      setUploadingAvatar(false);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
+    }
+  };
+
   const handleCreatePost = async () => {
     if (!newPostContent.trim() || !userId) return;
     setSubmittingPost(true);
@@ -806,6 +943,33 @@ export default function CommunityPage() {
         alert("Session expired. Please sign in again.");
         router.push("/signin");
         return;
+      }
+
+      let imageUrl = null;
+
+      // Upload image if selected
+      if (newPostImage) {
+        setUploadingImage(true);
+        const formData = new FormData();
+        formData.append("file", newPostImage);
+
+        const uploadResponse = await fetch("/api/community/posts/upload-image", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        });
+
+        const uploadData = await uploadResponse.json();
+        if (uploadResponse.ok && uploadData.url) {
+          imageUrl = uploadData.url;
+        } else {
+          setUploadingImage(false);
+          alert(uploadData.error || "Failed to upload image");
+          return;
+        }
+        setUploadingImage(false);
       }
 
       const response = await fetch("/api/community/posts", {
@@ -819,7 +983,8 @@ export default function CommunityPage() {
           content: newPostContent.trim(),
           post_type: newPostType,
           setting_tags: newPostSettings,
-          ecci_domains: []
+          ecci_domains: [],
+          image_url: imageUrl
         })
       });
 
@@ -830,6 +995,7 @@ export default function CommunityPage() {
         setNewPostContent("");
         setNewPostType("general");
         setNewPostSettings([]);
+        handleRemoveImage();
         setShowNewPostModal(false);
       } else {
         alert(data.error || "Failed to create post");
@@ -839,6 +1005,7 @@ export default function CommunityPage() {
       alert("Failed to create post");
     } finally {
       setSubmittingPost(false);
+      setUploadingImage(false);
     }
   };
 
@@ -943,6 +1110,36 @@ export default function CommunityPage() {
         }
         return p;
       }));
+    }
+  };
+
+  // Share post - copy link to clipboard
+  const handleSharePost = async (post: Post) => {
+    const postUrl = `${window.location.origin}/community?post=${post.id}`;
+
+    try {
+      // Try native share API first (works on mobile)
+      if (navigator.share) {
+        await navigator.share({
+          title: `Post by ${post.author.display_name}`,
+          text: post.content.slice(0, 100) + (post.content.length > 100 ? '...' : ''),
+          url: postUrl,
+        });
+      } else {
+        // Fallback to clipboard
+        await navigator.clipboard.writeText(postUrl);
+        setCopiedPostId(post.id);
+        setTimeout(() => setCopiedPostId(null), 2000);
+      }
+    } catch (error) {
+      // If share was cancelled or clipboard failed, try clipboard as fallback
+      try {
+        await navigator.clipboard.writeText(postUrl);
+        setCopiedPostId(post.id);
+        setTimeout(() => setCopiedPostId(null), 2000);
+      } catch {
+        console.error("Failed to share/copy:", error);
+      }
     }
   };
 
@@ -1227,6 +1424,27 @@ export default function CommunityPage() {
     return `${Math.floor(seconds / 604800)}w`;
   };
 
+  // Render comment content with gradient @mentions
+  const renderCommentContent = (content: string) => {
+    // Match @mentions at the start: @FirstName LastName (exactly 2 words after @)
+    const mentionMatch = content.match(/^(@[A-Za-z]+\s+[A-Za-z]+)\s/);
+
+    if (mentionMatch) {
+      const mention = mentionMatch[1];
+      const rest = content.slice(mentionMatch[0].length);
+      return (
+        <>
+          <span className="font-semibold bg-gradient-to-r from-teal-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
+            {mention}
+          </span>
+          {" "}{rest}
+        </>
+      );
+    }
+
+    return content;
+  };
+
   // Send connection request
   const handleConnect = async (targetUserId: string) => {
     if (!userId) return;
@@ -1478,7 +1696,7 @@ export default function CommunityPage() {
   // ============================================
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
       {/* Inject Premium Animation Styles */}
       <style dangerouslySetInnerHTML={{ __html: animationStyles }} />
 
@@ -1566,17 +1784,70 @@ export default function CommunityPage() {
 
         {/* Main Layout */}
         <div className="flex gap-6">
-          {/* Left Sidebar - Profile */}
-          <div className="w-72 flex-shrink-0 hidden lg:block">
+          {/* Left Sidebar - Collapsible */}
+          <div className={`flex-shrink-0 hidden lg:block transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'w-12' : 'w-72'}`}>
             <div className="sticky top-24 space-y-4">
+              {/* Collapse Toggle Button */}
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="w-full flex items-center justify-center p-2 rounded-xl border border-slate-800 bg-slate-900/50 text-slate-400 hover:text-slate-200 hover:border-slate-700 premium-transition"
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                <svg
+                  className={`w-5 h-5 transition-transform duration-300 ${sidebarCollapsed ? 'rotate-180' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Sidebar Content - Hidden when collapsed */}
+              <div className={`space-y-4 transition-all duration-300 ${sidebarCollapsed ? 'opacity-0 invisible h-0 overflow-hidden' : 'opacity-100 visible'}`}>
               {hasProfile ? (
                 <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 premium-card hover:border-slate-700">
+                  {/* Hidden file input for avatar upload */}
+                  <input
+                    type="file"
+                    ref={avatarInputRef}
+                    onChange={handleAvatarUpload}
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="hidden"
+                  />
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-lg font-bold text-white premium-transition hover:scale-105 cursor-pointer shadow-lg shadow-teal-500/20">
-                      {getInitials(communityProfile?.display_name || userData?.full_name || "?")}
+                    <div
+                      onClick={() => avatarInputRef.current?.click()}
+                      className="relative group cursor-pointer"
+                    >
+                      {communityProfile?.avatar_url ? (
+                        <img
+                          src={communityProfile.avatar_url}
+                          alt={communityProfile.display_name || "Profile"}
+                          className="w-14 h-14 rounded-full object-cover premium-transition group-hover:scale-105 shadow-lg ring-2 ring-slate-700 group-hover:ring-teal-500/50"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-lg font-bold text-white premium-transition group-hover:scale-105 shadow-lg shadow-teal-500/20">
+                          {getInitials(communityProfile?.display_name || userData?.full_name || "?")}
+                        </div>
+                      )}
+                      {/* Upload overlay on hover */}
+                      <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 premium-transition">
+                        {uploadingAvatar ? (
+                          <svg className="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                        )}
+                      </div>
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-100">{communityProfile?.display_name}</p>
+                      <Link href={`/community/profile/${userId}`} className="font-semibold text-slate-100 hover:text-teal-400 premium-transition">{communityProfile?.display_name}</Link>
                       <p className="text-xs text-slate-400">{communityProfile?.years_experience}</p>
                     </div>
                   </div>
@@ -1584,6 +1855,14 @@ export default function CommunityPage() {
                   {communityProfile?.bio && (
                     <p className="text-sm text-slate-300 mb-4">{communityProfile.bio}</p>
                   )}
+
+                  {/* View Profile Button */}
+                  <Link
+                    href={`/community/profile/${userId}`}
+                    className="block w-full text-center py-2 px-4 mb-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium premium-transition"
+                  >
+                    View My Profile
+                  </Link>
 
                   <div className="grid grid-cols-3 gap-2 text-center py-3 border-t border-slate-800">
                     <div className="premium-transition hover:scale-105 cursor-default">
@@ -1621,9 +1900,10 @@ export default function CommunityPage() {
                     onClick={() => {
                       setShowMyPosts(false);
                       setShowFriendsFeed(false);
+                      setShowSavedPosts(false);
                     }}
                     className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold premium-transition ${
-                      !showMyPosts && !showFriendsFeed
+                      !showMyPosts && !showFriendsFeed && !showSavedPosts
                         ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/25"
                         : "border border-slate-700 bg-slate-900/50 text-slate-300 hover:border-violet-500/50 hover:text-white"
                     }`}
@@ -1631,32 +1911,17 @@ export default function CommunityPage() {
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
                     </svg>
-                    {!showMyPosts && !showFriendsFeed ? "Viewing All Posts" : "All Posts"}
-                  </button>
-
-                  {/* My Posts Toggle */}
-                  <button
-                    onClick={() => {
-                      setShowMyPosts(!showMyPosts);
-                      if (!showMyPosts) setShowFriendsFeed(false);
-                    }}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold premium-transition ${
-                      showMyPosts
-                        ? "bg-gradient-to-r from-teal-500 to-violet-500 text-white shadow-lg shadow-teal-500/25"
-                        : "border border-slate-700 bg-slate-900/50 text-slate-300 hover:border-teal-500/50 hover:text-white"
-                    }`}
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    {showMyPosts ? "Viewing My Posts" : "My Posts"}
+                    {!showMyPosts && !showFriendsFeed && !showSavedPosts ? "Viewing All Posts" : "All Posts"}
                   </button>
 
                   {/* Friends Feed Toggle */}
                   <button
                     onClick={() => {
                       setShowFriendsFeed(!showFriendsFeed);
-                      if (!showFriendsFeed) setShowMyPosts(false);
+                      if (!showFriendsFeed) {
+                        setShowMyPosts(false);
+                        setShowSavedPosts(false);
+                      }
                     }}
                     className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold premium-transition ${
                       showFriendsFeed
@@ -1676,6 +1941,101 @@ export default function CommunityPage() {
                       </span>
                     )}
                   </button>
+
+                  {/* Saved Posts Toggle */}
+                  <button
+                    onClick={() => {
+                      setShowSavedPosts(!showSavedPosts);
+                      if (!showSavedPosts) {
+                        setShowMyPosts(false);
+                        setShowFriendsFeed(false);
+                      }
+                    }}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold premium-transition ${
+                      showSavedPosts
+                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25"
+                        : "border border-slate-700 bg-slate-900/50 text-slate-300 hover:border-amber-500/50 hover:text-white"
+                    }`}
+                  >
+                    <svg className="w-5 h-5" fill={showSavedPosts ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    {showSavedPosts ? "Viewing Saved" : "Saved Posts"}
+                    {posts.filter(p => p.bookmarked_by_user).length > 0 && (
+                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
+                        showSavedPosts ? "bg-white/20" : "bg-slate-700"
+                      }`}>
+                        {posts.filter(p => p.bookmarked_by_user).length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Sort Options */}
+              {activeTab === "feed" && (
+                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 premium-card hover:border-slate-700">
+                  <h4 className="text-sm font-semibold text-slate-400 mb-3">SORT BY</h4>
+                  <div className="flex gap-1 p-1 bg-slate-800/50 rounded-lg">
+                    <button
+                      onClick={() => {
+                        setFeedSort("recent");
+                        setShowFriendsFeed(false);
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium premium-transition ${
+                        feedSort === "recent"
+                          ? "bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-md"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Recent
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFeedSort("top");
+                        setShowFriendsFeed(false);
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium premium-transition ${
+                        feedSort === "top"
+                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      Top
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFeedSort("following");
+                        setShowFriendsFeed(false);
+                      }}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium premium-transition ${
+                        feedSort === "following"
+                          ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-md"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Following
+                    </button>
+                  </div>
+                  {feedSort === "top" && (
+                    <p className="mt-2 text-xs text-slate-500 text-center">
+                      Showing posts ranked by engagement
+                    </p>
+                  )}
+                  {feedSort === "following" && connections.length === 0 && (
+                    <p className="mt-2 text-xs text-amber-400 text-center">
+                      Connect with members to see their posts
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1709,6 +2069,31 @@ export default function CommunityPage() {
                   </div>
                 </div>
               )}
+
+              {/* Community Guidelines */}
+              <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-purple-500/5 p-4 premium-card hover:border-violet-500/50">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <h4 className="text-sm font-semibold text-violet-400">Community Guidelines</h4>
+                </div>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
+                    <span className="text-violet-400 mt-0.5">·</span>
+                    <span><span className="text-slate-100 font-medium">Respect confidentiality</span> - Never share client info</span>
+                  </li>
+                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
+                    <span className="text-violet-400 mt-0.5">·</span>
+                    <span><span className="text-slate-100 font-medium">Support each other</span> - We all have hard days</span>
+                  </li>
+                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
+                    <span className="text-violet-400 mt-0.5">·</span>
+                    <span><span className="text-slate-100 font-medium">Be constructive</span> - Offer help, not judgment</span>
+                  </li>
+                </ul>
+              </div>
+              </div>
             </div>
           </div>
 
@@ -1717,31 +2102,16 @@ export default function CommunityPage() {
             {/* FEED TAB */}
             {activeTab === "feed" && (
               <div className="space-y-4">
-                {/* Quick Post Composer */}
-                {hasProfile && (
-                  <div
-                    onClick={() => setShowNewPostModal(true)}
-                    className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 cursor-pointer premium-card hover:border-slate-700 group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105 shadow-lg shadow-teal-500/20">
-                        {getInitials(communityProfile?.display_name || "?")}
-                      </div>
-                      <div className="flex-1 px-4 py-2 rounded-full bg-slate-800 text-slate-500 text-sm premium-transition group-hover:bg-slate-700 group-hover:text-slate-400">
-                        Share a win, ask a question, or post an insight...
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Posts */}
-                {loadingPosts ? (
+                {(() => {
+                  const displayPosts = showSavedPosts ? posts.filter(p => p.bookmarked_by_user) : posts;
+                  return loadingPosts ? (
                   <div className="space-y-4">
                     <PostSkeleton />
                     <PostSkeleton />
                     <PostSkeleton />
                   </div>
-                ) : posts.length === 0 ? (
+                ) : displayPosts.length === 0 ? (
                   <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center animate-fade-in-up">
                     {showFriendsFeed ? (
                       <>
@@ -1766,6 +2136,22 @@ export default function CommunityPage() {
                           className="px-4 py-2 rounded-lg bg-blue-500 text-white font-medium premium-button"
                         >
                           {connections.length === 0 ? "Find Friends" : "Discover More"}
+                        </button>
+                      </>
+                    ) : showSavedPosts ? (
+                      <>
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/10 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-100 mb-2">No saved posts yet</h3>
+                        <p className="text-slate-400 mb-4">Bookmark posts you find valuable to save them here!</p>
+                        <button
+                          onClick={() => setShowSavedPosts(false)}
+                          className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-medium premium-button"
+                        >
+                          Browse All Posts
                         </button>
                       </>
                     ) : showMyPosts ? (
@@ -1798,7 +2184,7 @@ export default function CommunityPage() {
                     )}
                   </div>
                 ) : (
-                  posts.map((post, index) => (
+                  displayPosts.map((post, index) => (
                     <div
                       key={post.id}
                       className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden premium-card hover:border-slate-700 stagger-item"
@@ -1807,12 +2193,22 @@ export default function CommunityPage() {
                       {/* Post Header */}
                       <div className="p-4 pb-0">
                         <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white flex-shrink-0 premium-transition hover:scale-110 cursor-pointer shadow-md">
-                            {getInitials(post.author.display_name)}
-                          </div>
+                          <Link href={`/community/profile/${post.user_id}`}>
+                            {post.author.avatar_url ? (
+                              <img
+                                src={post.author.avatar_url}
+                                alt={post.author.display_name}
+                                className="w-10 h-10 rounded-full object-cover flex-shrink-0 premium-transition hover:scale-110 cursor-pointer shadow-md ring-2 ring-slate-700"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white flex-shrink-0 premium-transition hover:scale-110 cursor-pointer shadow-md">
+                                {getInitials(post.author.display_name)}
+                              </div>
+                            )}
+                          </Link>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium text-slate-100 hover:text-teal-400 premium-transition cursor-pointer">{post.author.display_name}</span>
+                              <Link href={`/community/profile/${post.user_id}`} className="font-medium text-slate-100 hover:text-teal-400 premium-transition">{post.author.display_name}</Link>
                               {post.author.open_to_mentoring && (
                                 <span className="px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-400 premium-transition hover:bg-amber-500/30">Mentor</span>
                               )}
@@ -1836,6 +2232,25 @@ export default function CommunityPage() {
                       {/* Post Content */}
                       <div className="p-4">
                         <p className="text-slate-200 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+                        {/* Post Image */}
+                        {post.image_url && (
+                          <div className="mt-3 rounded-xl overflow-hidden border border-slate-700/50 group relative cursor-pointer" onClick={() => window.open(post.image_url, '_blank')}>
+                            <img
+                              src={post.image_url}
+                              alt="Post image"
+                              className="w-full max-h-96 object-cover premium-transition group-hover:scale-[1.02]"
+                            />
+                            {/* Hover overlay with expand icon */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 premium-transition flex items-end justify-end p-3">
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm text-white text-sm">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                </svg>
+                                View full size
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Post Actions */}
@@ -1883,10 +2298,27 @@ export default function CommunityPage() {
                         </button>
 
                         {/* Share button */}
-                        <button className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-teal-400 hover:bg-teal-500/10 premium-transition hover:scale-105 active:scale-95">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                          </svg>
+                        <button
+                          onClick={() => handleSharePost(post)}
+                          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg premium-transition hover:scale-105 active:scale-95 ${
+                            copiedPostId === post.id
+                              ? "bg-teal-500/20 text-teal-400"
+                              : "bg-slate-800 text-slate-400 hover:text-teal-400 hover:bg-teal-500/10"
+                          }`}
+                          title="Share post"
+                        >
+                          {copiedPostId === post.id ? (
+                            <>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span className="text-xs font-medium">Copied!</span>
+                            </>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                            </svg>
+                          )}
                         </button>
 
                         {/* Delete button - only visible on own posts */}
@@ -1904,6 +2336,20 @@ export default function CommunityPage() {
                       </div>
                     </div>
                   ))
+                );
+                })()}
+
+                {/* You're all caught up message */}
+                {posts.length > 0 && !loadingPosts && (
+                  <div className="py-12 text-center animate-fade-in-up">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-teal-500/20 to-cyan-500/20 mb-4">
+                      <svg className="w-8 h-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-200 mb-1">You're all caught up!</h3>
+                    <p className="text-slate-400 text-sm">You've seen all the posts. Check back later for more.</p>
+                  </div>
                 )}
               </div>
             )}
@@ -1925,11 +2371,11 @@ export default function CommunityPage() {
                           className="flex items-center gap-3 p-3 rounded-lg bg-slate-900/50 premium-card hover:bg-slate-900 stagger-item"
                           style={{ animationDelay: `${index * 50}ms` }}
                         >
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-sm font-bold text-white premium-transition hover:scale-105 shadow-md">
+                          <Link href={`/community/profile/${req.user?.user_id}`} className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-sm font-bold text-white premium-transition hover:scale-105 shadow-md">
                             {getInitials(req.user?.display_name || "?")}
-                          </div>
+                          </Link>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-slate-100">{req.user?.display_name}</p>
+                            <Link href={`/community/profile/${req.user?.user_id}`} className="font-medium text-slate-100 hover:text-teal-400 premium-transition">{req.user?.display_name}</Link>
                             <p className="text-xs text-slate-500">{req.user?.years_experience}</p>
                           </div>
                           <div className="flex gap-2">
@@ -1980,12 +2426,22 @@ export default function CommunityPage() {
                         style={{ animationDelay: `${index * 50}ms` }}
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 premium-transition group-hover:scale-105 shadow-lg shadow-teal-500/20">
-                            {getInitials(conn.user?.display_name || "?")}
-                          </div>
+                          <Link href={`/community/profile/${conn.user?.user_id}`}>
+                            {conn.user?.avatar_url ? (
+                              <img
+                                src={conn.user.avatar_url}
+                                alt={conn.user.display_name || "User"}
+                                className="w-14 h-14 rounded-full object-cover flex-shrink-0 premium-transition hover:scale-105 shadow-lg ring-2 ring-slate-700 hover:ring-teal-500/50"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 premium-transition hover:scale-105 shadow-lg shadow-teal-500/20">
+                                {getInitials(conn.user?.display_name || "?")}
+                              </div>
+                            )}
+                          </Link>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-semibold text-slate-100 group-hover:text-teal-400 premium-transition">{conn.user?.display_name}</h4>
+                              <Link href={`/community/profile/${conn.user?.user_id}`} className="font-semibold text-slate-100 hover:text-teal-400 premium-transition">{conn.user?.display_name}</Link>
                               {conn.user?.open_to_mentoring && (
                                 <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 text-xs">Mentor</span>
                               )}
@@ -2016,6 +2472,30 @@ export default function CommunityPage() {
             {/* DISCOVER TAB */}
             {activeTab === "discover" && (
               <div className="space-y-4">
+                {/* Search Input */}
+                <div className="relative animate-fade-in-up">
+                  <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={discoverSearch}
+                    onChange={(e) => setDiscoverSearch(e.target.value)}
+                    placeholder="Search members by name..."
+                    className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 premium-transition"
+                  />
+                  {discoverSearch && (
+                    <button
+                      onClick={() => setDiscoverSearch("")}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 premium-transition"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
                 {loadingDiscover ? (
                   <div className="grid gap-3">
                     <MemberSkeleton />
@@ -2023,19 +2503,37 @@ export default function CommunityPage() {
                     <MemberSkeleton />
                     <MemberSkeleton />
                   </div>
-                ) : discoverMembers.length === 0 ? (
+                ) : (() => {
+                  // Filter members by search query
+                  const filteredMembers = discoverMembers.filter(member =>
+                    member.display_name.toLowerCase().includes(discoverSearch.toLowerCase())
+                  );
+
+                  return filteredMembers.length === 0 ? (
                   <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center animate-fade-in-up">
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center">
                       <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={discoverSearch ? "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" : "M5 13l4 4L19 7"} />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-100 mb-2">Everyone's connected!</h3>
-                    <p className="text-slate-400">You've connected with all community members.</p>
+                    <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                      {discoverSearch ? "No members found" : "Everyone's connected!"}
+                    </h3>
+                    <p className="text-slate-400">
+                      {discoverSearch ? `No members match "${discoverSearch}"` : "You've connected with all community members."}
+                    </p>
+                    {discoverSearch && (
+                      <button
+                        onClick={() => setDiscoverSearch("")}
+                        className="mt-4 px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 premium-transition"
+                      >
+                        Clear search
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="grid gap-3">
-                    {discoverMembers.map((member, index) => (
+                    {filteredMembers.map((member, index) => (
                       <div
                         key={member.user_id}
                         onClick={() => openMemberProfile(member)}
@@ -2043,12 +2541,22 @@ export default function CommunityPage() {
                         style={{ animationDelay: `${index * 50}ms` }}
                       >
                         <div className="flex items-center gap-4">
-                          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 premium-transition group-hover:scale-105 shadow-lg shadow-violet-500/20">
-                            {getInitials(member.display_name)}
-                          </div>
+                          <Link href={`/community/profile/${member.user_id}`} onClick={(e) => e.stopPropagation()}>
+                            {member.avatar_url ? (
+                              <img
+                                src={member.avatar_url}
+                                alt={member.display_name}
+                                className="w-14 h-14 rounded-full object-cover flex-shrink-0 premium-transition hover:scale-105 shadow-lg ring-2 ring-slate-700 hover:ring-violet-500/50"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 premium-transition hover:scale-105 shadow-lg shadow-violet-500/20">
+                                {getInitials(member.display_name)}
+                              </div>
+                            )}
+                          </Link>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-semibold text-slate-100 group-hover:text-violet-400 premium-transition">{member.display_name}</h4>
+                              <Link href={`/community/profile/${member.user_id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-slate-100 hover:text-violet-400 premium-transition">{member.display_name}</Link>
                               {member.open_to_mentoring && (
                                 <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 text-xs">Mentor</span>
                               )}
@@ -2071,7 +2579,8 @@ export default function CommunityPage() {
                       </div>
                     ))}
                   </div>
-                )}
+                );
+                })()}
               </div>
             )}
 
@@ -2091,6 +2600,78 @@ export default function CommunityPage() {
                   </p>
                 </div>
 
+                {/* Search and Filter */}
+                <div className="space-y-3 animate-fade-in-up" style={{ animationDelay: "100ms" }}>
+                  {/* Search by Name */}
+                  <div className="relative">
+                    <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={mentorSearch}
+                      onChange={(e) => setMentorSearch(e.target.value)}
+                      placeholder="Search mentors by name..."
+                      className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 premium-transition"
+                    />
+                    {mentorSearch && (
+                      <button
+                        onClick={() => setMentorSearch("")}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 premium-transition"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filter by Specialty */}
+                  {(() => {
+                    // Gather all unique specialties from mentors
+                    const allMentors = [
+                      ...connections.filter(c => c.user?.open_to_mentoring).map(c => c.user),
+                      ...discoverMembers.filter(m => m.open_to_mentoring)
+                    ];
+                    const allSpecialties = new Set<string>();
+                    allMentors.forEach(m => {
+                      (m?.strong_domains || []).forEach((d: string) => allSpecialties.add(d));
+                      (m?.specialties || []).forEach((s: string) => allSpecialties.add(s));
+                    });
+                    const specialtyOptions = Array.from(allSpecialties).sort();
+
+                    if (specialtyOptions.length === 0) return null;
+
+                    return (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setMentorSpecialtyFilter(null)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium premium-transition ${
+                            !mentorSpecialtyFilter
+                              ? "bg-amber-500 text-slate-950"
+                              : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                          }`}
+                        >
+                          All Specialties
+                        </button>
+                        {specialtyOptions.map(specialty => (
+                          <button
+                            key={specialty}
+                            onClick={() => setMentorSpecialtyFilter(mentorSpecialtyFilter === specialty ? null : specialty)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium premium-transition ${
+                              mentorSpecialtyFilter === specialty
+                                ? "bg-amber-500 text-slate-950"
+                                : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                            }`}
+                          >
+                            {specialty}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+
                 {/* Mentor List */}
                 {(() => {
                   const mentors = [
@@ -2098,19 +2679,56 @@ export default function CommunityPage() {
                     ...discoverMembers.filter(m => m.open_to_mentoring).map(m => ({ ...m, isConnected: false }))
                   ];
 
-                  return mentors.length === 0 ? (
+                  // Apply search filter
+                  let filteredMentors = mentors.filter((mentor: any) =>
+                    mentor.display_name?.toLowerCase().includes(mentorSearch.toLowerCase())
+                  );
+
+                  // Apply specialty filter
+                  if (mentorSpecialtyFilter) {
+                    filteredMentors = filteredMentors.filter((mentor: any) => {
+                      const domains = mentor.strong_domains || [];
+                      const specialties = mentor.specialties || [];
+                      return domains.includes(mentorSpecialtyFilter) || specialties.includes(mentorSpecialtyFilter);
+                    });
+                  }
+
+                  const hasActiveFilters = mentorSearch || mentorSpecialtyFilter;
+
+                  return filteredMentors.length === 0 ? (
                     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center animate-fade-in-up">
                       <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center opacity-50">
-                        <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        <svg className="w-8 h-8 text-white" fill={hasActiveFilters ? "none" : "currentColor"} viewBox="0 0 24 24" stroke={hasActiveFilters ? "currentColor" : "none"}>
+                          {hasActiveFilters ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          ) : (
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                          )}
                         </svg>
                       </div>
-                      <h3 className="text-lg font-semibold text-slate-100 mb-2">No mentors available yet</h3>
-                      <p className="text-slate-400">Check back soon as more interpreters join the community!</p>
+                      <h3 className="text-lg font-semibold text-slate-100 mb-2">
+                        {hasActiveFilters ? "No mentors found" : "No mentors available yet"}
+                      </h3>
+                      <p className="text-slate-400">
+                        {hasActiveFilters
+                          ? `No mentors match your search${mentorSpecialtyFilter ? ` in "${mentorSpecialtyFilter}"` : ""}`
+                          : "Check back soon as more interpreters join the community!"}
+                      </p>
+                      {hasActiveFilters && (
+                        <button
+                          onClick={() => {
+                            setMentorSearch("");
+                            setMentorSpecialtyFilter(null);
+                          }}
+                          className="mt-4 px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 premium-transition"
+                        >
+                          Clear filters
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="grid gap-3">
-                      {mentors.map((mentor: any, index: number) => (
+                      {filteredMentors.map((mentor: any, index: number) => (
                         <div
                           key={mentor.user_id}
                           className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/5 to-orange-500/5 overflow-hidden premium-card hover:border-amber-500/50 stagger-item group"
@@ -2130,11 +2748,21 @@ export default function CommunityPage() {
                           </div>
                           <div className="p-4">
                             <div className="flex items-start gap-4">
-                              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 premium-transition group-hover:scale-105 shadow-lg shadow-amber-500/20">
-                                {getInitials(mentor.display_name)}
-                              </div>
+                              <Link href={`/community/profile/${mentor.user_id}`}>
+                                {mentor.avatar_url ? (
+                                  <img
+                                    src={mentor.avatar_url}
+                                    alt={mentor.display_name}
+                                    className="w-14 h-14 rounded-full object-cover flex-shrink-0 premium-transition hover:scale-105 shadow-lg ring-2 ring-amber-500/30 hover:ring-amber-500/50"
+                                  />
+                                ) : (
+                                  <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-lg font-bold text-white flex-shrink-0 premium-transition hover:scale-105 shadow-lg shadow-amber-500/20">
+                                    {getInitials(mentor.display_name)}
+                                  </div>
+                                )}
+                              </Link>
                               <div className="flex-1 min-w-0">
-                                <h4 className="font-semibold text-slate-100 mb-1 group-hover:text-amber-400 premium-transition">{mentor.display_name}</h4>
+                                <Link href={`/community/profile/${mentor.user_id}`} className="font-semibold text-slate-100 mb-1 hover:text-amber-400 premium-transition block">{mentor.display_name}</Link>
                                 <p className="text-sm text-slate-400 mb-2">
                                   {mentor.years_experience}
                                   {mentor.specialties?.length ? ` · ${mentor.specialties.join(", ")}` : ""}
@@ -2174,30 +2802,6 @@ export default function CommunityPage() {
           {/* Right Sidebar */}
           <div className="w-72 flex-shrink-0 hidden xl:block">
             <div className="sticky top-24 space-y-4">
-              {/* Community Guidelines */}
-              <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-purple-500/5 p-4 premium-card hover:border-violet-500/50">
-                <div className="flex items-center gap-2 mb-3">
-                  <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                  <h4 className="text-sm font-semibold text-violet-400">Community Guidelines</h4>
-                </div>
-                <ul className="space-y-2 text-sm text-slate-300">
-                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
-                    <span className="text-violet-400 mt-0.5">·</span>
-                    <span><span className="text-slate-100 font-medium">Respect confidentiality</span> - Never share client info</span>
-                  </li>
-                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
-                    <span className="text-violet-400 mt-0.5">·</span>
-                    <span><span className="text-slate-100 font-medium">Support each other</span> - We all have hard days</span>
-                  </li>
-                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
-                    <span className="text-violet-400 mt-0.5">·</span>
-                    <span><span className="text-slate-100 font-medium">Be constructive</span> - Offer help, not judgment</span>
-                  </li>
-                </ul>
-              </div>
-
               {/* Recent Chats */}
               {conversations.length > 0 && (
                 <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 premium-card hover:border-slate-700">
@@ -2320,12 +2924,22 @@ export default function CommunityPage() {
             {/* Original Post Preview */}
             <div className="p-4 border-b border-slate-800 bg-slate-800/30">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-                  {getInitials(commentsPost.author?.display_name || "?")}
-                </div>
+                <Link href={`/community/profile/${commentsPost.user_id}`}>
+                  {commentsPost.author?.avatar_url ? (
+                    <img
+                      src={commentsPost.author.avatar_url}
+                      alt={commentsPost.author.display_name || "User"}
+                      className="w-10 h-10 rounded-full object-cover flex-shrink-0 ring-2 ring-slate-700 hover:ring-teal-500/50 premium-transition"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-sm font-bold text-white flex-shrink-0 hover:scale-105 premium-transition">
+                      {getInitials(commentsPost.author?.display_name || "?")}
+                    </div>
+                  )}
+                </Link>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-100">{commentsPost.author?.display_name}</span>
+                    <Link href={`/community/profile/${commentsPost.user_id}`} className="font-semibold text-slate-100 hover:text-teal-400 premium-transition">{commentsPost.author?.display_name}</Link>
                     <span className="text-slate-500 text-sm">{formatTimeAgo(commentsPost.created_at)}</span>
                   </div>
                   <p className="text-slate-300 text-sm mt-1 line-clamp-3">{commentsPost.content}</p>
@@ -2352,18 +2966,28 @@ export default function CommunityPage() {
                   <div key={comment.id} className="space-y-3">
                     {/* Top-level comment */}
                     <div className="flex gap-3 group">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                        {getInitials(comment.author?.display_name || "?")}
-                      </div>
+                      <Link href={`/community/profile/${comment.user_id}`}>
+                        {comment.author?.avatar_url ? (
+                          <img
+                            src={comment.author.avatar_url}
+                            alt={comment.author.display_name || "User"}
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-2 ring-slate-700 hover:ring-teal-500/50 premium-transition"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0 hover:scale-105 premium-transition">
+                            {getInitials(comment.author?.display_name || "?")}
+                          </div>
+                        )}
+                      </Link>
                       <div className="flex-1 min-w-0">
                         <div className="bg-slate-800/50 rounded-2xl rounded-tl-sm px-4 py-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-200 text-sm">{comment.author?.display_name}</span>
+                            <Link href={`/community/profile/${comment.user_id}`} className="font-semibold text-slate-200 text-sm hover:text-teal-400 premium-transition">{comment.author?.display_name}</Link>
                             {comment.author?.years_experience && (
                               <span className="text-slate-500 text-xs">{comment.author.years_experience}</span>
                             )}
                           </div>
-                          <p className="text-slate-300 text-sm mt-1">{comment.content}</p>
+                          <p className="text-slate-300 text-sm mt-1">{renderCommentContent(comment.content)}</p>
                         </div>
                         <div className="flex items-center gap-4 mt-1 ml-2">
                           <span className="text-slate-500 text-xs">{formatTimeAgo(comment.created_at)}</span>
@@ -2403,15 +3027,25 @@ export default function CommunityPage() {
                       <div className="ml-11 space-y-3 border-l-2 border-slate-700 pl-4">
                         {comment.replies.map((reply) => (
                           <div key={reply.id} className="flex gap-3 group">
-                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                              {getInitials(reply.author?.display_name || "?")}
-                            </div>
+                            <Link href={`/community/profile/${reply.user_id}`}>
+                              {reply.author?.avatar_url ? (
+                                <img
+                                  src={reply.author.avatar_url}
+                                  alt={reply.author.display_name || "User"}
+                                  className="w-7 h-7 rounded-full object-cover flex-shrink-0 ring-2 ring-slate-700 hover:ring-teal-500/50 premium-transition"
+                                />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0 hover:scale-105 premium-transition">
+                                  {getInitials(reply.author?.display_name || "?")}
+                                </div>
+                              )}
+                            </Link>
                             <div className="flex-1 min-w-0">
                               <div className="bg-slate-800/30 rounded-2xl rounded-tl-sm px-3 py-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-slate-200 text-sm">{reply.author?.display_name}</span>
+                                  <Link href={`/community/profile/${reply.user_id}`} className="font-semibold text-slate-200 text-sm hover:text-teal-400 premium-transition">{reply.author?.display_name}</Link>
                                 </div>
-                                <p className="text-slate-300 text-sm mt-1">{reply.content}</p>
+                                <p className="text-slate-300 text-sm mt-1">{renderCommentContent(reply.content)}</p>
                               </div>
                               <div className="flex items-center gap-4 mt-1 ml-2">
                                 <span className="text-slate-500 text-xs">{formatTimeAgo(reply.created_at)}</span>
@@ -2473,9 +3107,17 @@ export default function CommunityPage() {
                 </div>
               )}
               <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                  {getInitials(communityProfile?.display_name || "?")}
-                </div>
+                {communityProfile?.avatar_url ? (
+                  <img
+                    src={communityProfile.avatar_url}
+                    alt={communityProfile.display_name || "You"}
+                    className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-2 ring-slate-700"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                    {getInitials(communityProfile?.display_name || "?")}
+                  </div>
+                )}
                 <div className="flex-1 flex items-end gap-2">
                   <textarea
                     ref={commentInputRef}
@@ -2577,6 +3219,62 @@ export default function CommunityPage() {
                 </div>
               </div>
 
+              {/* Image Upload */}
+              <div>
+                <input
+                  type="file"
+                  ref={imageInputRef}
+                  onChange={handleImageSelect}
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="hidden"
+                />
+                {newPostImagePreview ? (
+                  <div className="relative group animate-fade-in-scale">
+                    <img
+                      src={newPostImagePreview}
+                      alt="Preview"
+                      className="w-full max-h-64 object-cover rounded-xl border border-slate-700 shadow-lg shadow-black/20"
+                    />
+                    {/* Overlay on hover */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent rounded-xl opacity-0 group-hover:opacity-100 premium-transition" />
+                    {/* Remove button */}
+                    <button
+                      onClick={handleRemoveImage}
+                      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-slate-900/90 backdrop-blur-sm text-slate-300 hover:text-white hover:bg-rose-500 flex items-center justify-center premium-transition hover:scale-110 active:scale-95 shadow-lg"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    {/* Change image button */}
+                    <button
+                      onClick={() => imageInputRef.current?.click()}
+                      className="absolute bottom-2 right-2 px-3 py-1.5 rounded-lg bg-slate-900/90 backdrop-blur-sm text-slate-300 hover:text-white hover:bg-teal-500 flex items-center gap-1.5 text-sm premium-transition hover:scale-105 active:scale-95 shadow-lg opacity-0 group-hover:opacity-100"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => imageInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-3 px-4 py-5 rounded-xl border-2 border-dashed border-slate-700 bg-slate-800/30 text-slate-400 hover:border-teal-500/50 hover:text-teal-400 hover:bg-teal-500/5 premium-transition group"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-teal-500/20 premium-transition">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <span className="block font-medium">Add a photo</span>
+                      <span className="text-xs text-slate-500 group-hover:text-teal-500/70">JPEG, PNG, GIF, WebP up to 5MB</span>
+                    </div>
+                  </button>
+                )}
+              </div>
+
               {/* Settings Tags */}
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">Related settings (optional)</label>
@@ -2622,9 +3320,18 @@ export default function CommunityPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
-                    Posting...
+                    {uploadingImage ? "Uploading image..." : "Posting..."}
                   </span>
-                ) : "Post"}
+                ) : (
+                  <span className="flex items-center gap-2">
+                    {newPostImage && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                    Post
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -2636,9 +3343,17 @@ export default function CommunityPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 modal-backdrop">
           <div className="bg-slate-900 rounded-2xl border border-slate-700 max-w-md w-full modal-content shadow-2xl shadow-black/50">
             <div className="p-6 text-center border-b border-slate-800">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-2xl font-bold text-white mx-auto mb-4 shadow-xl shadow-teal-500/30 premium-transition hover:scale-105">
-                {getInitials(selectedMember.display_name)}
-              </div>
+              {selectedMember.avatar_url ? (
+                <img
+                  src={selectedMember.avatar_url}
+                  alt={selectedMember.display_name}
+                  className="w-20 h-20 rounded-full object-cover mx-auto mb-4 shadow-xl shadow-teal-500/30 premium-transition hover:scale-105 ring-4 ring-slate-700"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-teal-500 to-violet-500 flex items-center justify-center text-2xl font-bold text-white mx-auto mb-4 shadow-xl shadow-teal-500/30 premium-transition hover:scale-105">
+                  {getInitials(selectedMember.display_name)}
+                </div>
+              )}
               <h2 className="text-xl font-bold text-slate-100">{selectedMember.display_name}</h2>
               <p className="text-slate-400">{selectedMember.years_experience}</p>
               {selectedMember.open_to_mentoring && (
@@ -2782,33 +3497,92 @@ export default function CommunityPage() {
                       </button>
                     </div>
                   ) : (
-                    conversations.map((conv, index) => (
-                      <button
-                        key={conv.id}
-                        onClick={() => setSelectedConversation(conv.id)}
-                        className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/50 premium-transition border-b border-slate-800 group stagger-item"
-                        style={{ animationDelay: `${index * 50}ms` }}
-                      >
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105">
-                          {getConversationAvatar(conv)}
-                        </div>
-                        <div className="flex-1 text-left min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-slate-100 truncate group-hover:text-teal-400 premium-transition">{getConversationName(conv)}</span>
-                            {conv.last_message && (
-                              <span className="text-xs text-slate-500">{formatTime(conv.last_message.created_at || "")}</span>
-                            )}
+                    <>
+                      {/* Teaming / Work Section */}
+                      {conversations.filter(c => c.conversation_type === 'teaming').length > 0 && (
+                        <div className="mb-2">
+                          <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700 sticky top-0 z-10">
+                            <span className="text-xs font-semibold text-orange-400 uppercase tracking-wider flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                              Teaming / Work
+                            </span>
                           </div>
-                          {conv.last_message ? (
-                            <p className="text-sm text-slate-400 truncate">
-                              {conv.last_message.sender_name === "You" ? "You: " : ""}{conv.last_message.content}
-                            </p>
-                          ) : (
-                            <p className="text-sm text-slate-500 italic">No messages yet</p>
-                          )}
+                          {conversations.filter(c => c.conversation_type === 'teaming').map((conv, index) => (
+                            <button
+                              key={conv.id}
+                              onClick={() => setSelectedConversation(conv.id)}
+                              className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/50 premium-transition border-b border-slate-800 group stagger-item"
+                              style={{ animationDelay: `${index * 50}ms` }}
+                            >
+                              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105">
+                                {getConversationAvatar(conv)}
+                              </div>
+                              <div className="flex-1 text-left min-w-0">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-medium text-slate-100 truncate group-hover:text-orange-400 premium-transition">{getConversationName(conv)}</span>
+                                  {conv.last_message && (
+                                    <span className="text-xs text-slate-500">{formatTime(conv.last_message.created_at || "")}</span>
+                                  )}
+                                </div>
+                                {conv.assignment && (
+                                  <p className="text-xs text-orange-400/80 truncate mb-0.5">
+                                    {conv.assignment.title}
+                                  </p>
+                                )}
+                                {conv.last_message ? (
+                                  <p className="text-sm text-slate-400 truncate">
+                                    {conv.last_message.sender_name === "You" ? "You: " : ""}{conv.last_message.content}
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-slate-500 italic">No messages yet</p>
+                                )}
+                              </div>
+                            </button>
+                          ))}
                         </div>
-                      </button>
-                    ))
+                      )}
+
+                      {/* Personal / Mentoring Section */}
+                      <div>
+                        <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700 sticky top-0 z-10">
+                          <span className="text-xs font-semibold text-teal-400 uppercase tracking-wider flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+                            </svg>
+                            Personal / Mentoring
+                          </span>
+                        </div>
+                        {conversations.filter(c => c.conversation_type !== 'teaming').map((conv, index) => (
+                          <button
+                            key={conv.id}
+                            onClick={() => setSelectedConversation(conv.id)}
+                            className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/50 premium-transition border-b border-slate-800 group stagger-item"
+                            style={{ animationDelay: `${index * 50}ms` }}
+                          >
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105">
+                              {getConversationAvatar(conv)}
+                            </div>
+                            <div className="flex-1 text-left min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium text-slate-100 truncate group-hover:text-teal-400 premium-transition">{getConversationName(conv)}</span>
+                                {conv.last_message && (
+                                  <span className="text-xs text-slate-500">{formatTime(conv.last_message.created_at || "")}</span>
+                                )}
+                              </div>
+                              {conv.last_message ? (
+                                <p className="text-sm text-slate-400 truncate">
+                                  {conv.last_message.sender_name === "You" ? "You: " : ""}{conv.last_message.content}
+                                </p>
+                              ) : (
+                                <p className="text-sm text-slate-500 italic">No messages yet</p>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               ) : (
@@ -2820,13 +3594,50 @@ export default function CommunityPage() {
                     >
                       ←
                     </button>
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white shadow-md">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-md ${
+                      conversations.find(c => c.id === selectedConversation)?.conversation_type === 'teaming'
+                        ? 'bg-gradient-to-br from-orange-500 to-amber-500'
+                        : 'bg-gradient-to-br from-teal-500 to-blue-500'
+                    }`}>
                       {getConversationAvatar(conversations.find(c => c.id === selectedConversation)!)}
                     </div>
                     <span className="font-medium text-slate-100">
                       {getConversationName(conversations.find(c => c.id === selectedConversation)!)}
                     </span>
                   </div>
+
+                  {/* Assignment Link Banner for Teaming Conversations */}
+                  {(() => {
+                    const conv = conversations.find(c => c.id === selectedConversation);
+                    if (conv?.conversation_type === 'teaming' && conv?.assignment) {
+                      return (
+                        <a
+                          href={`/assignments?id=${conv.assignment.id}`}
+                          className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-orange-500/10 to-amber-500/10 border-b border-orange-500/20 hover:from-orange-500/20 hover:to-amber-500/20 premium-transition group"
+                        >
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-orange-400 truncate group-hover:text-orange-300">
+                              {conv.assignment.title}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {conv.assignment.date} at {conv.assignment.time} • {conv.assignment.setting}
+                            </p>
+                          </div>
+                          <div className="text-orange-400 group-hover:text-orange-300 group-hover:translate-x-1 premium-transition">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </a>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {currentMessages.length === 0 ? (
@@ -2856,6 +3667,28 @@ export default function CommunityPage() {
                   </div>
 
                   <div className="p-4 border-t border-slate-800">
+                    {/* Quick Status Emoji Bar */}
+                    <div className="flex items-center gap-1 mb-3">
+                      <span className="text-xs text-slate-500 mr-2">Quick status:</span>
+                      {[
+                        { emoji: "💚", label: "All good", message: "💚 All good here!" },
+                        { emoji: "🔥", label: "On fire", message: "🔥 We're on fire!" },
+                        { emoji: "🤔", label: "Thinking", message: "🤔 Need a moment to think..." },
+                        { emoji: "⚡", label: "Intense", message: "⚡ Things are getting intense" },
+                        { emoji: "👋", label: "Check-in", message: "👋 Just checking in!" }
+                      ].map((item) => (
+                        <button
+                          key={item.emoji}
+                          onClick={() => {
+                            setNewMessageText(item.message);
+                          }}
+                          title={item.label}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 text-lg premium-transition hover:scale-110 active:scale-95"
+                        >
+                          {item.emoji}
+                        </button>
+                      ))}
+                    </div>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -3018,9 +3851,17 @@ export default function CommunityPage() {
                         }`}
                         style={{ animationDelay: `${index * 50}ms` }}
                       >
-                        <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white premium-transition ${isSelected ? 'scale-105' : ''}`}>
-                          {getInitials(conn.user.display_name)}
-                        </div>
+                        {conn.user.avatar_url ? (
+                          <img
+                            src={conn.user.avatar_url}
+                            alt={conn.user.display_name}
+                            className={`w-10 h-10 rounded-full object-cover premium-transition ring-2 ring-slate-700 ${isSelected ? 'scale-105 ring-teal-500/50' : ''}`}
+                          />
+                        ) : (
+                          <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white premium-transition ${isSelected ? 'scale-105' : ''}`}>
+                            {getInitials(conn.user.display_name)}
+                          </div>
+                        )}
                         <div className="flex-1 text-left">
                           <p className={`font-medium premium-transition ${isSelected ? "text-teal-400" : "text-slate-100"}`}>
                             {conn.user.display_name}

@@ -48,7 +48,7 @@ export async function GET(
     const authorIds = [...new Set(comments.map(c => c.user_id))];
     const { data: profiles } = await supabase
       .from("community_profiles")
-      .select("user_id, display_name, years_experience")
+      .select("user_id, display_name, years_experience, avatar_url")
       .in("user_id", authorIds);
 
     const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
@@ -103,7 +103,8 @@ export async function GET(
       created_at: comment.created_at,
       author: profileMap.get(comment.user_id) || {
         display_name: "Anonymous",
-        years_experience: null
+        years_experience: null,
+        avatar_url: null
       },
       likes_count: likesCountMap.get(comment.id) || 0,
       liked_by_user: userLikedCommentsSet.has(comment.id)
@@ -245,7 +246,7 @@ export async function POST(
     // Get author info
     const { data: author } = await supabase
       .from("community_profiles")
-      .select("display_name, years_experience")
+      .select("display_name, years_experience, avatar_url")
       .eq("user_id", userId)
       .single();
 
@@ -255,7 +256,8 @@ export async function POST(
         ...comment,
         author: author || {
           display_name: "Anonymous",
-          years_experience: null
+          years_experience: null,
+          avatar_url: null
         },
         likes_count: 0,
         liked_by_user: false,
