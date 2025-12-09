@@ -163,29 +163,8 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status") || "accepted";
     const type = searchParams.get("type"); // 'pending_received', 'pending_sent', 'accepted'
 
-    let query = supabase
-      .from("connections")
-      .select(`
-        *,
-        requester:community_profiles!connections_requester_id_fkey(
-          user_id,
-          display_name,
-          bio,
-          strong_domains,
-          specialties,
-          years_experience,
-          open_to_mentoring
-        ),
-        addressee:community_profiles!connections_addressee_id_fkey(
-          user_id,
-          display_name,
-          bio,
-          strong_domains,
-          specialties,
-          years_experience,
-          open_to_mentoring
-        )
-      `);
+    // Build query without foreign key joins
+    let query = supabase.from("connections").select("*");
 
     // Filter based on type
     if (type === 'pending_received') {
@@ -209,10 +188,34 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    if (!connections || connections.length === 0) {
+      return NextResponse.json({ connections: [] });
+    }
+
+    // Get all unique user IDs from connections
+    const userIds = [...new Set(connections.flatMap(c => [c.requester_id, c.addressee_id]))];
+
+    // Fetch profiles separately
+    const { data: profiles } = await supabase
+      .from("community_profiles")
+      .select("user_id, display_name, bio, strong_domains, specialties, years_experience, open_to_mentoring")
+      .in("user_id", userIds);
+
+    const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
+
     // Transform to show the "other" person in each connection
-    const transformedConnections = connections?.map(conn => {
+    const transformedConnections = connections.map(conn => {
       const isRequester = conn.requester_id === userId;
-      const otherPerson = isRequester ? conn.addressee : conn.requester;
+      const otherUserId = isRequester ? conn.addressee_id : conn.requester_id;
+      const otherPerson = profileMap.get(otherUserId) || {
+        user_id: otherUserId,
+        display_name: "Unknown",
+        bio: null,
+        strong_domains: [],
+        specialties: [],
+        years_experience: null,
+        open_to_mentoring: false
+      };
 
       return {
         connection_id: conn.id,
@@ -222,7 +225,7 @@ export async function GET(req: NextRequest) {
         is_requester: isRequester,
         user: otherPerson
       };
-    }) || [];
+    });
 
     return NextResponse.json({
       connections: transformedConnections

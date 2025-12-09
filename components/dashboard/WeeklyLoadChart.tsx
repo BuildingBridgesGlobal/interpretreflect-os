@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
 import {
   BarChart,
   Bar,
@@ -155,11 +154,7 @@ export default function WeeklyLoadChart({ assignments }: WeeklyLoadChartProps) {
     : maxDailyLoad;
 
   return (
-    <motion.div
-      className="rounded-xl border border-slate-700 bg-slate-800/30 p-4"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
+    <>
       <div className="flex items-start justify-between mb-3">
         <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
           <span className="text-lg">📊</span> This Week's Load
@@ -177,7 +172,7 @@ export default function WeeklyLoadChart({ assignments }: WeeklyLoadChartProps) {
       </div>
 
       {/* Chart */}
-      <div className="rounded-xl bg-slate-900/70 p-3 mb-3">
+      <div className="rounded-xl bg-slate-800/30 p-3 mb-3">
         {totalAssignments === 0 ? (
           <div className="h-32 flex items-center justify-center">
             <p className="text-sm text-slate-500">No assignments this week</p>
@@ -293,6 +288,6 @@ export default function WeeklyLoadChart({ assignments }: WeeklyLoadChartProps) {
           Very High (4)
         </span>
       </div>
-    </motion.div>
+    </>
   );
 }

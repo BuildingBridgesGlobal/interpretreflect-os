@@ -344,6 +344,7 @@ export type Database = {
           debriefed: boolean | null
           description: string | null
           duration_minutes: number | null
+          emotional_intensity: string | null
           id: string
           is_team_assignment: boolean | null
           location: string | null
@@ -376,6 +377,7 @@ export type Database = {
           debriefed?: boolean | null
           description?: string | null
           duration_minutes?: number | null
+          emotional_intensity?: string | null
           id?: string
           is_team_assignment?: boolean | null
           location?: string | null
@@ -408,6 +410,7 @@ export type Database = {
           debriefed?: boolean | null
           description?: string | null
           duration_minutes?: number | null
+          emotional_intensity?: string | null
           id?: string
           is_team_assignment?: boolean | null
           location?: string | null

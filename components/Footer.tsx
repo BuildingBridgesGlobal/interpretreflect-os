@@ -36,7 +36,7 @@ export const Footer: React.FC = () => {
           </div>
         </div>
         <div className="mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-slate-900/80 pt-5">
-          <p className="text-[0.7rem] text-slate-500">© {new Date().getFullYear()} InterpretReflect · All rights reserved.</p>
+          <p className="text-[0.7rem] text-slate-500">© 2025 InterpretReflect · All rights reserved.</p>
           <p className="text-[0.7rem] text-slate-500">Built with trauma-informed design, emotional intelligence research, and interpreter ethics at the core.</p>
         </div>
       </div>

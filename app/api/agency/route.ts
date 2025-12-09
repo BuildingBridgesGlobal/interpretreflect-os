@@ -186,7 +186,7 @@ export async function GET(req: NextRequest) {
 
     const { data: allAssignments } = await supabaseAdmin
       .from("assignments")
-      .select("user_id, completed, debrief_completed, organization_id")
+      .select("user_id, completed, debriefed, prep_status, organization_id")
       .in("user_id", userIds)
       .eq("organization_id", orgId)
       .gte("date", monthStart.toISOString().split("T")[0]);
@@ -201,13 +201,15 @@ export async function GET(req: NextRequest) {
       const memberAssignments =
         allAssignments?.filter((a) => a.user_id === member.user_id) || [];
       const total = memberAssignments.length;
-      const completed = memberAssignments.filter((a: any) => a.completed).length;
-      const debriefed = memberAssignments.filter(
-        (a: any) => a.debrief_completed
+      // Count assignments with prep_status = 'completed'
+      const prepped = memberAssignments.filter((a: any) => a.prep_status === 'completed').length;
+      // Count assignments with debriefed = true
+      const debriefedCount = memberAssignments.filter(
+        (a: any) => a.debriefed === true
       ).length;
 
-      const prepRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-      const debriefRate = total > 0 ? Math.round((debriefed / total) * 100) : 0;
+      const prepRate = total > 0 ? Math.round((prepped / total) * 100) : 0;
+      const debriefRate = total > 0 ? Math.round((debriefedCount / total) * 100) : 0;
 
       // Get interpreter's data sharing preferences for average calculation
       const prefs = (member as any).data_sharing_preferences || {

@@ -136,7 +136,7 @@ export const Hero: React.FC<HeroProps> = ({
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
-                    <span>2 workshops/month</span>
+                    <span>0.2 CEUs/month</span>
                   </div>
                 </div>
               </div>

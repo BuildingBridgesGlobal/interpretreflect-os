@@ -189,7 +189,7 @@ export const PrepWorkflow: React.FC<PrepWorkflowProps> = ({
                 Flip to reflection mode. What worked? What surprised you? What would you do differently?
               </p>
               <p className="mt-2 text-sm text-slate-400">
-                Your reflections feed back into the system, making your next prep smarter. CEU-ready evidence, automatically.
+                Your reflections feed back into the system, making your next prep smarter. Your growth, documented.
               </p>
             </div>
           </div>

@@ -15,7 +15,7 @@ import { Footer } from "@/components/Footer";
 
 export default function Page() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
+    <div className="min-h-screen bg-ir-bg-primary text-slate-50">
       <Header />
       <main>
         {/* Hero: Career OS positioning */}

@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
           price_data: {
             currency: "usd",
             product_data: {
-              name: `CEU Credits: ${packageConfig.name}`,
+              name: `Workshop Credits: ${packageConfig.name}`,
               description: packageConfig.description,
             },
             unit_amount: packageConfig.price_cents,

@@ -681,7 +681,7 @@ export default function CEUDashboard() {
                 <p className="text-slate-400 text-sm">
                   <span className="text-2xl font-bold text-teal-400">$30</span>
                   <span className="text-slate-500">/month</span>
-                  <span className="text-slate-400 ml-2">• 4 CEU credits/month • Track RID compliance</span>
+                  <span className="text-slate-400 ml-2">• 4 workshop credits/month (up to 2 CEUs) • Track RID compliance</span>
                 </p>
               </div>
               <button
@@ -1013,7 +1013,7 @@ export default function CEUDashboard() {
                       Credits Available
                       {credits.monthly > 0 && <span className="text-slate-400"> ({credits.monthly} monthly{credits.topup > 0 ? ` + ${credits.topup} top-up` : ""})</span>}
                     </p>
-                    <p className="text-xs text-slate-400">Use credits to access CEU workshops. Theory (0.5), Skill (1), Deep Dive (2)</p>
+                    <p className="text-xs text-slate-400">1 credit = 30 min (0.5 CEU) • 2 credits = 60 min (1.0 CEU)</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -1136,7 +1136,7 @@ export default function CEUDashboard() {
             <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-100">Need more CEU credits?</h3>
+                  <h3 className="text-lg font-semibold text-slate-100">Need more workshop credits?</h3>
                   <p className="text-sm text-slate-400 mt-1">Purchase additional credits. They never expire.</p>
                 </div>
                 <div className="flex flex-wrap gap-3">

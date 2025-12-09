@@ -15,21 +15,15 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const postType = searchParams.get("post_type");
     const domain = searchParams.get("domain");
+    const authorId = searchParams.get("author_id"); // Filter by specific author (for "My Posts")
+    const filterByAuthorIds = searchParams.get("author_ids"); // Filter by multiple authors (for "Friends Feed")
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    // Build query for posts with author info from community_profiles
+    // Build query for posts (without foreign key join to avoid schema cache issues)
     let query = supabase
       .from("community_posts")
-      .select(`
-        *,
-        author:community_profiles!community_posts_user_id_fkey(
-          display_name,
-          years_experience,
-          strong_domains,
-          open_to_mentoring
-        )
-      `)
+      .select("*")
       .eq("is_deleted", false)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -40,6 +34,16 @@ export async function GET(req: NextRequest) {
 
     if (domain) {
       query = query.contains("ecci_domains", [domain]);
+    }
+
+    if (authorId) {
+      query = query.eq("user_id", authorId);
+    } else if (filterByAuthorIds) {
+      // Filter by multiple author IDs (comma-separated)
+      const friendIds = filterByAuthorIds.split(",").filter(id => id.trim());
+      if (friendIds.length > 0) {
+        query = query.in("user_id", friendIds);
+      }
     }
 
     const { data: posts, error: postsError } = await query;
@@ -55,6 +59,15 @@ export async function GET(req: NextRequest) {
     if (!posts || posts.length === 0) {
       return NextResponse.json({ posts: [], has_more: false });
     }
+
+    // Fetch author profiles separately
+    const authorIds = [...new Set(posts.map(p => p.user_id))];
+    const { data: profiles } = await supabase
+      .from("community_profiles")
+      .select("user_id, display_name, years_experience, strong_domains, open_to_mentoring")
+      .in("user_id", authorIds);
+
+    const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
 
     // Get user's likes and bookmarks for these posts
     const postIds = posts.map(p => p.id);
@@ -94,6 +107,7 @@ export async function GET(req: NextRequest) {
     // Combine data
     const postsWithUserData = posts.map(post => {
       const postStats = statsMap.get(post.id);
+      const authorProfile = profileMap.get(post.user_id);
       return {
         id: post.id,
         user_id: post.user_id,
@@ -103,9 +117,9 @@ export async function GET(req: NextRequest) {
         setting_tags: post.setting_tags || [],
         is_edited: post.is_edited,
         created_at: post.created_at,
-        author: post.author || {
+        author: authorProfile || {
           display_name: "Anonymous",
-          years_experience: 0,
+          years_experience: null,
           strong_domains: [],
           open_to_mentoring: false
         },
@@ -207,6 +221,73 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error("Post creation error:", error);
+    return NextResponse.json(
+      { error: "Internal server error", details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Soft delete a post (only owner can delete)
+export async function DELETE(req: NextRequest) {
+  try {
+    // Validate authentication
+    const { user, error: authError } = await validateAuth(req);
+    if (authError) return authError;
+    const userId = user!.id;
+
+    const { searchParams } = new URL(req.url);
+    const postId = searchParams.get("post_id");
+
+    if (!postId) {
+      return NextResponse.json(
+        { error: "post_id is required" },
+        { status: 400 }
+      );
+    }
+
+    // Verify the user owns this post
+    const { data: post, error: fetchError } = await supabase
+      .from("community_posts")
+      .select("id, user_id")
+      .eq("id", postId)
+      .single();
+
+    if (fetchError || !post) {
+      return NextResponse.json(
+        { error: "Post not found" },
+        { status: 404 }
+      );
+    }
+
+    if (post.user_id !== userId) {
+      return NextResponse.json(
+        { error: "You can only delete your own posts" },
+        { status: 403 }
+      );
+    }
+
+    // Soft delete the post
+    const { error: deleteError } = await supabase
+      .from("community_posts")
+      .update({ is_deleted: true })
+      .eq("id", postId);
+
+    if (deleteError) {
+      console.error("Error deleting post:", deleteError);
+      return NextResponse.json(
+        { error: "Failed to delete post", details: deleteError.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Post deleted successfully"
+    });
+
+  } catch (error: any) {
+    console.error("Post deletion error:", error);
     return NextResponse.json(
       { error: "Internal server error", details: error.message },
       { status: 500 }

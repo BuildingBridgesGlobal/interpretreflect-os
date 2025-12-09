@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 import { motion } from "framer-motion";
+import WeeklyLoadChart from "@/components/dashboard/WeeklyLoadChart";
+import BurnoutDriftIndicator from "@/components/dashboard/BurnoutDriftIndicator";
 
 const feelings = [
   { id: "energized", label: "Energized", color: "emerald", description: "Ready to take on the world" },
@@ -46,6 +48,21 @@ type TrendDataPoint = {
   assignment_type: string | null;
 };
 
+type Assignment = {
+  id: string;
+  title: string;
+  date: string | null;
+  emotional_intensity?: string | null;
+  completed?: boolean | null;
+  assignment_type?: string | null;
+};
+
+type WellnessCheckin = {
+  id: string;
+  feeling: "energized" | "calm" | "okay" | "drained" | "overwhelmed";
+  created_at: string;
+};
+
 export default function WellnessPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -60,6 +77,9 @@ export default function WellnessPage() {
   const [todayCheckin, setTodayCheckin] = useState<any>(null);
   const [cooldown, setCooldown] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [weekAssignments, setWeekAssignments] = useState<Assignment[]>([]);
+  const [allWellnessCheckins, setAllWellnessCheckins] = useState<WellnessCheckin[]>([]);
+  const [showWellnessModal, setShowWellnessModal] = useState(false);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -78,6 +98,41 @@ export default function WellnessPage() {
       // Load wellness check-ins
       await loadWellnessData(session.user.id);
 
+      // Fetch this week's assignments for weekly load chart
+      const weekStart = new Date();
+      const currentDay = weekStart.getDay();
+      const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
+      weekStart.setDate(weekStart.getDate() + mondayOffset);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+
+      const { data: weekAssignmentsData } = await supabase
+        .from("assignments")
+        .select("id, title, date, emotional_intensity, completed, assignment_type")
+        .eq("user_id", session.user.id)
+        .gte("date", weekStart.toISOString().split('T')[0])
+        .lt("date", weekEnd.toISOString().split('T')[0])
+        .order("date", { ascending: true });
+
+      if (weekAssignmentsData) {
+        setWeekAssignments(weekAssignmentsData as Assignment[]);
+      }
+
+      // Fetch all wellness checkins for burnout drift indicator (last 28 days)
+      const twentyEightDaysAgo = new Date();
+      twentyEightDaysAgo.setDate(twentyEightDaysAgo.getDate() - 28);
+      const { data: allWellnessData } = await supabase
+        .from("wellness_checkins")
+        .select("id, feeling, created_at")
+        .eq("user_id", session.user.id)
+        .gte("created_at", twentyEightDaysAgo.toISOString())
+        .order("created_at", { ascending: false });
+
+      if (allWellnessData) {
+        setAllWellnessCheckins(allWellnessData as WellnessCheckin[]);
+      }
+
       setLoading(false);
     };
     loadUserData();
@@ -85,7 +140,18 @@ export default function WellnessPage() {
 
   const loadWellnessData = async (userId: string) => {
     try {
-      const response = await fetch(`/api/wellness?user_id=${userId}&days=30`);
+      // Get auth token for API call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.error("No auth session for wellness API");
+        return;
+      }
+
+      const response = await fetch(`/api/wellness?days=30`, {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`
+        }
+      });
       const data = await response.json();
       if (data.success) {
         // Set the most recent feeling if available
@@ -121,13 +187,21 @@ export default function WellnessPage() {
     setWasUpdated(false);
 
     try {
+      // Get auth token for API call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.error("Not authenticated for wellness check-in");
+        setSaving(false);
+        return;
+      }
+
       const response = await fetch("/api/wellness", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
         },
         body: JSON.stringify({
-          user_id: userData.id,
           feeling,
           hours_worked_this_week: hoursWorkedThisWeek,
           rest_days_this_month: restDaysThisMonth,
@@ -183,14 +257,14 @@ export default function WellnessPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-slate-400">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
       {/* Hero-style Background Effects - matching other pages */}
       <div className="absolute inset-0 -z-10 opacity-30">
         <div className="absolute top-20 left-20 w-96 h-96 bg-emerald-400/20 rounded-full blur-3xl animate-pulse" />
@@ -361,6 +435,35 @@ export default function WellnessPage() {
                 </div>
               </div>
             </motion.div>
+
+            {/* Weekly Load & Burnout Tracking Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Weekly Load Chart */}
+              <motion.div
+                className="rounded-xl border border-teal-500/30 bg-gradient-to-br from-teal-500/10 to-transparent p-5"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.35 }}
+              >
+                <WeeklyLoadChart assignments={weekAssignments} />
+              </motion.div>
+
+              {/* Burnout Drift Indicator */}
+              <motion.div
+                className="rounded-xl border border-rose-500/30 bg-gradient-to-br from-rose-500/10 to-transparent p-5"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.4 }}
+              >
+                <BurnoutDriftIndicator
+                  checkins={allWellnessCheckins}
+                  onAddCheckin={() => {
+                    // Scroll to the check-in card at the top
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              </motion.div>
+            </div>
 
           </div>
 

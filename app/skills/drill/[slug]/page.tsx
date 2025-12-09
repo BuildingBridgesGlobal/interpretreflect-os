@@ -179,7 +179,7 @@ export default function ScenarioDrillPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-slate-400">Loading scenario...</div>
       </div>
     );
@@ -187,7 +187,7 @@ export default function ScenarioDrillPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-400 mb-4">{error}</p>
           <button
@@ -217,7 +217,7 @@ export default function ScenarioDrillPage() {
   // Show result
   if (showResult && lastResult) {
     return (
-      <div className="min-h-screen bg-slate-900 text-white p-6">
+      <div className="min-h-screen bg-slate-950 text-white p-6">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold mb-2">Scenario Complete!</h1>
@@ -319,9 +319,9 @@ export default function ScenarioDrillPage() {
   const unlockedDifficulties = progress?.unlocked_difficulties || ["practice"];
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
-      <div className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4">
           <button
             onClick={() => router.push("/skills?tab=drill")}

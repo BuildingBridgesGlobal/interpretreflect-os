@@ -38,8 +38,8 @@ const timeline: TimelineItem[] = [
   {
     time: "6:40 PM",
     label: "Evening debrief",
-    context: "You’re home, tired, and tempted to push the day away without looking at what it cost you.",
-    osAction: "The OS gives you three guided prompts based on the day’s highest-load assignment and auto-saves reflections as CEU-ready evidence.",
+    context: "You're home, tired, and tempted to push the day away without looking at what it cost you.",
+    osAction: "The OS gives you three guided prompts based on the day's highest-load assignment and auto-saves reflections to your professional journal.",
     tag: "Guided debrief",
   },
   {

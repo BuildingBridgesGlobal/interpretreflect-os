@@ -546,7 +546,7 @@ export default function ScenarioDrill({
     const diffConfig = DIFFICULTY_CONFIG[difficulty];
 
     return (
-      <div className="min-h-screen bg-slate-900 text-white p-6">
+      <div className="min-h-screen bg-slate-950 text-white p-6">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
@@ -702,7 +702,7 @@ export default function ScenarioDrill({
   if (phase === "playing") {
     if (!currentPoint) {
       return (
-        <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
+        <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
           <p>Loading next scene...</p>
         </div>
       );
@@ -713,7 +713,7 @@ export default function ScenarioDrill({
     return (
       <>
         <PulseOverlay intensity={pulseIntensity} />
-        <div className="min-h-screen bg-slate-900 text-white p-6 relative z-10">
+        <div className="min-h-screen bg-slate-950 text-white p-6 relative z-10">
           <div className="max-w-3xl mx-auto">
             {/* Header with timer */}
             <div className="flex items-center justify-between mb-8">
@@ -819,7 +819,7 @@ export default function ScenarioDrill({
     const categories = scenario.scoring_rubric.categories;
 
     return (
-      <div className="min-h-screen bg-slate-900 text-white p-6">
+      <div className="min-h-screen bg-slate-950 text-white p-6">
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <motion.div

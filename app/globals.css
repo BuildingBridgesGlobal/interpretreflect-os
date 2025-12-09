@@ -2,8 +2,377 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+:root {
+  color-scheme: dark;
+  /* InterpretReflect Color Palette - Clean Design System */
+  --ir-bg-primary: #020617;      /* slate-950 - Primary Background (clean, solid) */
+  --ir-bg-secondary: #111827;    /* Dark Navy - Cards/Containers */
+  --ir-bg-tertiary: #1f2937;     /* Lighter Navy - Elevated elements */
+  --ir-bg-card: #0f172a;         /* Card background - slate-900 */
+  --ir-accent-teal: #14b8a6;     /* Teal - Primary accent (hero CTA style) */
+  --ir-accent-cyan: #06b6d4;     /* Cyan - Secondary accent */
+  --ir-accent-purple: #a855f7;   /* Purple - Elya/Premium features */
+  --ir-accent-magenta: #ec4899;  /* Magenta - Emotional/Wellness */
+  --ir-accent-amber: #f59e0b;    /* Amber - Warnings/Research */
+  --ir-accent-blue: #3b82f6;     /* Blue - Debrief/Reflection */
+  --ir-border-subtle: rgba(255, 255, 255, 0.08); /* Subtle card borders */
+  --ir-border-accent: rgba(20, 184, 166, 0.3);   /* Teal accent borders */
+  --ir-text-primary: #ffffff;    /* White - Main text */
+  --ir-text-secondary: #d1d5db;  /* Light Gray - Descriptions */
+  --ir-text-tertiary: #9ca3af;   /* Medium Gray - Muted */
+  --ir-text-accent: #2dd4bf;     /* Teal text accent */
+}
+
 html { scroll-behavior: smooth; }
-body { background-color: rgb(2, 6, 23); }
+
+/* Clean solid background - matching community page style */
+body {
+  background-color: #020617; /* slate-950 */
+}
+
 .ai-motif { transition: opacity 300ms ease; }
 @media (prefers-reduced-motion: reduce) { .ai-motif { opacity: 0 !important; } }
+
+/* Elya Avatar Gradient Orb */
+.elya-orb {
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #f472b6 100%);
+  box-shadow:
+    0 0 20px rgba(168, 85, 247, 0.4),
+    0 0 40px rgba(236, 72, 153, 0.2);
+  animation: elya-pulse 3s ease-in-out infinite;
+}
+
+.elya-orb-sm {
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
+}
+
+@keyframes elya-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(168, 85, 247, 0.4),
+      0 0 40px rgba(236, 72, 153, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(168, 85, 247, 0.6),
+      0 0 60px rgba(236, 72, 153, 0.3);
+  }
+}
+
+/* IR Card Styles - Hero design system */
+.ir-card {
+  background-color: var(--ir-bg-card);
+  border: 1px solid var(--ir-border-subtle);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.ir-card:hover {
+  border-color: var(--ir-border-accent);
+  background-color: rgba(17, 24, 39, 0.8);
+}
+
+/* Glassmorphism card styles - Hero design */
+.glass-card {
+  background: rgba(15, 22, 41, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--ir-border-subtle);
+  border-radius: 0.75rem;
+}
+
+.glass-card:hover {
+  background: rgba(17, 24, 39, 0.9);
+  border-color: rgba(20, 184, 166, 0.2);
+  transition: all 0.2s ease;
+}
+
+/* Hero-style feature cards with left accent border */
+.hero-card {
+  background: var(--ir-bg-card);
+  border: 1px solid var(--ir-border-subtle);
+  border-left: 3px solid var(--ir-accent-teal);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.hero-card:hover {
+  border-color: var(--ir-border-accent);
+  background: rgba(17, 24, 39, 0.9);
+}
+
+/* Dashboard sidebar card style */
+.sidebar-card {
+  background: rgba(15, 22, 41, 0.6);
+  border: 1px solid var(--ir-border-subtle);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.sidebar-card:hover {
+  background: rgba(17, 24, 39, 0.8);
+  border-color: rgba(20, 184, 166, 0.15);
+}
+
+/* Enhanced Hero Glass Card */
+.glass-card-hero {
+  background: linear-gradient(
+    135deg,
+    rgba(20, 184, 166, 0.1) 0%,
+    rgba(6, 182, 212, 0.05) 100%
+  );
+  border: 2px solid rgba(20, 184, 166, 0.2);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card-hero:hover {
+  border-color: rgba(20, 184, 166, 0.4);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 30px rgba(20, 184, 166, 0.2);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(20, 184, 166, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(20, 184, 166, 0.5);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Loading skeleton */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+  border-radius: 0.5rem;
+}
+
+/* Button hover glow */
+.btn-glow:hover {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* Time badge pulse */
+.time-badge-pulse {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Dark theme for react-datepicker */
+.react-datepicker {
+  background-color: rgb(15, 23, 42) !important;
+  border: 1px solid rgb(51, 65, 85) !important;
+  border-radius: 0.75rem !important;
+  font-family: inherit !important;
+}
+
+.react-datepicker__header {
+  background-color: rgb(30, 41, 59) !important;
+  border-bottom: 1px solid rgb(51, 65, 85) !important;
+  border-radius: 0.75rem 0.75rem 0 0 !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker-time__header,
+.react-datepicker__day-name {
+  color: rgb(226, 232, 240) !important;
+}
+
+.react-datepicker__day {
+  color: rgb(203, 213, 225) !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: rgb(51, 65, 85) !important;
+  border-radius: 0.5rem !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: rgb(45, 212, 191) !important;
+  color: rgb(2, 6, 23) !important;
+  border-radius: 0.5rem !important;
+}
+
+.react-datepicker__day--today {
+  background-color: rgb(51, 65, 85) !important;
+  border-radius: 0.5rem !important;
+}
+
+.react-datepicker__day--disabled {
+  color: rgb(100, 116, 139) !important;
+}
+
+.react-datepicker__navigation-icon::before {
+  border-color: rgb(148, 163, 184) !important;
+}
+
+.react-datepicker__navigation:hover *::before {
+  border-color: rgb(45, 212, 191) !important;
+}
+
+.react-datepicker__triangle {
+  display: none !important;
+}
+
+/* Time picker styles */
+.react-datepicker__time-container {
+  border-left: 1px solid rgb(51, 65, 85) !important;
+}
+
+.react-datepicker__time {
+  background-color: rgb(15, 23, 42) !important;
+}
+
+.react-datepicker__time-box {
+  width: 100px !important;
+}
+
+.react-datepicker__time-list-item {
+  color: rgb(203, 213, 225) !important;
+  height: auto !important;
+  padding: 8px 10px !important;
+}
+
+.react-datepicker__time-list-item:hover {
+  background-color: rgb(51, 65, 85) !important;
+}
+
+.react-datepicker__time-list-item--selected {
+  background-color: rgb(45, 212, 191) !important;
+  color: rgb(2, 6, 23) !important;
+}
+
+/* Popper positioning */
+.react-datepicker-popper {
+  z-index: 9999 !important;
+}
+
+.react-datepicker-wrapper {
+  width: 100%;
+}
+
+/* Additional dark theme styles for react-datepicker */
+.react-datepicker__month-container {
+  background-color: rgb(15, 23, 42) !important;
+}
+
+.react-datepicker__month {
+  background-color: rgb(15, 23, 42) !important;
+  margin: 0.4rem !important;
+}
+
+.react-datepicker__week {
+  display: flex !important;
+}
+
+.react-datepicker__day-names {
+  display: flex !important;
+  background-color: rgb(30, 41, 59) !important;
+}
+
+.react-datepicker__navigation {
+  top: 10px !important;
+}
+
+.react-datepicker__day--outside-month {
+  color: rgb(71, 85, 105) !important;
+}
+
+/* Time picker list dark styling */
+.react-datepicker__time-list {
+  background-color: rgb(15, 23, 42) !important;
+}
+
+/* Input focus ring styling */
+.react-datepicker__input-container input:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgb(45, 212, 191) !important;
+}
+
+/* Calendar icon color for date inputs */
+.react-datepicker__calendar-icon {
+  fill: rgb(148, 163, 184) !important;
+}
+
+/* Month/Year dropdown dark mode */
+.react-datepicker__month-dropdown-container,
+.react-datepicker__year-dropdown-container {
+  color: rgb(226, 232, 240) !important;
+}
+
+.react-datepicker__month-read-view,
+.react-datepicker__year-read-view {
+  color: rgb(226, 232, 240) !important;
+}
+
+.react-datepicker__month-dropdown,
+.react-datepicker__year-dropdown {
+  background-color: rgb(30, 41, 59) !important;
+  border: 1px solid rgb(51, 65, 85) !important;
+}
+
+.react-datepicker__month-option,
+.react-datepicker__year-option {
+  color: rgb(203, 213, 225) !important;
+}
+
+.react-datepicker__month-option:hover,
+.react-datepicker__year-option:hover {
+  background-color: rgb(51, 65, 85) !important;
+}
+
+.react-datepicker__month-option--selected,
+.react-datepicker__year-option--selected {
+  background-color: rgb(45, 212, 191) !important;
+  color: rgb(2, 6, 23) !important;
+}

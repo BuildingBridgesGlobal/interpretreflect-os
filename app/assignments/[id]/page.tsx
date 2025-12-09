@@ -23,6 +23,8 @@ type Assignment = {
   prep_status: string;
   completed: boolean;
   timezone: string;
+  organization_id?: string | null;
+  created_by_agency?: boolean;
 };
 
 type TeamMember = {
@@ -251,37 +253,6 @@ export default function AssignmentDetailPage() {
     (member.specialties || []).some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const handleStatusUpdate = async (newStatus: string) => {
-    if (!assignment) return;
-
-    const { error } = await supabase
-      .from("assignments")
-      .update({ status: newStatus })
-      .eq("id", assignmentId);
-
-    if (!error) {
-      setAssignment({ ...assignment, status: newStatus });
-
-      // If marked as completed, auto-create debrief
-      if (newStatus === "completed") {
-        const { data: existingDebrief } = await (supabase as any)
-          .from("assignment_debriefs")
-          .select("id")
-          .eq("assignment_id", assignmentId)
-          .single();
-
-        if (!existingDebrief) {
-          await (supabase as any)
-            .from("assignment_debriefs")
-            .insert({
-              assignment_id: assignmentId,
-              created_by: user.id,
-              status: "in_progress"
-            });
-        }
-      }
-    }
-  };
 
   const getTypeColor = (type: string) => {
     const colors: any = {
@@ -336,10 +307,16 @@ export default function AssignmentDetailPage() {
     );
   }
 
-  const statusColors = getStatusColor(assignment.status);
-  const assignmentDate = new Date(`${assignment.date}T${assignment.time || '00:00'}`);
-  const isUpcoming = assignment.status === "upcoming";
-  const isCompleted = assignment.status === "completed";
+  const assignmentDateTime = new Date(`${assignment.date}T${assignment.time || '00:00'}`);
+  // Auto-determine status based on date - no need for manual status field
+  const assignmentDateOnly = assignment.date ? new Date(assignment.date + 'T00:00:00') : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  // Assignment is upcoming if date is today or in the future
+  const isUpcoming = assignmentDateOnly ? assignmentDateOnly >= today : false;
+  // Assignment is past/completed if date is before today
+  const isPast = assignmentDateOnly ? assignmentDateOnly < today : false;
+  const statusColors = getStatusColor(isUpcoming ? "upcoming" : "completed");
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -365,8 +342,8 @@ export default function AssignmentDetailPage() {
                 <h1 className="text-3xl font-semibold text-slate-50">{assignment.title}</h1>
                 <p className="mt-2 text-slate-400">{assignment.setting}</p>
                 <div className="flex items-center gap-3 mt-3">
-                  <span className={`px-3 py-1 rounded-lg text-sm font-medium ${statusColors.bg} ${statusColors.border} ${statusColors.text} border`}>
-                    {assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)}
+                  <span className="px-3 py-1 rounded-lg text-sm font-medium bg-slate-800 border border-slate-700 text-slate-300">
+                    {isUpcoming ? "Upcoming" : "Past"}
                   </span>
                   {assignment.is_team_assignment && (
                     <span className="px-3 py-1 rounded-lg text-sm font-medium bg-violet-500/20 border border-violet-500/30 text-violet-400 flex items-center gap-1.5">
@@ -380,23 +357,6 @@ export default function AssignmentDetailPage() {
               </div>
             </div>
 
-            {/* Status Update Dropdown */}
-            {assignment.user_id === user?.id && isUpcoming && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleStatusUpdate("in_progress")}
-                  className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors text-sm"
-                >
-                  Mark In Progress
-                </button>
-                <button
-                  onClick={() => handleStatusUpdate("completed")}
-                  className="px-4 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-400 transition-colors text-sm font-medium"
-                >
-                  Mark Completed
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -411,7 +371,7 @@ export default function AssignmentDetailPage() {
                 <div>
                   <p className="text-sm text-slate-400 mb-1">Date & Time</p>
                   <p className="text-slate-200 font-medium">
-                    {assignmentDate.toLocaleDateString('en-US', {
+                    {assignmentDateTime.toLocaleDateString('en-US', {
                       weekday: 'long',
                       month: 'long',
                       day: 'numeric',
@@ -471,7 +431,8 @@ export default function AssignmentDetailPage() {
                       if (assignment.is_team_assignment) {
                         router.push(`/assignments/${assignmentId}/team-prep`);
                       } else {
-                        router.push(`/assignments/${assignmentId}/prep`);
+                        // Navigate to dashboard with prep mode and assignment
+                        router.push(`/dashboard?mode=prep&assignment=${assignmentId}`);
                       }
                     }}
                     className="px-4 py-3 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-left"
@@ -480,17 +441,21 @@ export default function AssignmentDetailPage() {
                   </button>
                 )}
 
-                {isCompleted && (
+                {isPast && (
                   <button
-                    onClick={() => router.push(`/assignments/${assignmentId}/debrief`)}
-                    className="px-4 py-3 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors text-left font-medium"
+                    onClick={() => router.push(`/dashboard?mode=debrief&assignment=${assignmentId}`)}
+                    className="px-4 py-3 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-400 transition-colors text-left"
                   >
-                    View Debrief
+                    Debrief
                   </button>
                 )}
 
                 <button
-                  onClick={() => {/* TODO: Share assignment */}}
+                  onClick={() => {
+                    const url = `${window.location.origin}/assignments/${assignmentId}`;
+                    navigator.clipboard.writeText(url);
+                    alert('Link copied to clipboard!');
+                  }}
                   className="px-4 py-3 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors text-left font-medium"
                 >
                   Share
@@ -508,7 +473,7 @@ export default function AssignmentDetailPage() {
                   <h2 className="text-lg font-semibold text-slate-100">
                     Team {teamMembers.length > 0 && `(${teamMembers.length})`}
                   </h2>
-                  {assignment.user_id === user?.id && (
+                  {assignment.user_id === user?.id && !assignment.organization_id && (
                     <button
                       onClick={openInviteModal}
                       className="px-3 py-1.5 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/30 text-violet-300 text-xs font-medium transition-colors"
@@ -545,7 +510,7 @@ export default function AssignmentDetailPage() {
                 ) : (
                   <div className="text-center py-4">
                     <p className="text-sm text-slate-400 mb-3">No team members yet</p>
-                    {assignment.user_id === user?.id && (
+                    {assignment.user_id === user?.id && !assignment.organization_id && (
                       <button
                         onClick={openInviteModal}
                         className="px-4 py-2 rounded-lg bg-violet-500 hover:bg-violet-400 text-white text-sm font-medium transition-colors"
@@ -586,20 +551,32 @@ export default function AssignmentDetailPage() {
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="text-lg font-semibold text-slate-100 mb-4">Resources</h2>
               <div className="space-y-2">
-                <button className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm">
+                <button
+                  onClick={() => router.push(`/dashboard?mode=prep&assignment=${assignmentId}&message=${encodeURIComponent(`Give me a preparation checklist for my ${assignment.assignment_type} assignment "${assignment.title}". What should I review and prepare before the assignment?`)}`)}
+                  className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm"
+                >
                   Assignment Checklist
                 </button>
                 {assignment.assignment_type === "Medical" && (
-                  <button className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm">
+                  <button
+                    onClick={() => router.push(`/dashboard?mode=prep&assignment=${assignmentId}&message=${encodeURIComponent(`Generate key medical terminology and vocabulary I should know for this ${assignment.setting || 'medical'} assignment. Include both English terms and interpretation considerations.`)}`)}
+                    className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm"
+                  >
                     Medical Terminology Guide
                   </button>
                 )}
                 {assignment.is_team_assignment && (
-                  <button className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm">
+                  <button
+                    onClick={() => router.push(`/dashboard?mode=prep&assignment=${assignmentId}&message=${encodeURIComponent(`What are best practices for team interpreting? Help me prepare for coordinating with my team partner(s) for this assignment.`)}`)}
+                    className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm"
+                  >
                     Team Interpreting Guide
                   </button>
                 )}
-                <button className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm">
+                <button
+                  onClick={() => router.push(`/dashboard?mode=research&message=${encodeURIComponent(`What resources and reference materials would help me prepare for a ${assignment.assignment_type} interpreting assignment?`)}`)}
+                  className="w-full text-left px-3 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-teal-400 transition-colors text-sm"
+                >
                   General Resources
                 </button>
               </div>

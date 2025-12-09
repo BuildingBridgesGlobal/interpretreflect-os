@@ -87,7 +87,12 @@ export default function DrillSessionPage() {
 
     // Fetch drills for this category
     const response = await fetch(
-      `/api/drills?category=${category}&count=5&user_id=${session.user.id}`
+      `/api/drills?category=${category}&count=5`,
+      {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      }
     );
 
     if (response.ok) {
@@ -214,8 +219,8 @@ export default function DrillSessionPage() {
             <p className={`text-lg ${performanceColor} font-medium`}>{performanceLevel}</p>
           </div>
 
-          {/* Stats Card - Enhanced */}
-          <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-900/80 to-slate-800/50 p-8 mb-8">
+          {/* Stats Card */}
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 mb-6">
             <div className="grid grid-cols-3 gap-6 text-center">
               <div className="p-4 rounded-lg bg-slate-800/50">
                 <div className="text-4xl font-bold text-teal-400 mb-2">{sessionStats.total}</div>
@@ -247,7 +252,7 @@ export default function DrillSessionPage() {
           </div>
 
           {/* Encouragement message */}
-          <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-6 mb-8 text-center">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 mb-6 text-center">
             <p className="text-slate-300">
               {accuracy >= 80
                 ? "Outstanding work! You're demonstrating strong interpreter judgment. Keep reinforcing these skills."
@@ -336,7 +341,7 @@ export default function DrillSessionPage() {
         {!showFeedback ? (
           <>
             {/* Scenario Card */}
-            <div className="rounded-xl border border-slate-700 bg-gradient-to-br from-slate-900/80 to-slate-800/30 p-8 mb-6">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 mb-6">
               <div className="mb-6">
                 <div className="flex items-center gap-3 mb-4">
                   <span className="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium">

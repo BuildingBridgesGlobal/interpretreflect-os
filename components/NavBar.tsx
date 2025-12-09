@@ -10,6 +10,7 @@ export default function NavBar() {
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isAgencyAdmin, setIsAgencyAdmin] = useState(false);
 
@@ -63,12 +64,12 @@ export default function NavBar() {
   const isActive = (path: string) => pathname === path;
 
   return (
-    <nav className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm sticky top-0 z-50">
+    <nav className="border-b border-white/[0.06] bg-ir-bg-primary/95 backdrop-blur-md sticky top-0 z-50">
       <div className="container mx-auto max-w-7xl px-4 md:px-6">
         <div className="flex h-16 items-center justify-between">
           {/* Logo - links to dashboard when logged in, landing page when not */}
           <Link href={user ? "/dashboard" : "/"} className="flex items-center gap-2">
-            <span className="text-xl font-semibold text-slate-50">
+            <span className="text-xl font-semibold text-slate-100">
               Interpret<span className="text-teal-400">Reflect</span>
             </span>
           </Link>
@@ -149,8 +150,27 @@ export default function NavBar() {
             </div>
           )}
 
-          {/* Auth Buttons */}
+          {/* Mobile Menu Button & Auth Buttons */}
           <div className="flex items-center gap-3">
+            {/* Mobile Hamburger Button - only show when logged in */}
+            {mounted && user && (
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 rounded-lg text-slate-300 hover:text-teal-300 hover:bg-slate-800 transition-colors"
+                aria-label="Toggle menu"
+              >
+                {mobileMenuOpen ? (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                )}
+              </button>
+            )}
+
             {!mounted ? (
               // Placeholder to prevent hydration mismatch - shows nothing during SSR
               <div className="h-10 w-24" />
@@ -159,7 +179,7 @@ export default function NavBar() {
                 <div className="relative">
                   <button
                     onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className="flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:border-teal-400/70 hover:text-teal-300 transition-colors"
+                    className="flex items-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.02] px-4 py-2 text-sm font-medium text-slate-200 hover:border-teal-500/30 hover:text-teal-300 transition-colors"
                   >
                     <span className="max-w-[150px] truncate">
                       {user.user_metadata?.full_name || user.email?.split('@')[0] || 'Account'}
@@ -183,7 +203,7 @@ export default function NavBar() {
                       />
 
                       {/* Dropdown Menu */}
-                      <div className="absolute right-0 mt-2 w-48 rounded-lg border border-slate-700 bg-slate-900 shadow-xl z-20">
+                      <div className="absolute right-0 mt-2 w-48 rounded-lg border border-slate-700 bg-slate-950 shadow-xl shadow-black/50 z-20">
                         <div className="py-1">
                           {isAgencyAdmin && (
                             <Link
@@ -218,6 +238,17 @@ export default function NavBar() {
                             </svg>
                             Settings
                           </Link>
+                          <a
+                            href="mailto:support@interpretreflect.com"
+                            onClick={() => setDropdownOpen(false)}
+                            className="flex items-center gap-2 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-teal-300 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Help & Support
+                          </a>
+                          <div className="border-t border-white/[0.06] my-1" />
                           <button
                             onClick={() => {
                               setDropdownOpen(false);
@@ -240,13 +271,13 @@ export default function NavBar() {
               <>
                 <Link
                   href="/signin"
-                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:border-teal-400/70 hover:text-teal-300 transition-colors"
+                  className="rounded-lg border border-white/[0.1] px-4 py-2 text-sm font-medium text-slate-200 hover:border-teal-500/30 hover:text-teal-300 transition-colors"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/signup"
-                  className="rounded-lg bg-teal-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-teal-300 transition-colors"
+                  className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-teal-400 transition-colors shadow-lg shadow-teal-500/20"
                 >
                   Get Started
                 </Link>
@@ -255,6 +286,126 @@ export default function NavBar() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Navigation Menu */}
+      {mounted && user && mobileMenuOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="md:hidden fixed inset-0 bg-slate-950 z-40"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+
+          {/* Mobile Menu Panel */}
+          <div className="md:hidden fixed top-16 left-0 right-0 bg-slate-950 border-b border-slate-800 z-50 shadow-xl shadow-black/50">
+            <div className="container mx-auto max-w-7xl px-4 py-4">
+              <div className="flex flex-col gap-1">
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/dashboard")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/journal"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/journal")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  Journal
+                </Link>
+                <Link
+                  href="/assignments"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/assignments") || pathname?.startsWith("/assignments")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  Assignments
+                </Link>
+                <Link
+                  href="/skills"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/skills")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  Skills
+                </Link>
+                <Link
+                  href="/community"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/community")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  Community
+                </Link>
+                <Link
+                  href="/wellness"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/wellness")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  Wellness
+                </Link>
+                <Link
+                  href="/ceu"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/ceu")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  My CEUs
+                </Link>
+                <Link
+                  href="/settings"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/settings")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  Settings
+                </Link>
+                {isAgencyAdmin && (
+                  <Link
+                    href="/agency"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                      isActive("/agency")
+                        ? "bg-violet-500/20 text-violet-400"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-violet-300"
+                    }`}
+                  >
+                    Agency Dashboard
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </nav>
   );
 }

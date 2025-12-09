@@ -269,7 +269,7 @@ function AssignmentsPageContent() {
     };
     const color = typeColors[type] || "bg-slate-500";
     return (
-      <div className={`w-8 h-8 rounded-full ${color} flex-shrink-0`}></div>
+      <div className={`w-3 h-3 rounded-full ${color} flex-shrink-0`}></div>
     );
   };
 
@@ -323,11 +323,11 @@ function AssignmentsPageContent() {
           assignment_type: formData.assignment_type,
           setting: formData.setting,
           date: formData.date,
-          time: formData.time,
+          time: formData.time || null, // Convert empty string to null for PostgreSQL time type
           location_type: formData.location_type,
-          location_details: formData.location_details,
+          location_details: formData.location_details || null,
           duration_minutes: formData.duration_minutes,
-          description: formData.description,
+          description: formData.description || null,
           is_team_assignment: formData.is_team_assignment,
           team_size: formData.is_team_assignment ? formData.team_size : 1,
           timezone: formData.timezone,
@@ -440,7 +440,7 @@ function AssignmentsPageContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-slate-400">Loading assignments...</div>
       </div>
     );
@@ -455,7 +455,7 @@ function AssignmentsPageContent() {
   const totalFreeWrites = pastAssignments.reduce((acc, a) => acc + (a.free_write_sessions?.length || 0), 0) + freeWriteSessions.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
       {/* Hero-style Background Effects */}
       <div className="absolute inset-0 -z-10 opacity-30">
         <div className="absolute top-20 left-20 w-96 h-96 bg-teal-400/20 rounded-full blur-3xl animate-pulse" />
@@ -598,7 +598,7 @@ function AssignmentsPageContent() {
         )}
 
         {/* Assignments List */}
-        <div className="space-y-4">
+        <div className="space-y-2">
           {displayedAssignments.map((assignment) => {
             const statusColors = getStatusColor(assignment.status);
             const teamMembers = assignment.team_members || [];
@@ -608,117 +608,87 @@ function AssignmentsPageContent() {
             return (
               <div
                 key={assignment.id}
-                className={`rounded-xl border ${statusColors.border} ${statusColors.bg} p-6 hover:shadow-lg transition-all cursor-pointer`}
+                className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-3 hover:border-slate-600 transition-all cursor-pointer"
                 onClick={() => router.push(`/assignments/${assignment.id}`)}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      {getTypeIcon(assignment.assignment_type)}
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-100">{assignment.title}</h3>
-                        <p className="text-sm text-slate-400">{assignment.setting}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {getTypeIcon(assignment.assignment_type)}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-semibold text-slate-100 truncate">{assignment.title}</h3>
+                        {assignment.setting && (
+                          <span className="text-xs text-slate-500 hidden sm:inline">• {assignment.setting}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+                        <span>
+                          {new Date(assignment.date + 'T' + (assignment.time || '00:00')).toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </span>
+                        {assignment.duration_minutes && <span>{assignment.duration_minutes} min</span>}
+                        {assignment.location_type && <span>{assignment.location_type.replace('_', ' ')}</span>}
                       </div>
                     </div>
+                  </div>
 
-                    <div className="flex items-center gap-4 mt-3 text-sm text-slate-300">
-                      <span className="flex items-center gap-1">
-                        {new Date(assignment.date + 'T' + (assignment.time || '00:00')).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                        {assignment.time && ` at ${assignment.time}`}
+                  {/* Badges - inline */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {assignment.is_team_assignment && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-500/20 border border-violet-500/30 text-violet-400">
+                        Team
                       </span>
-                      {assignment.duration_minutes && (
-                        <span className="flex items-center gap-1">
-                          {assignment.duration_minutes} min
-                        </span>
-                      )}
-                      {assignment.location_type && (
-                        <span className="flex items-center gap-1">
-                          {assignment.location_type.replace('_', ' ')}
-                        </span>
-                      )}
-                    </div>
-
-                    {assignment.description && (
-                      <p className="text-sm text-slate-300 mt-3 line-clamp-2">{assignment.description}</p>
                     )}
-
-                    {/* Team Badge & Intensity Badge */}
-                    {(assignment.is_team_assignment || assignment.emotional_intensity) && (
-                      <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        {assignment.is_team_assignment && (
-                          <span className="px-2 py-1 rounded-md bg-violet-500/20 border border-violet-500/30 text-violet-400 text-xs font-medium flex items-center gap-1">
-                            Team Assignment ({confirmedMembers.length} {confirmedMembers.length === 1 ? 'member' : 'members'})
-                          </span>
-                        )}
-                        {assignment.emotional_intensity && (
-                          <span className={`px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1 ${
-                            assignment.emotional_intensity === 'very_high'
-                              ? 'bg-rose-500/20 border border-rose-500/30 text-rose-400'
-                              : assignment.emotional_intensity === 'high'
-                              ? 'bg-orange-500/20 border border-orange-500/30 text-orange-400'
-                              : assignment.emotional_intensity === 'moderate'
-                              ? 'bg-amber-500/20 border border-amber-500/30 text-amber-400'
-                              : 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
-                          }`}>
-                            {assignment.emotional_intensity === 'very_high' ? '🔴' :
-                             assignment.emotional_intensity === 'high' ? '🟠' :
-                             assignment.emotional_intensity === 'moderate' ? '🟡' : '🟢'}
-                            {assignment.emotional_intensity === 'very_high' ? 'Very High Load' :
-                             assignment.emotional_intensity === 'high' ? 'High Load' :
-                             assignment.emotional_intensity === 'moderate' ? 'Moderate Load' : 'Low Load'}
-                          </span>
-                        )}
-                      </div>
+                    {assignment.emotional_intensity && (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        assignment.emotional_intensity === 'very_high'
+                          ? 'bg-rose-500/20 border border-rose-500/30 text-rose-400'
+                          : assignment.emotional_intensity === 'high'
+                          ? 'bg-orange-500/20 border border-orange-500/30 text-orange-400'
+                          : assignment.emotional_intensity === 'moderate'
+                          ? 'bg-amber-500/20 border border-amber-500/30 text-amber-400'
+                          : 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
+                      }`}>
+                        {assignment.emotional_intensity === 'very_high' ? 'High' :
+                         assignment.emotional_intensity === 'high' ? 'Med-High' :
+                         assignment.emotional_intensity === 'moderate' ? 'Med' : 'Low'}
+                      </span>
                     )}
-
-                    {/* Prep Status - Upcoming Tab */}
+                    {/* Prep Status Badge - Upcoming */}
                     {selectedTab === "upcoming" && (
-                      <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        <span className={`px-2 py-1 rounded-md text-xs font-medium ${
-                          assignment.prep_status === 'completed'
-                            ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
-                            : assignment.prep_status === 'in_progress'
-                            ? 'bg-amber-500/20 border border-amber-500/30 text-amber-400'
-                            : 'bg-slate-700/50 border border-slate-600 text-slate-400'
-                        }`}>
-                          {assignment.prep_status === 'completed' ? 'Prep Complete' :
-                           assignment.prep_status === 'in_progress' ? 'Prep In Progress' :
-                           'Prep Pending'}
-                        </span>
-                      </div>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        assignment.prep_status === 'completed'
+                          ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
+                          : assignment.prep_status === 'in_progress'
+                          ? 'bg-amber-500/20 border border-amber-500/30 text-amber-400'
+                          : 'bg-slate-700/50 border border-slate-600 text-slate-500'
+                      }`}>
+                        {assignment.prep_status === 'completed' ? 'Prepped' :
+                         assignment.prep_status === 'in_progress' ? 'Prepping' : 'Not Prepped'}
+                      </span>
                     )}
-
-                    {/* Status Badges - Past Tab */}
+                    {/* Debrief Status Badge - Past */}
                     {selectedTab === "past" && (
-                      <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        {assignment.prep_status === 'completed' && (
-                          <span className="px-2 py-1 rounded-md text-xs font-medium bg-emerald-500/20 border border-emerald-500/30 text-emerald-400">
-                            Prepped
-                          </span>
-                        )}
-                        {assignment.debriefed && (
-                          <span className="px-2 py-1 rounded-md text-xs font-medium bg-teal-500/20 border border-teal-500/30 text-teal-400 flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                            Debriefed
-                          </span>
-                        )}
-                        {hasFreeWrites && (
-                          <span className="px-2 py-1 rounded-md text-xs font-medium bg-purple-500/20 border border-purple-500/30 text-purple-400">
-                            {assignment.free_write_sessions?.length} Free Write{assignment.free_write_sessions?.length !== 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </div>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        assignment.debriefed
+                          ? 'bg-teal-500/20 border border-teal-500/30 text-teal-400'
+                          : 'bg-slate-700/50 border border-slate-600 text-slate-500'
+                      }`}>
+                        {assignment.debriefed ? 'Debriefed' : 'Not Debriefed'}
+                      </span>
+                    )}
+                    {selectedTab === "past" && hasFreeWrites && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 border border-purple-500/30 text-purple-400">
+                        {assignment.free_write_sessions?.length} FW
+                      </span>
                     )}
                   </div>
 
                   {/* Actions */}
-                  <div className="ml-4 flex flex-col gap-2">
+                  <div className="flex-shrink-0">
                     {selectedTab === "upcoming" && assignment.prep_status !== 'completed' && (
                       <button
                         onClick={(e) => {
@@ -726,21 +696,21 @@ function AssignmentsPageContent() {
                           if (assignment.is_team_assignment) {
                             router.push(`/assignments/${assignment.id}/team-prep`);
                           } else {
-                            router.push(`/assignments/${assignment.id}/prep`);
+                            router.push(`/dashboard?mode=prep&assignment=${assignment.id}`);
                           }
                         }}
-                        className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors whitespace-nowrap text-sm"
+                        className="px-3 py-1.5 rounded-md bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-xs"
                       >
-                        {assignment.is_team_assignment ? 'Team Prep' : 'Start Prep'}
+                        {assignment.is_team_assignment ? 'Team Prep' : 'Prep'}
                       </button>
                     )}
                     {selectedTab === "past" && !assignment.debriefed && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(`/debrief/${assignment.id}`);
+                          router.push(`/dashboard?mode=debrief&assignment=${assignment.id}`);
                         }}
-                        className="px-4 py-2 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-sm font-semibold border border-teal-500/30 transition-all whitespace-nowrap"
+                        className="px-3 py-1.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 text-xs font-medium border border-teal-500/30 transition-all"
                       >
                         Debrief
                       </button>
@@ -749,64 +719,49 @@ function AssignmentsPageContent() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          router.push(`/debrief/${assignment.id}`);
+                          router.push(`/dashboard?mode=debrief&assignment=${assignment.id}`);
                         }}
-                        className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors whitespace-nowrap text-sm"
+                        className="px-3 py-1.5 rounded-md border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors text-xs"
                       >
-                        View Debrief
+                        Debrief
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Free Write Sessions - Past Tab only */}
+                {/* Free Write Sessions - Past Tab only (collapsible) */}
                 {selectedTab === "past" && hasFreeWrites && (
-                  <div className="mt-4 pt-4 border-t border-slate-700/50">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-4 h-4 rounded-full bg-gradient-to-r from-purple-400 to-rose-400"></div>
-                      <h4 className="text-sm font-semibold text-purple-300">
-                        Free Writes ({assignment.free_write_sessions?.length})
-                      </h4>
-                    </div>
-                    <div className="space-y-2">
-                      {assignment.free_write_sessions?.map((session) => (
-                        <div
-                          key={session.id}
-                          className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-slate-400">
-                              {formatDateTime(session.created_at || "")}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpandedFreeWrite(
-                                  expandedFreeWrite === session.id ? null : session.id
-                                );
-                              }}
-                              className="text-xs text-purple-300 hover:text-purple-200"
-                            >
-                              {expandedFreeWrite === session.id ? "Collapse" : "Expand"}
-                            </button>
-                          </div>
-                          {expandedFreeWrite === session.id ? (
-                            <div className="space-y-2 mt-3">
-                              {(session.messages || []).filter(m => m.role === "user").map((msg, idx) => (
-                                <p key={idx} className="text-sm text-slate-200 whitespace-pre-wrap">
-                                  {msg.content}
-                                </p>
-                              ))}
+                  <div className="mt-2 pt-2 border-t border-slate-700/30">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedFreeWrite(expandedFreeWrite === assignment.id ? null : assignment.id);
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300"
+                    >
+                      <span>{assignment.free_write_sessions?.length} Free Write{assignment.free_write_sessions?.length !== 1 ? 's' : ''}</span>
+                      <svg className={`w-3 h-3 transition-transform ${expandedFreeWrite === assignment.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {expandedFreeWrite === assignment.id && (
+                      <div className="mt-2 space-y-1.5">
+                        {assignment.free_write_sessions?.map((session) => (
+                          <div
+                            key={session.id}
+                            className="rounded border border-purple-500/20 bg-purple-500/5 px-2 py-1.5 text-xs"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">{formatDateTime(session.created_at || "")}</span>
                             </div>
-                          ) : (
-                            <p className="text-sm text-slate-300 truncate">
+                            <p className="text-slate-300 truncate mt-0.5">
                               {(session.messages || []).find(m => m.role === "user")?.content || "No content"}
                             </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1357,7 +1312,7 @@ function AssignmentsPageContent() {
 // Loading fallback for Suspense
 function AssignmentsPageLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen bg-slate-950">
       <NavBar />
       <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8">
         <div className="text-slate-400">Loading assignments...</div>

@@ -33,7 +33,18 @@
       "Bash(powershell -Command \"Stop-Process -Id 131804 -Force\")",
       "Bash(timeout /t 2 /nobreak)",
       "Bash(cmd /c \"taskkill /F /PID 112576\")",
-      "Bash(powershell -Command \"Stop-Process -Id 112576 -Force\")"
+      "Bash(powershell -Command \"Stop-Process -Id 112576 -Force\")",
+      "Bash(xargs:*)",
+      "Bash(for version in 20250128000001 20250128000002)",
+      "Bash(do echo \"Marking $version as applied...\")",
+      "Bash(for version in 20250128_dashboard_features 20250128_interpreteros_schema 20250128_interpreteros_schema_v2)",
+      "Bash(timeout 60 npx tsc:*)",
+      "Bash(npm ls:*)",
+      "Bash(cmd /c \"taskkill /F /PID 6184\")",
+      "Bash(cmd /c \"taskkill /F /IM node.exe\")",
+      "Bash(powershell -Command \"Stop-Process -Id 6184 -Force\")",
+      "Bash(npx tsc:*)",
+      "Bash(node scripts/create-comment-likes.js:*)"
     ],
     "deny": [],
     "ask": []

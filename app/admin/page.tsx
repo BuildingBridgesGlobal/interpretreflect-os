@@ -41,12 +41,29 @@ type AgencyCode = {
   created_at: string;
 };
 
+type ElyaFeedback = {
+  id: string;
+  user_id: string;
+  mode: string;
+  title: string | null;
+  mood_emoji: string | null;
+  sentiment: string | null;
+  user_feedback: string | null;
+  message_count: number;
+  created_at: string;
+  ended_at: string | null;
+  user?: {
+    full_name: string | null;
+    email: string | null;
+  };
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [userData, setUserData] = useState<any>(null);
-  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials" | "agencies" | "ceu">("overview");
+  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials" | "agencies" | "ceu" | "elya-feedback">("overview");
 
   // Agency management state
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -73,6 +90,11 @@ export default function AdminPage() {
   });
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  // Elya Feedback state
+  const [elyaFeedback, setElyaFeedback] = useState<ElyaFeedback[]>([]);
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
+  const [feedbackFilter, setFeedbackFilter] = useState<"all" | "helpful" | "okay" | "not-helpful" | "with-text">("all");
 
   // CEU Export state
   const [exportStartDate, setExportStartDate] = useState(() => {
@@ -140,6 +162,65 @@ export default function AdminPage() {
       loadAgencyData();
     }
   }, [selectedView]);
+
+  // Load Elya feedback when that tab is selected
+  useEffect(() => {
+    if (selectedView === "elya-feedback") {
+      loadElyaFeedback();
+    }
+  }, [selectedView]);
+
+  const loadElyaFeedback = async () => {
+    setLoadingFeedback(true);
+    try {
+      // Get conversations that have feedback (mood_emoji is not null OR user_feedback is not null)
+      const { data: convos, error } = await supabase
+        .from("elya_conversations")
+        .select(`
+          id,
+          user_id,
+          mode,
+          title,
+          mood_emoji,
+          sentiment,
+          user_feedback,
+          message_count,
+          created_at,
+          ended_at
+        `)
+        .eq("is_active", false)
+        .order("ended_at", { ascending: false })
+        .limit(100);
+
+      if (error) {
+        console.error("Error loading feedback:", error);
+        return;
+      }
+
+      // Get user info for each conversation
+      if (convos && convos.length > 0) {
+        const userIds = [...new Set(convos.map((c: any) => c.user_id))];
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", userIds);
+
+        const profileMap = new Map(profiles?.map((p: any) => [p.id, p]) || []);
+
+        const feedbackWithUsers = convos.map((c: any) => ({
+          ...c,
+          user: profileMap.get(c.user_id) || null
+        }));
+
+        setElyaFeedback(feedbackWithUsers);
+      } else {
+        setElyaFeedback([]);
+      }
+    } catch (error) {
+      console.error("Error loading Elya feedback:", error);
+    }
+    setLoadingFeedback(false);
+  };
 
   const loadAgencyData = async () => {
     // Load organizations
@@ -508,7 +589,8 @@ export default function AdminPage() {
             { key: "community", label: "Community Activity" },
             { key: "wellness", label: "Wellness Indicators" },
             { key: "compliance", label: "Compliance & CEUs" },
-            { key: "credentials", label: "Credentials" }
+            { key: "credentials", label: "Credentials" },
+            { key: "elya-feedback", label: "Elya Feedback" }
           ].map((tab) => (
             <button
               key={tab.key}
@@ -1630,6 +1712,217 @@ export default function AdminPage() {
               <p className="text-sm text-slate-300">
                 Interpreters upload their credentials via Settings → Credentials. You can view all roster credentials here,
                 export compliance reports, and send renewal reminders. All credential files are stored securely and encrypted.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Elya Feedback Tab */}
+        {selectedView === "elya-feedback" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-100">Elya Feedback</h3>
+                <p className="text-sm text-slate-400 mt-1">User feedback from Elya chat sessions</p>
+              </div>
+              <button
+                onClick={loadElyaFeedback}
+                disabled={loadingFeedback}
+                className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors text-sm flex items-center gap-2"
+              >
+                <svg className={`w-4 h-4 ${loadingFeedback ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
+
+            {/* Summary Stats */}
+            {(() => {
+              const withFeedback = elyaFeedback.filter(f => f.mood_emoji);
+              const helpful = withFeedback.filter(f => f.mood_emoji === "helpful").length;
+              const okay = withFeedback.filter(f => f.mood_emoji === "okay").length;
+              const notHelpful = withFeedback.filter(f => f.mood_emoji === "not-helpful").length;
+              const withText = elyaFeedback.filter(f => f.user_feedback).length;
+              const totalWithFeedback = withFeedback.length;
+              const helpfulPercent = totalWithFeedback > 0 ? Math.round((helpful / totalWithFeedback) * 100) : 0;
+
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-5">
+                    <p className="text-3xl font-bold text-violet-400">{elyaFeedback.length}</p>
+                    <p className="text-sm text-slate-300 mt-1">Total Sessions</p>
+                    <p className="text-xs text-slate-500 mt-1">Completed chats</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+                    <p className="text-3xl font-bold text-emerald-400">{helpful}</p>
+                    <p className="text-sm text-slate-300 mt-1">Helpful</p>
+                    <p className="text-xs text-slate-500 mt-1">{helpfulPercent}% of feedback</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-600/50 bg-slate-700/20 p-5">
+                    <p className="text-3xl font-bold text-slate-300">{okay}</p>
+                    <p className="text-sm text-slate-300 mt-1">Okay</p>
+                    <p className="text-xs text-slate-500 mt-1">Neutral feedback</p>
+                  </div>
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-5">
+                    <p className="text-3xl font-bold text-rose-400">{notHelpful}</p>
+                    <p className="text-sm text-slate-300 mt-1">Not Helpful</p>
+                    <p className="text-xs text-slate-500 mt-1">Needs improvement</p>
+                  </div>
+                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
+                    <p className="text-3xl font-bold text-amber-400">{withText}</p>
+                    <p className="text-sm text-slate-300 mt-1">With Comments</p>
+                    <p className="text-xs text-slate-500 mt-1">Written feedback</p>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Filters */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-400">Filter:</span>
+              {[
+                { key: "all", label: "All" },
+                { key: "helpful", label: "Helpful" },
+                { key: "okay", label: "Okay" },
+                { key: "not-helpful", label: "Not Helpful" },
+                { key: "with-text", label: "With Comments" },
+              ].map((filter) => (
+                <button
+                  key={filter.key}
+                  onClick={() => setFeedbackFilter(filter.key as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    feedbackFilter === filter.key
+                      ? "bg-violet-500 text-white"
+                      : "bg-slate-800 text-slate-400 hover:text-slate-300 border border-slate-700"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Feedback Table */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+              <div className="p-6">
+                <h4 className="text-sm font-medium text-slate-300 mb-4">
+                  Recent Feedback ({elyaFeedback.filter(f => {
+                    if (feedbackFilter === "all") return true;
+                    if (feedbackFilter === "with-text") return !!f.user_feedback;
+                    return f.mood_emoji === feedbackFilter;
+                  }).length})
+                </h4>
+
+                {loadingFeedback ? (
+                  <div className="text-center py-8 text-slate-400">Loading feedback...</div>
+                ) : elyaFeedback.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="w-16 h-16 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-medium text-slate-200 mb-2">No Feedback Yet</h3>
+                    <p className="text-sm text-slate-400">Feedback will appear here when users complete Elya conversations</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-800">
+                          <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">User</th>
+                          <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Mode</th>
+                          <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Title</th>
+                          <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Feedback</th>
+                          <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Comment</th>
+                          <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {elyaFeedback
+                          .filter(f => {
+                            if (feedbackFilter === "all") return true;
+                            if (feedbackFilter === "with-text") return !!f.user_feedback;
+                            return f.mood_emoji === feedbackFilter;
+                          })
+                          .map((feedback) => (
+                            <tr key={feedback.id} className="hover:bg-slate-800/30 transition-colors">
+                              <td className="py-4">
+                                <div>
+                                  <p className="text-sm font-medium text-slate-100">
+                                    {feedback.user?.full_name || "Unknown User"}
+                                  </p>
+                                  <p className="text-xs text-slate-500">{feedback.user?.email || feedback.user_id.slice(0, 8)}</p>
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <span className={`px-2 py-1 rounded-md text-xs font-medium ${
+                                  feedback.mode === "chat" ? "bg-violet-500/20 text-violet-400" :
+                                  feedback.mode === "prep" ? "bg-teal-500/20 text-teal-400" :
+                                  feedback.mode === "debrief" ? "bg-blue-500/20 text-blue-400" :
+                                  feedback.mode === "research" ? "bg-amber-500/20 text-amber-400" :
+                                  feedback.mode === "free-write" ? "bg-rose-500/20 text-rose-400" :
+                                  "bg-slate-700/50 text-slate-400"
+                                }`}>
+                                  {feedback.mode || "chat"}
+                                </span>
+                              </td>
+                              <td className="py-4">
+                                <p className="text-sm text-slate-300 max-w-[200px] truncate">
+                                  {feedback.title || "Untitled"}
+                                </p>
+                                <p className="text-xs text-slate-500">{feedback.message_count} messages</p>
+                              </td>
+                              <td className="py-4">
+                                {feedback.mood_emoji ? (
+                                  <span className={`px-2 py-1 rounded-md text-xs font-medium ${
+                                    feedback.mood_emoji === "helpful" ? "bg-emerald-500/20 text-emerald-400" :
+                                    feedback.mood_emoji === "okay" ? "bg-slate-600/50 text-slate-300" :
+                                    feedback.mood_emoji === "not-helpful" ? "bg-rose-500/20 text-rose-400" :
+                                    "bg-slate-700/50 text-slate-400"
+                                  }`}>
+                                    {feedback.mood_emoji === "helpful" ? "Helpful" :
+                                     feedback.mood_emoji === "okay" ? "Okay" :
+                                     feedback.mood_emoji === "not-helpful" ? "Not Helpful" :
+                                     feedback.mood_emoji}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-500">No feedback</span>
+                                )}
+                              </td>
+                              <td className="py-4">
+                                {feedback.user_feedback ? (
+                                  <div className="max-w-[250px]">
+                                    <p className="text-sm text-slate-300 line-clamp-2">
+                                      &ldquo;{feedback.user_feedback}&rdquo;
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-slate-500">-</span>
+                                )}
+                              </td>
+                              <td className="py-4">
+                                <p className="text-sm text-slate-400">
+                                  {feedback.ended_at ? formatDate(feedback.ended_at) : formatDate(feedback.created_at)}
+                                </p>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Info Card */}
+            <div className="rounded-xl border border-violet-500/50 bg-violet-500/10 p-5">
+              <h3 className="text-sm font-semibold text-violet-400 mb-2">About Elya Feedback</h3>
+              <p className="text-sm text-slate-300">
+                Users are asked for feedback when they end a conversation with Elya. They can rate the chat as
+                &ldquo;Helpful&rdquo;, &ldquo;Okay&rdquo;, or &ldquo;Not what I needed&rdquo; and optionally leave a written comment.
+                This feedback helps improve Elya&apos;s responses over time.
               </p>
             </div>
           </div>

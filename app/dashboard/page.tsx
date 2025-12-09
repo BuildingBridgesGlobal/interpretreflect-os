@@ -7,11 +7,12 @@ import NavBar from "@/components/NavBar";
 import ElyaInterface from "@/components/dashboard/ElyaInterface";
 import UpgradeModal from "@/components/UpgradeModal";
 import PendingInvitationBanner from "@/components/PendingInvitationBanner";
-import BurnoutDriftIndicator from "@/components/dashboard/BurnoutDriftIndicator";
-import WellnessCheckinModal from "@/components/dashboard/WellnessCheckinModal";
-import WeeklyLoadChart from "@/components/dashboard/WeeklyLoadChart";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { SkeletonDashboard } from "@/components/ui/skeleton";
+import Link from "next/link";
+import {
+  Plus, Calendar, BookOpen, Award
+} from "lucide-react";
 
 type Assignment = {
   id: string;
@@ -25,66 +26,94 @@ type Assignment = {
   duration_minutes?: number | null;
   setting?: string | null;
   emotional_intensity?: string | null;
+  description?: string | null;
+  location_type?: string | null;
 };
 
-type CEUSummary = {
-  total_earned: number;
-  total_required: number;
-  professional_studies_earned: number;
-  certificates_count: number;
+type UserProfile = {
+  id: string;
+  full_name?: string | null;
+  subscription_tier?: string | null;
+  ceu_credits_remaining?: number | null;
+  ceu_credits_used?: number | null;
 };
 
-type DrillStats = {
-  readiness_score: number | null;
-  total_drills_attempted: number | null;
-  current_streak_days: number | null;
-};
-
-type RecentConversation = {
+type ElyaConversation = {
   id: string;
   mode: string;
+  mood_emoji: string | null;
+  ai_title: string | null;
   created_at: string;
-  // Optional fields from journal migration (may not exist)
-  mood_emoji?: string | null;
-  ai_title?: string | null;
+  message_count: number;
 };
 
-type WellnessCheckin = {
-  id: string;
-  feeling: "energized" | "calm" | "okay" | "drained" | "overwhelmed";
-  created_at: string;
-};
+// Upgrade Banner Component - Inline style (not sticky bar)
+function UpgradeBanner({ tier, onUpgrade }: { tier: string; onUpgrade: () => void }) {
+  if (tier === 'pro') return null;
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-gradient-to-r from-teal-500/10 via-cyan-500/5 to-transparent border border-teal-500/20">
+      <div className="flex items-center gap-3">
+        <span className="px-2 py-0.5 rounded text-xs font-medium bg-teal-500/20 text-teal-400 border border-teal-500/30">
+          {tier === 'free' ? 'Basic' : 'Growth'}
+        </span>
+        <span className="text-sm text-slate-400">
+          Upgrade to Pro for CEU workshops & unlimited features
+        </span>
+      </div>
+      <button
+        onClick={onUpgrade}
+        className="px-4 py-2 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-sm font-semibold transition-colors shadow-lg shadow-teal-500/20"
+      >
+        Upgrade to Pro
+      </button>
+    </div>
+  );
+}
 
 function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<any>(null);
+  const [userData, setUserData] = useState<UserProfile | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
-  const [showElya, setShowElya] = useState(false);
   const [elyaPreFillMessage, setElyaPreFillMessage] = useState<string>("");
-  const [elyaMode, setElyaMode] = useState<"chat" | "free-write" | "prep" | "debrief">("chat");
-  const [todayAssignments, setTodayAssignments] = useState<Assignment[]>([]);
+  const [elyaMode, setElyaMode] = useState<"chat" | "free-write" | "prep" | "debrief" | "research" | "patterns">("chat");
   const [upcomingAssignments, setUpcomingAssignments] = useState<Assignment[]>([]);
   const [recentAssignments, setRecentAssignments] = useState<Assignment[]>([]);
-  const [ceuSummary, setCeuSummary] = useState<CEUSummary | null>(null);
-  const [drillStats, setDrillStats] = useState<DrillStats | null>(null);
-  const [conversationCount, setConversationCount] = useState(0);
-  const [recentConversations, setRecentConversations] = useState<RecentConversation[]>([]);
-  const [wellnessCheckins, setWellnessCheckins] = useState<WellnessCheckin[]>([]);
-  const [showWellnessModal, setShowWellnessModal] = useState(false);
-  const [weekAssignments, setWeekAssignments] = useState<Assignment[]>([]);
+  const [recentReflections, setRecentReflections] = useState<ElyaConversation[]>([]);
+  const [lockedAssignmentData, setLockedAssignmentData] = useState<Assignment | null>(null);
 
-  // Check for mode parameter (e.g., ?mode=free-write)
+  // Check for mode, message, assignment, and conversation parameters (e.g., ?mode=debrief&assignment=abc123)
   const initialMode = searchParams.get('mode');
+  const initialMessage = searchParams.get('message');
+  const initialAssignmentId = searchParams.get('assignment');
+  const initialConversationId = searchParams.get('conversation');
+  const [lockedAssignment, setLockedAssignment] = useState<string | null>(null);
 
   useEffect(() => {
-    // If URL has mode param, open Elya with that mode
     if (initialMode === 'free-write') {
       setElyaMode('free-write');
-      setShowElya(true);
+    } else if (initialMode === 'prep') {
+      setElyaMode('prep');
+    } else if (initialMode === 'debrief') {
+      setElyaMode('debrief');
+    } else if (initialMode === 'research') {
+      setElyaMode('research');
+    } else if (initialMode === 'patterns') {
+      setElyaMode('patterns');
     }
-  }, [initialMode]);
+
+    // If a message parameter is provided, pre-fill Elya's input
+    if (initialMessage) {
+      setElyaPreFillMessage(decodeURIComponent(initialMessage));
+    }
+
+    // If an assignment parameter is provided, lock to that assignment
+    if (initialAssignmentId) {
+      setLockedAssignment(initialAssignmentId);
+    }
+  }, [initialMode, initialMessage, initialAssignmentId]);
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -103,7 +132,7 @@ function DashboardPageContent() {
 
       setUserData(profile);
 
-      // Auto-complete past assignments whose time has passed
+      // Auto-complete past assignments
       const now = new Date();
       const today = now.toISOString().split('T')[0];
       const currentTime = now.toTimeString().slice(0, 5);
@@ -131,30 +160,13 @@ function DashboardPageContent() {
         }
       }
 
-      // Fetch TODAY's assignments
-      const { data: todayData } = await supabase
-        .from("assignments")
-        .select("*")
-        .eq("user_id", session.user.id)
-        .eq("date", today)
-        .order("time", { ascending: true });
-
-      if (todayData) {
-        setTodayAssignments(todayData);
-      }
-
-      // Fetch upcoming assignments (next 7 days, excluding today)
-      const nextWeek = new Date();
-      nextWeek.setDate(nextWeek.getDate() + 7);
-      const nextWeekStr = nextWeek.toISOString().split('T')[0];
-
+      // Fetch upcoming assignments
       const { data: upcomingData } = await supabase
         .from("assignments")
         .select("*")
         .eq("user_id", session.user.id)
         .eq("completed", false)
-        .gt("date", today)
-        .lte("date", nextWeekStr)
+        .gte("date", today)
         .order("date", { ascending: true })
         .order("time", { ascending: true })
         .limit(5);
@@ -163,7 +175,7 @@ function DashboardPageContent() {
         setUpcomingAssignments(upcomingData);
       }
 
-      // Fetch recent completed assignments (last 5)
+      // Fetch recent completed assignments
       const { data: recentData } = await supabase
         .from("assignments")
         .select("*")
@@ -176,103 +188,39 @@ function DashboardPageContent() {
         setRecentAssignments(recentData);
       }
 
-      // Fetch all assignments for the current week (Mon-Sun for weekly load chart)
-      const currentDay = now.getDay();
-      // Get Monday as start: if today is Sunday (0), go back 6 days
-      const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() + mondayOffset);
-      const weekStartStr = weekStart.toISOString().split('T')[0];
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6); // Sunday
-      const weekEndStr = weekEnd.toISOString().split('T')[0];
-
-      const { data: weekData } = await supabase
-        .from("assignments")
-        .select("id, title, date, emotional_intensity, completed, assignment_type")
-        .eq("user_id", session.user.id)
-        .gte("date", weekStartStr)
-        .lte("date", weekEndStr)
-        .order("date", { ascending: true });
-
-      if (weekData) {
-        setWeekAssignments(weekData as Assignment[]);
-      }
-
-      // Fetch conversation count for this month
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const { count } = await supabase
+      // Fetch recent Elya conversations for journal preview
+      const { data: reflectionsData } = await supabase
         .from("elya_conversations")
-        .select("*", { count: 'exact', head: true })
+        .select("id, mode, created_at, message_count")
         .eq("user_id", session.user.id)
-        .gte("created_at", startOfMonth);
-
-      setConversationCount(count || 0);
-
-      // Fetch recent conversations for journal preview (last 3)
-      // Note: mood_emoji and ai_title may not exist if journal migration hasn't run
-      const { data: recentConvos } = await supabase
-        .from("elya_conversations")
-        .select("id, mode, created_at")
-        .eq("user_id", session.user.id)
+        .eq("is_active", false)
         .order("created_at", { ascending: false })
-        .limit(3);
+        .limit(4);
 
-      if (recentConvos) {
-        setRecentConversations(recentConvos as RecentConversation[]);
+      if (reflectionsData) {
+        setRecentReflections(reflectionsData as unknown as ElyaConversation[]);
       }
 
-      // Fetch drill stats
-      const { data: drillStatsData } = await supabase
-        .from("user_drill_stats")
-        .select("readiness_score, total_drills_attempted, current_streak_days")
-        .eq("user_id", session.user.id)
-        .single();
+      // If there's a locked assignment ID, fetch that specific assignment
+      if (initialAssignmentId) {
+        const { data: lockedData } = await supabase
+          .from("assignments")
+          .select("*")
+          .eq("id", initialAssignmentId)
+          .single();
 
-      if (drillStatsData) {
-        setDrillStats(drillStatsData);
-      }
-
-      // Fetch wellness check-ins (last 28 days for burnout drift)
-      const twentyEightDaysAgo = new Date();
-      twentyEightDaysAgo.setDate(twentyEightDaysAgo.getDate() - 28);
-      const { data: wellnessData } = await supabase
-        .from("wellness_checkins")
-        .select("id, feeling, created_at")
-        .eq("user_id", session.user.id)
-        .gte("created_at", twentyEightDaysAgo.toISOString())
-        .order("created_at", { ascending: false });
-
-      if (wellnessData) {
-        setWellnessCheckins(wellnessData as WellnessCheckin[]);
-      }
-
-      // Fetch CEU summary (requires auth token)
-      try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        if (currentSession?.access_token) {
-          const ceuResponse = await fetch('/api/ceu?action=summary', {
-            headers: {
-              'Authorization': `Bearer ${currentSession.access_token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          if (ceuResponse.ok) {
-            const ceuData = await ceuResponse.json();
-            setCeuSummary(ceuData);
-          }
+        if (lockedData) {
+          setLockedAssignmentData(lockedData);
         }
-      } catch (error) {
-        console.error('Error fetching CEU summary:', error);
       }
 
       setLoading(false);
     };
 
     loadUserData();
-  }, [router]);
+  }, [router, initialAssignmentId]);
 
-  // Helper function to format time nicely
+  // Helper functions
   const formatTime = (timeStr: string | null) => {
     if (!timeStr) return '';
     const [hours, minutes] = timeStr.split(':');
@@ -281,58 +229,76 @@ function DashboardPageContent() {
     return time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
-  // Helper to format date for upcoming
-  const formatUpcomingDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '';
     const date = new Date(dateStr + 'T00:00:00');
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    if (date.toDateString() === tomorrow.toDateString()) {
-      return 'Tomorrow';
-    }
     return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  // Get greeting based on time of day
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
+  const formatShortDate = (dateStr: string | null) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  // Open Elya with context
-  const openElyaWithContext = (mode: "chat" | "prep" | "debrief" | "free-write", message?: string) => {
-    setElyaMode(mode);
-    if (message) setElyaPreFillMessage(message);
-    setShowElya(true);
+  const getDaysUntil = (dateStr: string | null) => {
+    if (!dateStr) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const targetDate = new Date(dateStr + 'T00:00:00');
+    const diffTime = targetDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
   };
 
-  // Reload wellness checkins after adding a new one
-  const reloadWellnessCheckins = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+  const getModeLabel = (mode: string) => {
+    const labels: Record<string, string> = {
+      chat: 'Chat',
+      prep: 'Prep',
+      debrief: 'Debrief',
+      research: 'Research',
+      patterns: 'Patterns',
+      'free-write': 'Free Write'
+    };
+    return labels[mode] || 'Chat';
+  };
 
-    const sixWeeksAgo = new Date();
-    sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42);
-    const { data: wellnessData } = await supabase
-      .from("wellness_checkins")
-      .select("id, feeling, created_at")
-      .eq("user_id", session.user.id)
-      .gte("created_at", sixWeeksAgo.toISOString())
-      .order("created_at", { ascending: false });
+  const getModeColor = (mode: string) => {
+    const colors: Record<string, string> = {
+      chat: 'bg-violet-500',
+      prep: 'bg-teal-500',
+      debrief: 'bg-blue-500',
+      research: 'bg-amber-500',
+      patterns: 'bg-fuchsia-500',
+      'free-write': 'bg-rose-500'
+    };
+    return colors[mode] || 'bg-violet-500';
+  };
 
-    if (wellnessData) {
-      setWellnessCheckins(wellnessData as WellnessCheckin[]);
-    }
+  const getReflectionTitle = (reflection: ElyaConversation) => {
+    if (reflection.ai_title) return reflection.ai_title;
+    return `${getModeLabel(reflection.mode)} session`;
+  };
+
+  const formatRelativeTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return formatShortDate(dateStr.split('T')[0]);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen bg-slate-950">
         <NavBar />
-        <div className="container mx-auto max-w-6xl px-4 md:px-6 py-6">
+        <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6">
           <SkeletonDashboard />
         </div>
       </div>
@@ -340,619 +306,286 @@ function DashboardPageContent() {
   }
 
   const firstName = userData?.full_name?.split(' ')[0] || 'there';
+  const subscriptionTier = userData?.subscription_tier || 'free';
+  const ceuCredits = userData?.ceu_credits_remaining || 0;
+
+  // Combine upcoming, recent, and locked assignments for Elya
+  const allAssignmentsForElya = [
+    // Include locked assignment first if it exists (and isn't already in the lists)
+    ...(lockedAssignmentData && !upcomingAssignments.some(a => a.id === lockedAssignmentData.id) && !recentAssignments.some(a => a.id === lockedAssignmentData.id) ? [{
+      id: lockedAssignmentData.id,
+      title: lockedAssignmentData.title,
+      assignment_type: lockedAssignmentData.assignment_type || "general",
+      date: lockedAssignmentData.date || "",
+      time: lockedAssignmentData.time,
+      completed: lockedAssignmentData.completed || false,
+      setting: lockedAssignmentData.setting,
+      description: lockedAssignmentData.description,
+      duration_minutes: lockedAssignmentData.duration_minutes,
+      location_type: lockedAssignmentData.location_type
+    }] : []),
+    ...upcomingAssignments.map(a => ({
+      id: a.id,
+      title: a.title,
+      assignment_type: a.assignment_type || "general",
+      date: a.date || "",
+      time: a.time,
+      completed: a.completed || false,
+      setting: a.setting,
+      description: a.description,
+      duration_minutes: a.duration_minutes,
+      location_type: a.location_type
+    })),
+    ...recentAssignments.slice(0, 3).map(a => ({
+      id: a.id,
+      title: a.title,
+      assignment_type: a.assignment_type || "general",
+      date: a.date || "",
+      time: a.time,
+      completed: a.completed || false,
+      setting: a.setting,
+      description: a.description,
+      duration_minutes: a.duration_minutes,
+      location_type: a.location_type
+    }))
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
       <NavBar />
 
-      {/* Pending Invitation Banner */}
       <PendingInvitationBanner />
 
-      {/* Main Content */}
-      <div className="container mx-auto max-w-6xl px-4 md:px-6 py-6">
+      <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 relative">
 
-        {/* Welcome Header */}
+        {/* Upgrade Banner - Inline card style */}
+        {subscriptionTier !== 'pro' && (
+          <motion.div
+            className="mb-6"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <UpgradeBanner tier={subscriptionTier} onUpgrade={() => setShowUpgrade(true)} />
+          </motion.div>
+        )}
+
+        {/* Welcome Header with Elya intro - Hero style */}
         <motion.div
-          className="mb-8"
+          className="mb-6"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: subscriptionTier !== 'pro' ? 0.05 : 0 }}
         >
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-100">
-            {getGreeting()}, {firstName}!
+          <h1 className="text-2xl md:text-3xl font-bold">
+            <span className="text-teal-400">Hi, {firstName}!</span>
           </h1>
           <p className="text-slate-400 mt-1">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            I'm <span className="text-violet-400 font-medium">Elya</span>, your AI companion for interpreting work. I can help you prep for assignments, debrief after tough sessions, or just process your thoughts through free writing.
           </p>
         </motion.div>
 
-        {/* TODAY'S ASSIGNMENTS - Primary Focus */}
-        <motion.section
-          className="mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-              <span className="text-xl">📅</span> Today's Assignments
-            </h2>
-            <button
-              onClick={() => router.push('/assignments')}
-              className="text-sm text-teal-400 hover:text-teal-300 transition-colors"
-            >
-              View All →
-            </button>
-          </div>
+        {/* TWO-COLUMN LAYOUT - Elya on left, Sidebar on right */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
 
-          {todayAssignments.length > 0 ? (
-            <div className="space-y-3">
-              {todayAssignments.map((assignment, index) => (
-                <motion.div
-                  key={assignment.id}
-                  className={`rounded-xl border p-4 transition-all ${
-                    assignment.completed
-                      ? 'border-slate-700 bg-slate-800/30'
-                      : 'border-violet-500/50 bg-gradient-to-r from-violet-500/10 to-purple-500/10'
-                  }`}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 + index * 0.1 }}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        {assignment.time && (
-                          <span className={`text-sm font-medium ${assignment.completed ? 'text-slate-500' : 'text-violet-400'}`}>
-                            {formatTime(assignment.time)}
-                          </span>
-                        )}
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          assignment.completed
-                            ? 'bg-slate-700 text-slate-400'
-                            : 'bg-violet-500/20 text-violet-300'
-                        }`}>
-                          {assignment.assignment_type || 'General'}
-                        </span>
-                        {assignment.completed && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
-                            Completed
-                          </span>
-                        )}
-                      </div>
-                      <h3 className={`text-base font-semibold ${assignment.completed ? 'text-slate-400' : 'text-slate-100'}`}>
-                        {assignment.title}
-                      </h3>
-                      {assignment.setting && (
-                        <p className="text-sm text-slate-500 mt-1">{assignment.setting}</p>
-                      )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-2">
-                      {!assignment.completed ? (
-                        <button
-                          onClick={() => openElyaWithContext('prep', `Help me prep for my ${assignment.assignment_type || ''} assignment: ${assignment.title}`)}
-                          className="px-4 py-2 rounded-lg bg-violet-500 hover:bg-violet-400 text-white text-sm font-medium transition-all"
-                        >
-                          Prep with Elya
-                        </button>
-                      ) : !assignment.debriefed ? (
-                        <button
-                          onClick={() => openElyaWithContext('debrief', `Help me debrief my ${assignment.title} assignment`)}
-                          className="px-4 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium border border-amber-500/30 transition-all"
-                        >
-                          Debrief
-                        </button>
-                      ) : (
-                        <span className="px-4 py-2 text-emerald-400 text-sm flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          Done
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <motion.div
-              className="rounded-xl border border-dashed border-slate-700 bg-slate-800/20 p-8 text-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-slate-800 flex items-center justify-center">
-                <span className="text-2xl">🎉</span>
-              </div>
-              <h3 className="text-lg font-semibold text-slate-300 mb-2">No assignments today</h3>
-              <p className="text-sm text-slate-500 mb-4">Take some time for self-care or skill practice!</p>
-              <button
-                onClick={() => router.push('/assignments')}
-                className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium transition-all"
-              >
-                + Add Assignment
-              </button>
-            </motion.div>
-          )}
-        </motion.section>
-
-        {/* QUICK ACTIONS - 2x3 Grid */}
-        <motion.section
-          className="mb-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-            <span className="text-xl">🎯</span> Quick Actions
-          </h2>
-          <div className="grid grid-cols-3 gap-3">
-            {/* Row 1 */}
-            <button
-              onClick={() => openElyaWithContext('debrief')}
-              className="p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-600 transition-all group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <span className="text-sm font-medium text-slate-300">Start Debrief</span>
-            </button>
-
-            <button
-              onClick={() => openElyaWithContext('free-write')}
-              className="p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-600 transition-all group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </div>
-              <span className="text-sm font-medium text-slate-300">Free Write</span>
-            </button>
-
-            <button
-              onClick={() => router.push('/journal')}
-              className="p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-600 transition-all group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-              </div>
-              <span className="text-sm font-medium text-slate-300">View Journal</span>
-            </button>
-
-            {/* Row 2 */}
-            <button
-              onClick={() => router.push('/skills')}
-              className="p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-600 transition-all group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <span className="text-sm font-medium text-slate-300">Practice Skills</span>
-            </button>
-
-            <button
-              onClick={() => router.push('/ceu')}
-              className="p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-600 transition-all group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <svg className="w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                </svg>
-              </div>
-              <span className="text-sm font-medium text-slate-300">View CEUs</span>
-            </button>
-
-            <button
-              onClick={() => router.push('/assignments')}
-              className="p-4 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-600 transition-all group"
-            >
-              <div className="w-10 h-10 rounded-lg bg-rose-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <svg className="w-5 h-5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <span className="text-sm font-medium text-slate-300">Assignments</span>
-            </button>
-          </div>
-        </motion.section>
-
-        {/* TWO COLUMN LAYOUT: Upcoming + Progress */}
-        <div className="grid md:grid-cols-2 gap-6">
-
-          {/* UPCOMING THIS WEEK */}
-          <motion.section
+          {/* ===== MAIN CONTENT (Left Column) - Elya Interface ===== */}
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.1 }}
+            className="min-h-[720px]"
           >
-            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-              <span className="text-xl">📆</span> Coming Up
-            </h2>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
+            <ElyaInterface
+              userData={userData}
+              preFillMessage={elyaPreFillMessage}
+              onMessageSent={() => setElyaPreFillMessage("")}
+              initialMode={elyaMode}
+              recentAssignments={allAssignmentsForElya}
+              lockedAssignmentId={lockedAssignment}
+              continueConversationId={initialConversationId}
+            />
+          </motion.div>
+
+          {/* ===== SIDEBAR (Right Column) ===== */}
+          <div className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+
+            {/* No Upcoming Assignments / Upcoming List - Hero style card */}
+            <motion.div
+              className="p-5 rounded-xl bg-slate-900 border border-slate-800"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+            >
               {upcomingAssignments.length > 0 ? (
-                <div className="space-y-3">
-                  {upcomingAssignments.map((assignment) => (
-                    <div
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-slate-100 text-sm uppercase tracking-wider">Upcoming Assignments</h3>
+                    <Link href="/assignments" className="text-xs text-teal-400 hover:text-teal-300 transition-colors">
+                      View all
+                    </Link>
+                  </div>
+                  <div className="space-y-2">
+                    {upcomingAssignments.slice(0, 3).map(assignment => {
+                      const days = getDaysUntil(assignment.date);
+                      return (
+                        <Link
+                          key={assignment.id}
+                          href={`/assignments/${assignment.id}`}
+                          className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-teal-500/20 transition-all group"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-slate-200 truncate group-hover:text-teal-300 transition-colors">
+                              {assignment.title}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {formatDate(assignment.date)}
+                              {assignment.time && ` at ${formatTime(assignment.time)}`}
+                            </p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            days === 0 ? 'bg-amber-500/20 text-amber-400' :
+                            days === 1 ? 'bg-cyan-500/20 text-cyan-400' :
+                            'bg-slate-700/50 text-slate-400'
+                          }`}>
+                            {days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-teal-500/10 border border-teal-500/20 flex items-center justify-center">
+                    <Calendar className="w-5 h-5 text-teal-400" />
+                  </div>
+                  <h3 className="font-semibold text-slate-100 text-sm uppercase tracking-wider mb-2">No Upcoming Assignments</h3>
+                  <p className="text-sm text-slate-400 mb-4">
+                    Tell Elya about your next assignment to get started!
+                  </p>
+                  <Link
+                    href="/assignments?new=true"
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-sm font-semibold transition-colors w-full justify-center shadow-lg shadow-teal-500/20"
+                  >
+                    <Plus className="w-4 h-4" /> Add Assignment
+                  </Link>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Past Assignments - for debriefing */}
+            <motion.div
+              className="p-5 rounded-xl bg-slate-900 border border-slate-800"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.15 }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-slate-100 text-sm uppercase tracking-wider">Past Assignments</h3>
+                <Link href="/assignments?filter=completed" className="text-xs text-teal-400 hover:text-teal-300 transition-colors">
+                  View all
+                </Link>
+              </div>
+              {recentAssignments.length > 0 ? (
+                <div className="space-y-2">
+                  {recentAssignments.slice(0, 3).map(assignment => (
+                    <button
                       key={assignment.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors cursor-pointer"
-                      onClick={() => router.push('/assignments')}
+                      onClick={() => {
+                        setElyaMode("debrief");
+                        setElyaPreFillMessage(`I'd like to debrief about my ${assignment.assignment_type || 'interpreting'} assignment: "${assignment.title}" from ${formatDate(assignment.date)}.`);
+                      }}
+                      className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-blue-500/20 transition-all group text-left"
                     >
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-200 truncate">{assignment.title}</p>
-                        <p className="text-xs text-slate-500">
-                          {formatUpcomingDate(assignment.date || '')}
-                          {assignment.time && ` at ${formatTime(assignment.time)}`}
-                        </p>
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                       </div>
-                      <span className="px-2 py-1 rounded-full bg-slate-700 text-slate-400 text-xs">
-                        {assignment.assignment_type || 'General'}
-                      </span>
-                    </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-200 truncate group-hover:text-blue-300 transition-colors">
+                          {assignment.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-slate-500">{formatShortDate(assignment.date)}</span>
+                          {!assignment.debriefed && (
+                            <span className="text-xs text-blue-400">Ready to debrief</span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6">
-                  <p className="text-sm text-slate-500">No upcoming assignments this week</p>
+                <div className="text-center py-4">
+                  <p className="text-sm text-slate-500">No completed assignments yet</p>
+                  <p className="text-xs text-slate-600 mt-1">Complete an assignment to debrief with Elya</p>
                 </div>
               )}
-            </div>
-          </motion.section>
+            </motion.div>
 
-          {/* YOUR PROGRESS */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-          >
-            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-              <span className="text-xl">📊</span> Your Progress
-            </h2>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
-              <div className="grid grid-cols-3 gap-4">
-                {/* Reflections */}
-                <div className="text-center p-3 rounded-lg bg-slate-800/50">
-                  <div className="text-2xl font-bold text-violet-400">{conversationCount}</div>
-                  <div className="text-xs text-slate-500">Reflections</div>
-                  <div className="text-[10px] text-slate-600">this month</div>
-                </div>
-
-                {/* Readiness Score */}
-                <div className="text-center p-3 rounded-lg bg-slate-800/50">
-                  <div className={`text-2xl font-bold ${
-                    drillStats?.readiness_score && drillStats.readiness_score >= 70 ? 'text-emerald-400' :
-                    drillStats?.readiness_score && drillStats.readiness_score >= 40 ? 'text-amber-400' :
-                    'text-slate-400'
-                  }`}>
-                    {drillStats?.readiness_score || '--'}
-                  </div>
-                  <div className="text-xs text-slate-500">Readiness</div>
-                  <div className="text-[10px] text-slate-600">score</div>
-                </div>
-
-                {/* Streak */}
-                <div className="text-center p-3 rounded-lg bg-slate-800/50">
-                  <div className="text-2xl font-bold text-amber-400">
-                    {drillStats?.current_streak_days || 0}
-                  </div>
-                  <div className="text-xs text-slate-500">Day Streak</div>
-                  <div className="text-[10px] text-slate-600">🔥</div>
-                </div>
-              </div>
-
-              {/* CEU Progress - Shows for all users */}
-              <div className="mt-4 pt-4 border-t border-slate-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-slate-400">CEU Progress</span>
-                  <a href="/ceu" className="text-xs text-teal-400 hover:text-teal-300">View →</a>
-                </div>
-                {userData?.subscription_tier === "pro" && ceuSummary ? (
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-teal-500 rounded-full transition-all"
-                        style={{ width: `${Math.min((ceuSummary.total_earned / ceuSummary.total_required) * 100, 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-sm font-medium text-slate-300">
-                      {ceuSummary.total_earned.toFixed(1)}/{ceuSummary.total_required}
-                    </span>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowUpgrade(true)}
-                    className="w-full flex items-center gap-3"
-                  >
-                    <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
-                      <div className="h-full w-0 bg-slate-600 rounded-full" />
-                    </div>
-                    <span className="text-xs text-teal-400 hover:text-teal-300 whitespace-nowrap">
-                      Go Pro →
-                    </span>
-                  </button>
+            {/* CEU Workshops - Hero style card */}
+            <motion.div
+              className="p-5 rounded-xl bg-slate-900 border border-slate-800"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-slate-100 text-sm uppercase tracking-wider">CEU Workshops</h3>
+                {subscriptionTier === 'pro' && (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400 border border-violet-500/30">PRO</span>
                 )}
               </div>
-            </div>
-          </motion.section>
+              {subscriptionTier === 'pro' ? (
+                <>
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="w-12 h-12 rounded-full bg-teal-500/10 border border-teal-500/20 flex items-center justify-center">
+                      <BookOpen className="w-6 h-6 text-teal-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-slate-100">{ceuCredits}</p>
+                      <p className="text-xs text-slate-500">credits remaining</p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/ceu"
+                    className="text-teal-400 text-sm hover:text-teal-300 transition-colors inline-flex items-center gap-1"
+                  >
+                    Browse workshops <span className="text-teal-400/60">→</span>
+                  </Link>
+                </>
+              ) : (
+                <div className="text-center py-2">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-slate-800/50 border border-slate-700/50 flex items-center justify-center">
+                    <BookOpen className="w-6 h-6 text-slate-500" />
+                  </div>
+                  <p className="text-sm text-slate-400 mb-1">Earn CEUs for RID certification</p>
+                  <p className="text-xs text-slate-500 mb-3">0.2 CEUs/month included with Pro</p>
+                  <button
+                    onClick={() => setShowUpgrade(true)}
+                    className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-600 text-slate-200 hover:border-teal-500/50 hover:text-teal-300 transition-colors"
+                  >
+                    Upgrade to Pro
+                  </button>
+                </div>
+              )}
+            </motion.div>
+
+          </div>
         </div>
 
-        {/* WELLNESS & LOAD TRACKING */}
-        <motion.section
-          className="mt-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.45 }}
-        >
-          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-            <span className="text-xl">💫</span> Wellness & Load Tracking
-          </h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <WeeklyLoadChart assignments={weekAssignments} />
-            <BurnoutDriftIndicator
-              checkins={wellnessCheckins}
-              onAddCheckin={() => setShowWellnessModal(true)}
-            />
-          </div>
-        </motion.section>
-
-        {/* GETTING STARTED - Show for new users with no activity */}
-        {recentConversations.length === 0 && recentAssignments.length === 0 && (
-          <motion.section
-            className="mt-8"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-              <span className="text-xl">🚀</span> Getting Started
-            </h2>
-            <div className="rounded-xl border border-dashed border-teal-500/30 bg-gradient-to-br from-teal-500/5 to-slate-900/50 p-6">
-              <p className="text-slate-300 mb-4">
-                Welcome to InterpretReflect! Here are some ways to get the most out of your experience:
-              </p>
-              <div className="grid md:grid-cols-3 gap-4">
-                <button
-                  onClick={() => openElyaWithContext('chat')}
-                  className="p-4 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-teal-500/50 transition-all text-left group"
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">💬</span>
-                    <span className="text-sm font-medium text-slate-200 group-hover:text-teal-300">Meet Elya</span>
-                  </div>
-                  <p className="text-xs text-slate-400">Your AI wellness companion. Ask questions, get support, or just chat.</p>
-                </button>
-                <button
-                  onClick={() => router.push('/assignments')}
-                  className="p-4 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-teal-500/50 transition-all text-left group"
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">📅</span>
-                    <span className="text-sm font-medium text-slate-200 group-hover:text-teal-300">Add Assignment</span>
-                  </div>
-                  <p className="text-xs text-slate-400">Track your upcoming work to get prep reminders and debrief prompts.</p>
-                </button>
-                <button
-                  onClick={() => openElyaWithContext('free-write')}
-                  className="p-4 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-teal-500/50 transition-all text-left group"
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">✍️</span>
-                    <span className="text-sm font-medium text-slate-200 group-hover:text-teal-300">Start Journaling</span>
-                  </div>
-                  <p className="text-xs text-slate-400">Free write to process your day. Elya holds space without judgment.</p>
-                </button>
-              </div>
-              <div className="mt-4 pt-4 border-t border-slate-700/50">
-                <p className="text-xs text-slate-500 text-center">
-                  Your reflections build insights over time. The more you share, the more personalized Elya becomes.
-                </p>
-              </div>
-            </div>
-          </motion.section>
-        )}
-
-        {/* RECENT JOURNAL ENTRIES */}
-        {recentConversations.length > 0 && (
-          <motion.section
-            className="mt-8"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-                <span className="text-xl">📓</span> Recent Reflections
-              </h2>
-              <a href="/journal" className="text-xs text-teal-400 hover:text-teal-300">View all →</a>
-            </div>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
-              <div className="space-y-2">
-                {recentConversations.map((convo) => (
-                  <a
-                    key={convo.id}
-                    href={`/journal?conversation=${convo.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-800/50 transition-colors group"
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <span className="text-lg flex-shrink-0">{convo.mood_emoji || '💭'}</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-200 truncate">
-                          {convo.ai_title || (convo.mode === 'debrief' ? 'Debrief Session' : convo.mode === 'prep' ? 'Prep Session' : convo.mode === 'free-write' ? 'Free Writing' : 'Reflection')}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {new Date(convo.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ${
-                      convo.mode === 'debrief' ? 'bg-amber-500/20 text-amber-400' :
-                      convo.mode === 'prep' ? 'bg-violet-500/20 text-violet-400' :
-                      convo.mode === 'free-write' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-slate-700 text-slate-400'
-                    }`}>
-                      {convo.mode === 'free-write' ? 'free write' : convo.mode}
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          </motion.section>
-        )}
-
-        {/* RECENT ASSIGNMENTS ACTIVITY */}
-        {recentAssignments.length > 0 && (
-          <motion.section
-            className="mt-8"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-          >
-            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-              <span className="text-xl">🕐</span> Recent Assignments
-            </h2>
-            <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
-              <div className="space-y-2">
-                {recentAssignments.slice(0, 3).map((assignment) => (
-                  <div
-                    key={assignment.id}
-                    className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-800/50 transition-colors group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${
-                        assignment.debriefed ? 'bg-emerald-500' : 'bg-amber-500'
-                      }`} />
-                      <div>
-                        <p className="text-sm font-medium text-slate-200">{assignment.title}</p>
-                        <p className="text-xs text-slate-500">
-                          {new Date(assignment.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                    {!assignment.debriefed && (
-                      <button
-                        onClick={() => openElyaWithContext('debrief', `Help me debrief my ${assignment.title} assignment`)}
-                        className="px-3 py-1 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        Debrief
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.section>
-        )}
       </div>
 
-      {/* FLOATING ELYA BUTTON */}
-      <motion.button
-        onClick={() => setShowElya(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg shadow-violet-500/30 flex items-center justify-center z-40 hover:scale-110 transition-transform"
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ delay: 0.5, type: "spring" }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <span className="text-2xl">💬</span>
-      </motion.button>
-
-      {/* ELYA SLIDE-IN PANEL */}
-      <AnimatePresence>
-        {showElya && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              className="fixed inset-0 bg-black/50 z-40"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowElya(false)}
-            />
-
-            {/* Panel */}
-            <motion.div
-              className="fixed right-0 top-0 h-full w-full max-w-xl bg-slate-900 border-l border-slate-700 z-50 shadow-2xl"
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            >
-              {/* Panel Header */}
-              <div className="flex items-center justify-between p-4 border-b border-slate-700">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-                    <span className="text-lg">✨</span>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-100">Elya</h3>
-                    <p className="text-xs text-slate-400">Your AI companion</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowElya(false)}
-                  className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Elya Interface */}
-              <div className="h-[calc(100%-73px)]">
-                <ElyaInterface
-                  userData={userData}
-                  preFillMessage={elyaPreFillMessage}
-                  onMessageSent={() => setElyaPreFillMessage("")}
-                  initialMode={elyaMode}
-                  recentAssignments={[
-                    ...todayAssignments.map(a => ({
-                      id: a.id,
-                      title: a.title,
-                      assignment_type: a.assignment_type || "general",
-                      date: a.date || "",
-                      completed: a.completed || false
-                    })),
-                    ...recentAssignments.slice(0, 3).map(a => ({
-                      id: a.id,
-                      title: a.title,
-                      assignment_type: a.assignment_type || "general",
-                      date: a.date || "",
-                      completed: a.completed || false
-                    }))
-                  ]}
-                />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
       <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
-      <WellnessCheckinModal
-        isOpen={showWellnessModal}
-        onClose={() => setShowWellnessModal(false)}
-        onCheckinAdded={reloadWellnessCheckins}
-      />
     </div>
   );
 }
 
-// Loading fallback for Suspense
 function DashboardPageLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen">
       <NavBar />
-      <div className="container mx-auto max-w-6xl px-4 md:px-6 py-6">
+      <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6">
         <SkeletonDashboard />
       </div>
     </div>
