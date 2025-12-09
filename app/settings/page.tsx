@@ -236,15 +236,15 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
             </p>
           </div>
           <div className="text-center p-3 rounded-lg bg-slate-800/50">
-            <p className="text-xs text-slate-400">CEU Credits</p>
+            <p className="text-xs text-slate-400">Workshop Credits</p>
             <p className="text-xl font-bold text-amber-400">
-              {tier === "pro" ? "4/mo" : "0"}
+              {tier === "pro" ? "4/mo" : tier === "growth" ? "2/mo" : "0"}
             </p>
           </div>
           <div className="text-center p-3 rounded-lg bg-slate-800/50">
             <p className="text-xs text-slate-400">Elya</p>
             <p className="text-xl font-bold text-emerald-400">
-              {tier === "free" ? "5/mo" : "Unlimited"}
+              Unlimited
             </p>
           </div>
         </div>
@@ -299,8 +299,8 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
         )}
       </div>
 
-      {/* CEU Credits Card (Pro only) */}
-      {tier === "pro" && (
+      {/* Workshop Credits Card (Growth and Pro) */}
+      {(tier === "pro" || tier === "growth") && (
         <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-orange-500/5 p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
@@ -309,8 +309,8 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-100">CEU Credits</h3>
-              <p className="text-sm text-slate-400">Use credits to access CEU modules</p>
+              <h3 className="text-lg font-semibold text-slate-100">Workshop Credits</h3>
+              <p className="text-sm text-slate-400">1 credit = 30 min workshop (0.5 CEU)</p>
             </div>
           </div>
 
@@ -394,21 +394,27 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
             <tbody className="divide-y divide-slate-800">
               <tr>
                 <td className="py-2 px-3 text-slate-300">Elya Conversations</td>
-                <td className="py-2 px-3 text-center text-slate-400">5/month</td>
+                <td className="py-2 px-3 text-center text-slate-300">Unlimited</td>
                 <td className="py-2 px-3 text-center text-teal-400">Unlimited</td>
                 <td className="py-2 px-3 text-center text-violet-400">Unlimited</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 text-slate-300">Assignment Prep & Debrief</td>
-                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-slate-300">✓</td>
+                <td className="py-2 px-3 text-center text-teal-400">✓</td>
+                <td className="py-2 px-3 text-center text-violet-400">✓</td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 text-slate-300">Wellness Check-ins</td>
+                <td className="py-2 px-3 text-center text-slate-300">✓</td>
                 <td className="py-2 px-3 text-center text-teal-400">✓</td>
                 <td className="py-2 px-3 text-center text-violet-400">✓</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 text-slate-300">AI Insights & Patterns</td>
-                <td className="py-2 px-3 text-center text-slate-500">-</td>
-                <td className="py-2 px-3 text-center text-teal-400">✓</td>
-                <td className="py-2 px-3 text-center text-violet-400">✓</td>
+                <td className="py-2 px-3 text-center text-slate-400">Basic</td>
+                <td className="py-2 px-3 text-center text-teal-400">Full</td>
+                <td className="py-2 px-3 text-center text-violet-400">Full</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 text-slate-300">Burnout Monitoring</td>
@@ -417,19 +423,25 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
                 <td className="py-2 px-3 text-center text-violet-400">✓</td>
               </tr>
               <tr>
-                <td className="py-2 px-3 text-slate-300">CEU Credits</td>
-                <td className="py-2 px-3 text-center text-slate-500">-</td>
-                <td className="py-2 px-3 text-center text-slate-500">-</td>
-                <td className="py-2 px-3 text-center text-amber-400">4/month</td>
+                <td className="py-2 px-3 text-slate-300">Workshop Credits</td>
+                <td className="py-2 px-3 text-center text-slate-400">0</td>
+                <td className="py-2 px-3 text-center text-teal-400">2/mo (1 CEU)</td>
+                <td className="py-2 px-3 text-center text-amber-400">4/mo (2 CEUs)</td>
               </tr>
               <tr>
-                <td className="py-2 px-3 text-slate-300">CEU Modules & Certificates</td>
+                <td className="py-2 px-3 text-slate-300">CEU Certificates</td>
                 <td className="py-2 px-3 text-center text-slate-500">-</td>
-                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-teal-400">✓</td>
                 <td className="py-2 px-3 text-center text-violet-400">✓</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 text-slate-300">Credit Top-Ups</td>
+                <td className="py-2 px-3 text-center text-slate-500">-</td>
+                <td className="py-2 px-3 text-center text-teal-400">✓</td>
+                <td className="py-2 px-3 text-center text-violet-400">✓</td>
+              </tr>
+              <tr>
+                <td className="py-2 px-3 text-slate-300">Priority Support</td>
                 <td className="py-2 px-3 text-center text-slate-500">-</td>
                 <td className="py-2 px-3 text-center text-slate-500">-</td>
                 <td className="py-2 px-3 text-center text-violet-400">✓</td>
@@ -512,6 +524,12 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [ridMemberNumber, setRidMemberNumber] = useState("");
+
+  // Password change states
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   // Credentials states
   const [credentials, setCredentials] = useState<Credential[]>([]);
@@ -650,6 +668,45 @@ export default function SettingsPage() {
       console.error("Save error:", error);
     } else {
       showMessage("success", "Account settings saved!");
+    }
+  };
+
+  const handleChangePassword = async () => {
+    // Validate inputs
+    if (!newPassword || !confirmPassword) {
+      showMessage("error", "Please fill in all password fields.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      showMessage("error", "Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showMessage("error", "New passwords do not match.");
+      return;
+    }
+
+    setChangingPassword(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        showMessage("error", error.message || "Failed to change password.");
+      } else {
+        showMessage("success", "Password changed successfully!");
+        // Clear the form
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      }
+    } catch (err) {
+      console.error("Password change error:", err);
+      showMessage("error", "Failed to change password. Please try again.");
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -1213,6 +1270,44 @@ export default function SettingsPage() {
                   className="px-6 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors disabled:opacity-50"
                 >
                   {saving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+
+            {/* Change Password Section */}
+            <div className="rounded-xl border border-slate-600 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-4">Change Password</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">New Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Minimum 8 characters</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                  />
+                </div>
+
+                <button
+                  onClick={handleChangePassword}
+                  disabled={changingPassword || !newPassword || !confirmPassword}
+                  className="px-6 py-2 rounded-lg bg-amber-500 text-slate-950 font-medium hover:bg-amber-400 transition-colors disabled:opacity-50"
+                >
+                  {changingPassword ? "Changing Password..." : "Change Password"}
                 </button>
               </div>
             </div>
