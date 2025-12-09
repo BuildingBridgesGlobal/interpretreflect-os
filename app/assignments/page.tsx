@@ -4,7 +4,8 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
-import GoogleCalendarSync, { SyncToCalendarButton } from "@/components/GoogleCalendarSync";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 type Assignment = {
   id: string;
@@ -25,7 +26,7 @@ type Assignment = {
   completed?: boolean;
   team_members?: any[];
   free_write_sessions?: FreeWriteSession[];
-  google_calendar_synced?: boolean;
+  emotional_intensity?: 'low' | 'moderate' | 'high' | 'very_high';
 };
 
 type FreeWriteSession = {
@@ -36,6 +37,9 @@ type FreeWriteSession = {
   messages?: { role: string; content: string; timestamp: string }[];
 };
 
+// Persist modal state across Fast Refresh during development
+const modalStateRef = { current: false };
+
 function AssignmentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -43,7 +47,14 @@ function AssignmentsPageContent() {
   const [user, setUser] = useState<any>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedTab, setSelectedTab] = useState<"upcoming" | "past">("upcoming");
-  const [showNewAssignmentModal, setShowNewAssignmentModal] = useState(false);
+
+  // Use ref-backed state to survive Fast Refresh remounts
+  const [showNewAssignmentModal, setShowNewAssignmentModalInternal] = useState(() => modalStateRef.current);
+
+  const setShowNewAssignmentModal = (value: boolean) => {
+    modalStateRef.current = value;
+    setShowNewAssignmentModalInternal(value);
+  };
   const [creatingAssignment, setCreatingAssignment] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
@@ -66,39 +77,18 @@ function AssignmentsPageContent() {
     description: "",
     is_team_assignment: false,
     team_size: 1,
-    timezone: "America/New_York"
+    timezone: "America/New_York",
+    emotional_intensity: "" as "" | "low" | "moderate" | "high" | "very_high"
   });
 
   const [teamEmails, setTeamEmails] = useState<string[]>([""]);
   const [teamRoles, setTeamRoles] = useState<string[]>(["team"]);
-
-  const [calendarMessage, setCalendarMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     // Check for tab parameter from URL (for redirects from /history)
     const tab = searchParams.get('tab');
     if (tab === 'past') {
       setSelectedTab('past');
-    }
-
-    // Check for calendar connection result
-    const calendarConnected = searchParams.get('calendar_connected');
-    const calendarName = searchParams.get('calendar_name');
-    const calendarError = searchParams.get('calendar_error');
-
-    if (calendarConnected === 'true') {
-      setCalendarMessage({
-        type: 'success',
-        text: `Google Calendar connected${calendarName ? ` (${decodeURIComponent(calendarName)})` : ''}! Your assignments will now sync.`
-      });
-      // Clear URL params
-      window.history.replaceState({}, '', '/assignments');
-    } else if (calendarError) {
-      setCalendarMessage({
-        type: 'error',
-        text: `Calendar connection failed: ${decodeURIComponent(calendarError)}`
-      });
-      window.history.replaceState({}, '', '/assignments');
     }
 
     loadData();
@@ -155,8 +145,12 @@ function AssignmentsPageContent() {
     }
     setFreeWriteSessions(unlinkedSessions as any);
 
-    // Load templates
-    const templatesResponse = await fetch(`/api/assignments/templates?user_id=${session.user.id}`);
+    // Load templates (with auth token)
+    const templatesResponse = await fetch(`/api/assignments/templates`, {
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`
+      }
+    });
     if (templatesResponse.ok) {
       const templatesData = await templatesResponse.json();
       setTemplates(templatesData.templates || []);
@@ -186,11 +180,20 @@ function AssignmentsPageContent() {
     }
 
     try {
+      // Get auth token for API call
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        alert("Not authenticated. Please sign in again.");
+        return;
+      }
+
       const response = await fetch("/api/assignments/templates", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({
-          user_id: user.id,
           template_name: templateName,
           assignment_type: formData.assignment_type,
           setting: formData.setting,
@@ -312,7 +315,7 @@ function AssignmentsPageContent() {
 
     try {
       // Create the assignment
-      const { data: newAssignment, error: assignmentError } = await (supabase as any)
+      const { data: newAssignment, error: assignmentError } = await supabase
         .from("assignments")
         .insert({
           user_id: user.id,
@@ -330,45 +333,62 @@ function AssignmentsPageContent() {
           timezone: formData.timezone,
           status: "upcoming",
           prep_status: "pending",
-          completed: false
+          completed: false,
+          emotional_intensity: formData.emotional_intensity || null
         })
         .select()
         .single();
 
       if (assignmentError) {
-        console.error("Error creating assignment:", assignmentError);
-        alert("Failed to create assignment. Please try again.");
+        console.error("Error creating assignment:", JSON.stringify(assignmentError, null, 2));
+        console.error("Error details:", {
+          message: assignmentError.message,
+          details: assignmentError.details,
+          hint: assignmentError.hint,
+          code: assignmentError.code
+        });
+        alert(`Failed to create assignment: ${assignmentError.message || 'Unknown error'}`);
         setCreatingAssignment(false);
         return;
       }
 
-      // If team assignment, add team members
+      // If team assignment, add team members (non-blocking - don't fail assignment creation)
       if (formData.is_team_assignment && newAssignment) {
         const validEmails = teamEmails.filter(email => email.trim() !== "");
 
         if (validEmails.length > 0) {
-          // For MVP: look up users by email and add them as confirmed team members
-          const { data: profiles } = await supabase
-            .from("profiles")
-            .select("id, email")
-            .in("email", validEmails);
+          try {
+            // For MVP: look up users by email and add them as confirmed team members
+            const { data: profiles } = await supabase
+              .from("profiles")
+              .select("id, email")
+              .in("email", validEmails);
 
-          if (profiles && profiles.length > 0) {
-            const teamMembersToAdd = profiles.map((profile, index) => ({
-              assignment_id: newAssignment.id,
-              user_id: profile.id,
-              role: teamRoles[teamEmails.indexOf(profile.email || "")] || "team",
-              status: "confirmed", // MVP: auto-confirm
-              invited_by: user.id,
-              invited_at: new Date().toISOString(),
-              confirmed_at: new Date().toISOString(),
-              can_edit_assignment: false,
-              can_invite_others: false
-            }));
+            if (profiles && profiles.length > 0) {
+              const teamMembersToAdd = profiles.map((profile) => ({
+                assignment_id: newAssignment.id,
+                user_id: profile.id,
+                role: teamRoles[teamEmails.indexOf(profile.email || "")] || "team",
+                status: "confirmed",
+                invited_by: user.id,
+                invited_at: new Date().toISOString(),
+                confirmed_at: new Date().toISOString(),
+                can_edit_assignment: false,
+                can_invite_others: false
+              }));
 
-            await (supabase as any)
-              .from("assignment_team_members")
-              .insert(teamMembersToAdd);
+              const { error: teamError } = await supabase
+                .from("assignment_team_members")
+                .insert(teamMembersToAdd);
+
+              if (teamError) {
+                console.warn("Could not add team members:", teamError.message);
+                // Don't fail the whole assignment - just log the warning
+              }
+            }
+          } catch (teamErr) {
+            console.warn("Team member addition failed:", teamErr);
+            // Continue with assignment creation
           }
         }
       }
@@ -386,7 +406,8 @@ function AssignmentsPageContent() {
         description: "",
         is_team_assignment: false,
         team_size: 1,
-        timezone: "America/New_York"
+        timezone: "America/New_York",
+        emotional_intensity: ""
       });
       setTeamEmails([""]);
       setTeamRoles(["team"]);
@@ -398,9 +419,10 @@ function AssignmentsPageContent() {
 
       // Navigate to the new assignment
       router.push(`/assignments/${newAssignment.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating assignment:", error);
-      alert("An error occurred. Please try again.");
+      console.error("Full error:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      alert(`An error occurred: ${error?.message || 'Please try again.'}`);
     }
 
     setCreatingAssignment(false);
@@ -453,9 +475,6 @@ function AssignmentsPageContent() {
             <p className="mt-1 text-sm text-slate-300">Manage your interpreting assignments and reflections</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {/* Google Calendar Sync */}
-            <GoogleCalendarSync onSyncComplete={loadData} />
-
             {templates.length > 0 && (
               <button
                 onClick={() => setShowTemplates(true)}
@@ -472,38 +491,6 @@ function AssignmentsPageContent() {
             </button>
           </div>
         </div>
-
-        {/* Calendar Connection Message */}
-        {calendarMessage && (
-          <div
-            className={`mb-4 p-4 rounded-lg flex items-center justify-between ${
-              calendarMessage.type === 'success'
-                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-                : 'bg-red-500/10 border border-red-500/30 text-red-400'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              {calendarMessage.type === 'success' ? (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              )}
-              <span className="text-sm">{calendarMessage.text}</span>
-            </div>
-            <button
-              onClick={() => setCalendarMessage(null)}
-              className="text-current hover:opacity-70"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        )}
 
         {/* Tabs */}
         <div className="mb-6 flex gap-2 border-b border-slate-800">
@@ -659,12 +646,32 @@ function AssignmentsPageContent() {
                       <p className="text-sm text-slate-300 mt-3 line-clamp-2">{assignment.description}</p>
                     )}
 
-                    {/* Team Badge */}
-                    {assignment.is_team_assignment && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <span className="px-2 py-1 rounded-md bg-violet-500/20 border border-violet-500/30 text-violet-400 text-xs font-medium flex items-center gap-1">
-                          Team Assignment ({confirmedMembers.length} {confirmedMembers.length === 1 ? 'member' : 'members'})
-                        </span>
+                    {/* Team Badge & Intensity Badge */}
+                    {(assignment.is_team_assignment || assignment.emotional_intensity) && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        {assignment.is_team_assignment && (
+                          <span className="px-2 py-1 rounded-md bg-violet-500/20 border border-violet-500/30 text-violet-400 text-xs font-medium flex items-center gap-1">
+                            Team Assignment ({confirmedMembers.length} {confirmedMembers.length === 1 ? 'member' : 'members'})
+                          </span>
+                        )}
+                        {assignment.emotional_intensity && (
+                          <span className={`px-2 py-1 rounded-md text-xs font-medium flex items-center gap-1 ${
+                            assignment.emotional_intensity === 'very_high'
+                              ? 'bg-rose-500/20 border border-rose-500/30 text-rose-400'
+                              : assignment.emotional_intensity === 'high'
+                              ? 'bg-orange-500/20 border border-orange-500/30 text-orange-400'
+                              : assignment.emotional_intensity === 'moderate'
+                              ? 'bg-amber-500/20 border border-amber-500/30 text-amber-400'
+                              : 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-400'
+                          }`}>
+                            {assignment.emotional_intensity === 'very_high' ? '🔴' :
+                             assignment.emotional_intensity === 'high' ? '🟠' :
+                             assignment.emotional_intensity === 'moderate' ? '🟡' : '🟢'}
+                            {assignment.emotional_intensity === 'very_high' ? 'Very High Load' :
+                             assignment.emotional_intensity === 'high' ? 'High Load' :
+                             assignment.emotional_intensity === 'moderate' ? 'Moderate Load' : 'Low Load'}
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -682,12 +689,6 @@ function AssignmentsPageContent() {
                            assignment.prep_status === 'in_progress' ? 'Prep In Progress' :
                            'Prep Pending'}
                         </span>
-                        {/* Calendar Sync Status */}
-                        <SyncToCalendarButton
-                          assignmentId={assignment.id}
-                          isSynced={assignment.google_calendar_synced}
-                          onSync={loadData}
-                        />
                       </div>
                     )}
 
@@ -949,8 +950,19 @@ function AssignmentsPageContent() {
 
         {/* New Assignment Modal */}
         {showNewAssignmentModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-900 rounded-xl border border-slate-700 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 modal-backdrop"
+            onClick={(e) => {
+              // Only close if clicking the backdrop itself
+              if (e.target === e.currentTarget) {
+                setShowNewAssignmentModal(false);
+              }
+            }}
+          >
+            <div
+              className="bg-slate-900 rounded-xl border border-slate-700 max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="sticky top-0 bg-slate-900 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-slate-100">Create New Assignment</h2>
                 <button
@@ -1002,11 +1014,28 @@ function AssignmentsPageContent() {
                       <label className="block text-sm font-medium text-slate-300 mb-2">
                         Date <span className="text-red-400">*</span>
                       </label>
-                      <input
-                        type="date"
-                        value={formData.date}
-                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                      <DatePicker
+                        selected={formData.date ? new Date(formData.date + 'T00:00:00') : null}
+                        onChange={(date: Date | null) => {
+                          if (date) {
+                            const year = date.getFullYear();
+                            const month = String(date.getMonth() + 1).padStart(2, '0');
+                            const day = String(date.getDate()).padStart(2, '0');
+                            setFormData({ ...formData, date: `${year}-${month}-${day}` });
+                          } else {
+                            setFormData({ ...formData, date: '' });
+                          }
+                        }}
+                        minDate={new Date()}
+                        dateFormat="MM/dd/yyyy"
+                        placeholderText="Select a date"
                         className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        calendarClassName="dark-calendar"
+                        wrapperClassName="w-full"
+                        popperClassName="dark-datepicker-popper"
+                        popperProps={{
+                          strategy: "fixed",
+                        }}
                       />
                     </div>
                   </div>
@@ -1016,11 +1045,29 @@ function AssignmentsPageContent() {
                       <label className="block text-sm font-medium text-slate-300 mb-2">
                         Time
                       </label>
-                      <input
-                        type="time"
-                        value={formData.time}
-                        onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                      <DatePicker
+                        selected={formData.time ? new Date(`2000-01-01T${formData.time}`) : new Date(`2000-01-01T08:00`)}
+                        onChange={(date: Date | null) => {
+                          if (date) {
+                            const hours = String(date.getHours()).padStart(2, '0');
+                            const minutes = String(date.getMinutes()).padStart(2, '0');
+                            setFormData({ ...formData, time: `${hours}:${minutes}` });
+                          } else {
+                            setFormData({ ...formData, time: '' });
+                          }
+                        }}
+                        showTimeSelect
+                        showTimeSelectOnly
+                        timeIntervals={15}
+                        timeCaption="Time"
+                        dateFormat="h:mm aa"
+                        placeholderText="Select time"
                         className="w-full px-4 py-3 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        wrapperClassName="w-full"
+                        popperClassName="dark-datepicker-popper"
+                        popperProps={{
+                          strategy: "fixed",
+                        }}
                       />
                     </div>
 
@@ -1117,6 +1164,30 @@ function AssignmentsPageContent() {
                           rows={3}
                           className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-400"
                         />
+                      </div>
+                    </div>
+
+                    {/* Emotional Intensity */}
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">Load Tracking</h3>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2">
+                          Expected Emotional Intensity
+                        </label>
+                        <select
+                          value={formData.emotional_intensity}
+                          onChange={(e) => setFormData({ ...formData, emotional_intensity: e.target.value as "" | "low" | "moderate" | "high" | "very_high" })}
+                          className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        >
+                          <option value="">Not specified</option>
+                          <option value="low">🟢 Low intensity</option>
+                          <option value="moderate">🟡 Moderate</option>
+                          <option value="high">🟠 High intensity</option>
+                          <option value="very_high">🔴 Very high intensity</option>
+                        </select>
+                        <p className="text-xs text-slate-500 mt-1">
+                          This helps track your emotional load over time
+                        </p>
                       </div>
                     </div>
 
