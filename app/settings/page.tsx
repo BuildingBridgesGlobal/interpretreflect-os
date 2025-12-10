@@ -236,9 +236,9 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
             </p>
           </div>
           <div className="text-center p-3 rounded-lg bg-slate-800/50">
-            <p className="text-xs text-slate-400">Workshop Credits</p>
+            <p className="text-xs text-slate-400">RID CEUs</p>
             <p className="text-xl font-bold text-amber-400">
-              {tier === "pro" ? "4/mo" : tier === "growth" ? "2/mo" : "0"}
+              {tier === "pro" ? "0.3/mo" : tier === "growth" ? "0.1/mo" : "—"}
             </p>
           </div>
           <div className="text-center p-3 rounded-lg bg-slate-800/50">
@@ -309,8 +309,8 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-100">Workshop Credits</h3>
-              <p className="text-sm text-slate-400">1 credit = 30 min workshop (0.5 CEU)</p>
+              <h3 className="text-lg font-semibold text-slate-100">CEU Workshops</h3>
+              <p className="text-sm text-slate-400">RID-approved continuing education</p>
             </div>
           </div>
 
@@ -423,10 +423,10 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
                 <td className="py-2 px-3 text-center text-violet-400">✓</td>
               </tr>
               <tr>
-                <td className="py-2 px-3 text-slate-300">Workshop Credits</td>
-                <td className="py-2 px-3 text-center text-slate-400">0</td>
-                <td className="py-2 px-3 text-center text-teal-400">2/mo (1 CEU)</td>
-                <td className="py-2 px-3 text-center text-amber-400">4/mo (2 CEUs)</td>
+                <td className="py-2 px-3 text-slate-300">RID CEU Workshops</td>
+                <td className="py-2 px-3 text-center text-slate-400">—</td>
+                <td className="py-2 px-3 text-center text-teal-400">0.1 CEU/mo</td>
+                <td className="py-2 px-3 text-center text-violet-400">0.3 CEU/mo</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 text-slate-300">CEU Certificates</td>

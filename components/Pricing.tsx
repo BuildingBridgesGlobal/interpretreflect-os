@@ -85,9 +85,13 @@ export const Pricing: React.FC = () => {
                 <span className="text-violet-400 mt-0.5">✓</span>
                 <span>Export conversation history</span>
               </li>
+              <li className="flex items-start gap-2">
+                <span className="text-violet-400 mt-0.5">✓</span>
+                <span><span className="text-violet-300 font-medium">0.1 RID CEU/month</span> (1 hr of workshops)</span>
+              </li>
             </ul>
             <div className="mt-4 pt-4 border-t border-slate-800">
-              <p className="text-xs text-slate-500">Best for: Working interpreters who don't need CEUs yet</p>
+              <p className="text-xs text-slate-500">Best for: Working interpreters starting their CEU journey</p>
             </div>
             <a href="/start" className="mt-6 inline-flex items-center rounded-lg border border-violet-400 text-violet-300 px-4 py-2 text-sm font-semibold hover:bg-violet-500/10 w-full justify-center">Start with Growth</a>
           </div>
@@ -110,7 +114,7 @@ export const Pricing: React.FC = () => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-teal-400 mt-0.5">✓</span>
-                <span><span className="text-teal-300 font-medium">0.2 RID CEUs/month</span> (2 hrs of workshops)</span>
+                <span><span className="text-teal-300 font-medium">0.3 RID CEUs/month</span> (3 hrs of workshops)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-teal-400 mt-0.5">✓</span>
@@ -172,8 +176,8 @@ export const Pricing: React.FC = () => {
                 <span className="text-2xl">🎯</span>
                 <span className="font-medium text-slate-200">Pro Membership</span>
               </div>
-              <p className="text-sm text-slate-400">0.2 RID CEUs/month included</p>
-              <p className="text-xs text-slate-500 mt-1">2 hours of workshop content monthly</p>
+              <p className="text-sm text-slate-400">0.3 RID CEUs/month included</p>
+              <p className="text-xs text-slate-500 mt-1">3 hours of workshop content monthly</p>
             </div>
           </div>
           <p className="text-xs text-slate-500 mt-4 text-center">
