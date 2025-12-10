@@ -44,7 +44,8 @@
       "Bash(cmd /c \"taskkill /F /IM node.exe\")",
       "Bash(powershell -Command \"Stop-Process -Id 6184 -Force\")",
       "Bash(npx tsc:*)",
-      "Bash(node scripts/create-comment-likes.js:*)"
+      "Bash(node scripts/create-comment-likes.js:*)",
+      "Bash(timeout 90 npx tsc:*)"
     ],
     "deny": [],
     "ask": []

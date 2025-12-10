@@ -110,7 +110,7 @@ export const Pricing: React.FC = () => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-teal-400 mt-0.5">✓</span>
-                <span><span className="text-teal-300 font-medium">4 CEU credits/month</span></span>
+                <span><span className="text-teal-300 font-medium">0.2 RID CEUs/month</span> (2 hrs of workshops)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-teal-400 mt-0.5">✓</span>
@@ -155,74 +155,29 @@ export const Pricing: React.FC = () => {
           </div>
         </div>
 
-        {/* Top-Up Credits */}
-        <div className="mt-8 rounded-2xl border border-violet-500/30 bg-violet-500/5 p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-100">Need more CEU credits?</h3>
-              <p className="text-sm text-slate-400 mt-1">Pro members can purchase additional credits as needed. Never expire.</p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-center min-w-[90px]">
-                <p className="text-lg font-bold text-slate-100">$5</p>
-                <p className="text-xs text-slate-400">2 credits</p>
-                <p className="text-[10px] text-slate-500">$2.50/credit</p>
-              </div>
-              <div className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-4 py-2 text-center min-w-[90px]">
-                <p className="text-lg font-bold text-violet-300">$8</p>
-                <p className="text-xs text-slate-400">4 credits</p>
-                <p className="text-[10px] text-violet-400">$2.00/credit</p>
-              </div>
-              <div className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-center min-w-[90px]">
-                <p className="text-lg font-bold text-slate-100">$14</p>
-                <p className="text-xs text-slate-400">8 credits</p>
-                <p className="text-[10px] text-slate-500">$1.75/credit</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Student Discount Notice */}
-        <div className="mt-8 text-center">
-          <p className="text-sm text-slate-400">
-            Student or new interpreter (first 2 years)?{" "}
-            <a href="#contact" className="text-teal-300 hover:text-teal-200 underline">
-              Get 50% off Pro with verification
-            </a>
-          </p>
-        </div>
-
-        {/* Credit Values Explanation */}
+        {/* How RID CEUs Work */}
         <div className="mt-10 border-t border-slate-800 pt-8">
-          <h3 className="text-lg font-semibold text-slate-100 mb-4">How CEU Credits Work</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <h3 className="text-lg font-semibold text-slate-100 mb-4">How RID CEUs Work</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="rounded-lg bg-slate-900/50 border border-slate-800 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-2xl">📹</span>
-                <span className="font-medium text-slate-200">Theory Videos</span>
+                <span className="font-medium text-slate-200">On-Demand Workshops</span>
               </div>
-              <p className="text-sm text-slate-400">0.5 credits each</p>
-              <p className="text-xs text-slate-500 mt-1">Quick concept learning (10-15 min)</p>
+              <p className="text-sm text-slate-400">0.1 RID CEU per hour</p>
+              <p className="text-xs text-slate-500 mt-1">Watch video, complete assessment, earn certificate</p>
             </div>
             <div className="rounded-lg bg-slate-900/50 border border-slate-800 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-2xl">🎯</span>
-                <span className="font-medium text-slate-200">Skill Practice</span>
+                <span className="font-medium text-slate-200">Pro Membership</span>
               </div>
-              <p className="text-sm text-slate-400">1 credit each</p>
-              <p className="text-xs text-slate-500 mt-1">Interactive practice + assessment (30-45 min)</p>
-            </div>
-            <div className="rounded-lg bg-slate-900/50 border border-slate-800 p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-2xl">🔍</span>
-                <span className="font-medium text-slate-200">Deep Dive</span>
-              </div>
-              <p className="text-sm text-slate-400">2 credits each</p>
-              <p className="text-xs text-slate-500 mt-1">Case study + analysis (60+ min)</p>
+              <p className="text-sm text-slate-400">0.2 RID CEUs/month included</p>
+              <p className="text-xs text-slate-500 mt-1">2 hours of workshop content monthly</p>
             </div>
           </div>
           <p className="text-xs text-slate-500 mt-4 text-center">
-            Monthly credits reset on your billing date. Top-up credits never expire.
+            All workshops are RID-approved with official certificates for your records.
           </p>
         </div>
       </div>

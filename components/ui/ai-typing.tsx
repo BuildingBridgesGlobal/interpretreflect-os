@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { ElyaOrb, type OrbMode } from "./ElyaOrb";
 
 // ============================================================================
 // AI TYPING ANIMATION
@@ -109,44 +110,28 @@ export function StreamingText({ text, speed = 20, onComplete, className }: Strea
   );
 }
 
-// Pulsing brain/AI icon for loading states
+// Map color names to OrbMode
+const colorToOrbMode: Record<string, OrbMode> = {
+  violet: "default",
+  purple: "default",
+  teal: "prep",
+  blue: "debrief",
+  amber: "research",
+  magenta: "patterns",
+  rose: "freewrite"
+};
+
+// Pulsing brain/AI icon for loading states - now uses ElyaOrb
 export function AILoadingIcon({ size = "md", color = "violet" }: { size?: "sm" | "md" | "lg"; color?: string }) {
-  const sizes = {
-    sm: "w-6 h-6",
-    md: "w-8 h-8",
-    lg: "w-12 h-12"
-  };
-
-  const colorClasses: Record<string, { gradient: string; glow: string }> = {
-    violet: { gradient: "from-violet-400 to-purple-500", glow: "shadow-violet-500/50" },
-    teal: { gradient: "from-teal-400 to-emerald-500", glow: "shadow-teal-500/50" },
-    blue: { gradient: "from-blue-400 to-indigo-500", glow: "shadow-blue-500/50" },
-    amber: { gradient: "from-amber-400 to-orange-500", glow: "shadow-amber-500/50" },
-    purple: { gradient: "from-purple-400 to-fuchsia-500", glow: "shadow-purple-500/50" },
-    rose: { gradient: "from-rose-400 to-pink-500", glow: "shadow-rose-500/50" }
-  };
-
-  const colorConfig = colorClasses[color] || colorClasses.violet;
+  const orbSize = size === "sm" ? "xs" : size === "md" ? "sm" : "md";
+  const orbMode = colorToOrbMode[color] || "default";
 
   return (
-    <motion.div
-      className={`${sizes[size]} rounded-full overflow-hidden shadow-lg ${colorConfig.glow}`}
-      animate={{
-        scale: [1, 1.1, 1],
-        boxShadow: [
-          `0 0 20px 0 rgba(139, 92, 246, 0.3)`,
-          `0 0 30px 5px rgba(139, 92, 246, 0.5)`,
-          `0 0 20px 0 rgba(139, 92, 246, 0.3)`
-        ]
-      }}
-      transition={{
-        duration: 2,
-        repeat: Infinity,
-        ease: "easeInOut"
-      }}
-    >
-      <img src="/elya.jpg" alt="Elya" className="w-full h-full object-cover" />
-    </motion.div>
+    <ElyaOrb
+      size={orbSize}
+      mood="thinking"
+      mode={orbMode}
+    />
   );
 }
 

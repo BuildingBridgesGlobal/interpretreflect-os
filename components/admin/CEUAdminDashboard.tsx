@@ -587,6 +587,84 @@ export default function CEUAdminDashboard() {
               <li>Record confirmation number in Submission History</li>
             </ol>
           </div>
+
+          {/* Admin Tools */}
+          <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-5">
+            <h3 className="text-sm font-semibold text-slate-300 mb-3">🔧 Admin Tools</h3>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={async () => {
+                  if (!confirm("This will add/update the Virtual Synergy CEU Workshop in the database. Continue?")) return;
+                  try {
+                    const response = await fetchWithAuth("/api/admin/run-migration", {
+                      method: "POST",
+                      body: JSON.stringify({ action: "add_virtual_synergy_workshop" }),
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                      alert(`Success! Virtual Synergy workshop ${result.result?.action || "processed"}.`);
+                    } else {
+                      alert(`Error: ${result.error}`);
+                    }
+                  } catch (err) {
+                    alert("Failed to add workshop");
+                    console.error(err);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg border border-teal-500/50 text-teal-400 hover:bg-teal-500/20 transition-colors text-sm"
+              >
+                Add Virtual Synergy Workshop
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await fetchWithAuth("/api/admin/run-migration", {
+                      method: "POST",
+                      body: JSON.stringify({ action: "setup_ceu_rls_and_functions" }),
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                      alert(`${result.message}\n\n${result.instructions?.join('\n') || ''}`);
+                    } else {
+                      alert(`Error: ${result.error}`);
+                    }
+                  } catch (err) {
+                    alert("Failed to get setup instructions");
+                    console.error(err);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg border border-violet-500/50 text-violet-400 hover:bg-violet-500/20 transition-colors text-sm"
+              >
+                Setup RLS & Functions
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm("This will move NSM modules (1.1-1.6) to Quick Skills (non-CEU). Continue?")) return;
+                  try {
+                    const response = await fetchWithAuth("/api/admin/run-migration", {
+                      method: "POST",
+                      body: JSON.stringify({ action: "nsm_to_quick_skills" }),
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                      alert(`Success! ${result.updated?.length || 0} modules moved to Quick Skills.`);
+                    } else {
+                      alert(`Error: ${result.error}`);
+                    }
+                  } catch (err) {
+                    alert("Failed to run migration");
+                    console.error(err);
+                  }
+                }}
+                className="px-4 py-2 rounded-lg border border-amber-500/50 text-amber-400 hover:bg-amber-500/20 transition-colors text-sm"
+              >
+                Move NSM to Quick Skills
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              Use these tools to manage CEU system configuration.
+            </p>
+          </div>
         </div>
       )}
 

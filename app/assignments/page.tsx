@@ -539,16 +539,18 @@ function AssignmentsPageContent() {
           <div className="text-center py-16">
             {selectedTab === "upcoming" ? (
               <>
-                {/* Animated calendar/radar design for upcoming */}
+                {/* Calm calendar design for upcoming */}
                 <div className="relative w-24 h-24 mx-auto mb-6">
-                  {/* Pulsing rings */}
-                  <div className="absolute inset-0 rounded-2xl border-2 border-teal-500/20 animate-[ping_3s_ease-in-out_infinite]" />
-                  <div className="absolute inset-2 rounded-xl border-2 border-teal-500/30 animate-[ping_3s_ease-in-out_infinite_0.5s]" />
-                  <div className="absolute inset-4 rounded-lg border-2 border-teal-500/40 animate-[ping_3s_ease-in-out_infinite_1s]" />
+                  {/* Subtle glow */}
+                  <div className="absolute inset-0 rounded-full bg-teal-500/10 blur-xl" />
+                  {/* Static concentric rings */}
+                  <div className="absolute inset-0 rounded-full border border-teal-500/20" />
+                  <div className="absolute inset-3 rounded-full border border-teal-500/30" />
+                  <div className="absolute inset-6 rounded-full border border-teal-500/40" />
                   {/* Center calendar icon */}
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-teal-500/30">
-                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <div className="w-10 h-10 rounded-full bg-teal-500/20 border border-teal-500/40 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>

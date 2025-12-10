@@ -109,16 +109,6 @@ export default function CEUDashboard() {
   });
   const [showGrievanceForm, setShowGrievanceForm] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
-  const [durationFilter, setDurationFilter] = useState<"all" | "under10" | "under30" | "deepDive">("all");
-
-  // Filter workshops by duration
-  const filteredWorkshops = availableWorkshops.filter((workshop) => {
-    if (durationFilter === "all") return true;
-    if (durationFilter === "under10") return workshop.duration_minutes <= 10;
-    if (durationFilter === "under30") return workshop.duration_minutes <= 30;
-    if (durationFilter === "deepDive") return workshop.duration_minutes > 30;
-    return true;
-  });
 
   useEffect(() => {
     loadCEUData();
@@ -169,7 +159,8 @@ export default function CEUDashboard() {
         }
       }
 
-      // Fetch available CEU workshops (visible to all users for FOMO)
+      // Fetch available CEU workshops (only 30+ min content qualifies for CEUs)
+      // Short modules (<30 min) are now "Quick Skills" and don't appear here
       const { data: workshops } = await supabase
         .from("skill_modules")
         .select(`
@@ -189,6 +180,7 @@ export default function CEUDashboard() {
         `)
         .eq("ceu_eligible", true)
         .eq("is_active", true)
+        .gte("duration_minutes", 30) // Only workshops 30+ minutes qualify for CEUs
         .order("module_code", { ascending: true });
 
       if (workshops) {
@@ -633,7 +625,7 @@ export default function CEUDashboard() {
 
                   {/* Title */}
                   <h3 className="text-base font-semibold text-slate-100 mb-1 pr-10">
-                    {workshop.title}
+                    {workshop.title} <span className="text-slate-400 font-normal">({workshop.duration_minutes} min)</span>
                   </h3>
                   {workshop.subtitle && (
                     <p className="text-xs text-slate-500 mb-2">{workshop.subtitle}</p>
@@ -668,10 +660,19 @@ export default function CEUDashboard() {
               ))}
             </div>
 
-            {/* No workshops fallback */}
+            {/* No workshops - Coming Soon state */}
             {availableWorkshops.length === 0 && (
               <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-12 text-center">
-                <p className="text-slate-400">No workshops available yet. Check back soon!</p>
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-teal-500/10 border border-teal-500/30 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">CEU Workshops Coming Soon</h3>
+                <p className="text-slate-400 text-sm max-w-md mx-auto">
+                  We're preparing RID-approved workshops with full video content, assessments, and certificates.
+                  Pro members will be the first to access new workshops.
+                </p>
               </div>
             )}
           </motion.div>
@@ -742,9 +743,19 @@ export default function CEUDashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="rounded-xl border border-teal-500/30 bg-teal-500/10 p-5"
           >
-            <p className="text-3xl font-bold text-teal-400">
-              {summary?.total_earned.toFixed(2) || "0.00"}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-3xl font-bold text-teal-400">
+                {summary?.total_earned.toFixed(1) || "0.0"}
+              </p>
+              {cycle && (
+                <div className="text-right">
+                  <p className="text-xs text-slate-400">Due</p>
+                  <p className="text-sm font-medium text-teal-300">
+                    {new Date(cycle.end).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                  </p>
+                </div>
+              )}
+            </div>
             <p className="text-sm text-slate-300 mt-1">
               of {summary?.total_required || 8.0} CEUs
             </p>
@@ -1038,37 +1049,16 @@ export default function CEUDashboard() {
               </div>
             </div>
 
-            {/* Duration Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-400 mr-2">Filter by time:</span>
-              {[
-                { key: "all", label: "All" },
-                { key: "under10", label: "Under 10 min" },
-                { key: "under30", label: "Under 30 min" },
-                { key: "deepDive", label: "Deep Dive (30+)" },
-              ].map((filter) => (
-                <button
-                  key={filter.key}
-                  onClick={() => setDurationFilter(filter.key as typeof durationFilter)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    durationFilter === filter.key
-                      ? "bg-teal-500 text-slate-900"
-                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ))}
-              {durationFilter !== "all" && (
-                <span className="ml-2 text-xs text-slate-500">
-                  ({filteredWorkshops.length} workshop{filteredWorkshops.length !== 1 ? "s" : ""})
-                </span>
-              )}
-            </div>
+            {/* Workshop count info */}
+            {availableWorkshops.length > 0 && (
+              <div className="text-sm text-slate-400">
+                {availableWorkshops.length} CEU workshop{availableWorkshops.length !== 1 ? "s" : ""} available
+              </div>
+            )}
 
             {/* Workshop Grid */}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredWorkshops.map((workshop) => {
+              {availableWorkshops.map((workshop) => {
                 // Check if user has progress on this workshop
                 const progress = moduleProgress.find(p => p.skill_modules?.module_code === workshop.module_code);
                 const isCompleted = progress?.status === "completed";
@@ -1087,7 +1077,7 @@ export default function CEUDashboard() {
                         ? "border-amber-500/30 bg-amber-500/5"
                         : "border-slate-700 bg-slate-900/50"
                     }`}
-                    onClick={() => router.push(`/skills/${workshop.module_code}`)}
+                    onClick={() => router.push(`/ceu/workshop/${workshop.module_code}`)}
                   >
                     {/* Status Badge */}
                     <div className="flex items-center justify-between mb-3">
@@ -1124,7 +1114,7 @@ export default function CEUDashboard() {
 
                     {/* Title */}
                     <h3 className="text-base font-semibold text-slate-100 mb-1">
-                      {workshop.title}
+                      {workshop.title} <span className="text-slate-400 font-normal">({workshop.duration_minutes} min)</span>
                     </h3>
                     {workshop.subtitle && (
                       <p className="text-xs text-slate-500 mb-2">{workshop.subtitle}</p>
@@ -1155,108 +1145,22 @@ export default function CEUDashboard() {
               })}
             </div>
 
-            {/* No workshops fallback */}
-            {filteredWorkshops.length === 0 && availableWorkshops.length > 0 && (
-              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-8 text-center">
-                <p className="text-slate-400">
-                  No workshops match this filter. Try a different duration.
-                </p>
-                <button
-                  onClick={() => setDurationFilter("all")}
-                  className="mt-3 text-sm text-teal-400 hover:text-teal-300"
-                >
-                  Show all workshops
-                </button>
-              </div>
-            )}
+            {/* No workshops - Coming Soon state */}
             {availableWorkshops.length === 0 && (
-              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-12 text-center">
-                <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              <div className="rounded-xl border border-teal-500/20 bg-teal-500/5 p-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-teal-500/10 border border-teal-500/30 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-semibold text-slate-300 mb-2">No Workshops Available</h3>
-                <p className="text-sm text-slate-500">
-                  New CEU workshops are coming soon. Check back later!
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">CEU Workshops Coming Soon</h3>
+                <p className="text-sm text-slate-400 max-w-md mx-auto">
+                  We're preparing RID-approved workshops with full video content, assessments, and certificates.
+                  You'll be notified when new workshops are available.
                 </p>
               </div>
             )}
 
-            {/* Top-Up Credits Purchase */}
-            <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-100">Need more workshop credits?</h3>
-                  <p className="text-sm text-slate-400 mt-1">Purchase additional credits. They never expire.</p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={async () => {
-                      const session = await supabase.auth.getSession();
-                      if (!session.data.session) return;
-                      const res = await fetch("/api/credits/topup", {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          Authorization: `Bearer ${session.data.session.access_token}`,
-                        },
-                        body: JSON.stringify({ package_name: "small" }),
-                      });
-                      const data = await res.json();
-                      if (data.checkout_url) window.location.href = data.checkout_url;
-                    }}
-                    className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-center hover:border-violet-500/50 transition-colors"
-                  >
-                    <p className="text-lg font-bold text-slate-100">$5</p>
-                    <p className="text-xs text-slate-400">2 credits</p>
-                    <p className="text-[10px] text-slate-500">$2.50/credit</p>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const session = await supabase.auth.getSession();
-                      if (!session.data.session) return;
-                      const res = await fetch("/api/credits/topup", {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          Authorization: `Bearer ${session.data.session.access_token}`,
-                        },
-                        body: JSON.stringify({ package_name: "medium" }),
-                      });
-                      const data = await res.json();
-                      if (data.checkout_url) window.location.href = data.checkout_url;
-                    }}
-                    className="rounded-lg border border-violet-500/50 bg-violet-500/10 px-4 py-2 text-center hover:bg-violet-500/20 transition-colors"
-                  >
-                    <p className="text-lg font-bold text-violet-300">$8</p>
-                    <p className="text-xs text-slate-400">4 credits</p>
-                    <p className="text-[10px] text-violet-400">$2.00/credit</p>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const session = await supabase.auth.getSession();
-                      if (!session.data.session) return;
-                      const res = await fetch("/api/credits/topup", {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          Authorization: `Bearer ${session.data.session.access_token}`,
-                        },
-                        body: JSON.stringify({ package_name: "large" }),
-                      });
-                      const data = await res.json();
-                      if (data.checkout_url) window.location.href = data.checkout_url;
-                    }}
-                    className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-center hover:border-violet-500/50 transition-colors"
-                  >
-                    <p className="text-lg font-bold text-slate-100">$14</p>
-                    <p className="text-xs text-slate-400">8 credits</p>
-                    <p className="text-[10px] text-slate-500">$1.75/credit</p>
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 

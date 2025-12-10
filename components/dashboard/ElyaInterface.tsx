@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { ThinkingDots } from "@/components/ui/ai-typing";
+import { ElyaOrb, type OrbMode, type ElyaMood } from "@/components/ui/ElyaOrb";
 
 type ElyaInterfaceProps = {
   userData: any;
@@ -151,6 +152,16 @@ const modeConfig: Record<ElyaMode, {
 };
 
 const OPENING_MESSAGE = "Hi! I'm Elya, your AI interpreter co-pilot. I'm here to help you prep, debrief, research, analyze patterns, or just talk through whatever's on your mind. You can also tell me about an upcoming assignment and I'll automatically add it to your calendar. What would you like to work on?";
+
+// Map ElyaMode to OrbMode for the visual component
+const modeToOrbMode: Record<ElyaMode, OrbMode> = {
+  chat: "default",
+  prep: "prep",
+  debrief: "debrief",
+  research: "research",
+  patterns: "patterns",
+  "free-write": "freewrite"
+};
 
 // Post-debrief feeling options (matches wellness check-in options)
 const postDebriefFeelings = [
@@ -804,6 +815,27 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
           </div>
         )}
 
+        {/* Debrief Mode Quick Actions */}
+        {mode === "debrief" && (
+          <div className="px-4 py-2 border-b border-slate-800 bg-slate-800/20">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-[#9ca3af] mr-1">Short on time?</span>
+              <motion.a
+                href="/dashboard?quickDebrief=true"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/10 border border-blue-500/30 text-blue-300 hover:bg-blue-500/20 transition-colors"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Quick Debrief (2 min)
+              </motion.a>
+              <span className="text-xs text-[#9ca3af]">Just the essentials - setting, challenge level, quick notes</span>
+            </div>
+          </div>
+        )}
+
         {/* Prep Mode Quick Actions */}
         {mode === "prep" && selectedAssignment && (
           <div className="px-4 py-2 border-b border-slate-800 bg-slate-800/20">
@@ -876,19 +908,13 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
                     className={`flex gap-3 ${message.role === "user" ? "justify-end" : ""}`}
                   >
                     {message.role === "elya" && (
-                      <motion.div
-                        className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 mt-1 elya-orb-sm"
-                        animate={isThinking ? {
-                          boxShadow: [
-                            "0 0 0 0 rgba(168, 85, 247, 0)",
-                            "0 0 0 10px rgba(168, 85, 247, 0.3)",
-                            "0 0 0 0 rgba(168, 85, 247, 0)"
-                          ]
-                        } : {}}
-                        transition={{ duration: 1.5, repeat: isThinking ? Infinity : 0 }}
-                      >
-                        <img src="/elya.jpg" alt="Elya" className="w-full h-full object-cover" />
-                      </motion.div>
+                      <div className="flex-shrink-0 mt-1">
+                        <ElyaOrb
+                          size="md"
+                          mood={isThinking ? "thinking" : "neutral"}
+                          mode={modeToOrbMode[mode]}
+                        />
+                      </div>
                     )}
                     <motion.div
                       className={`flex-1 max-w-2xl rounded-xl px-4 py-3 ${
@@ -1079,11 +1105,7 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#1a1f3a] rounded-xl border border-[#252d46] max-w-sm w-full p-6 shadow-2xl">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full elya-orb-sm flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
+              <ElyaOrb size="sm" mood="curious" mode={modeToOrbMode[mode]} />
               <h3 className="text-lg font-semibold text-white">Start New Chat?</h3>
             </div>
             <p className="text-sm text-[#d1d5db] mb-6">
@@ -1107,84 +1129,65 @@ export default function ElyaInterface({ userData, preFillMessage, onMessageSent,
         </div>
       )}
 
-      {/* Feedback Modal */}
+      {/* Feedback Modal - Simplified quick feedback */}
       {showMoodPicker && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-[#1a1f3a] rounded-xl border border-[#252d46] max-w-md w-full p-6 shadow-2xl"
+            className="bg-[#1a1f3a] rounded-xl border border-[#252d46] p-5 shadow-2xl"
           >
-            <div className="text-center mb-5">
-              <div className="w-14 h-14 mx-auto mb-4 rounded-full overflow-hidden elya-orb">
-                <img src="/elya.jpg" alt="Elya" className="w-full h-full object-cover" />
+            <div className="flex items-center gap-4">
+              <ElyaOrb size="sm" mood="curious" mode={modeToOrbMode[mode]} />
+              <span className="text-sm text-[#d1d5db]">How was this chat?</span>
+
+              {/* Quick feedback buttons - single tap submits */}
+              <div className="flex gap-2">
+                <motion.button
+                  onClick={() => saveFeedbackAndEndConversation('helpful')}
+                  disabled={savingMood}
+                  className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-all disabled:opacity-50"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  title="Helpful"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+                  </svg>
+                </motion.button>
+                <motion.button
+                  onClick={() => saveFeedbackAndEndConversation('okay')}
+                  disabled={savingMood}
+                  className="p-2 rounded-lg border border-slate-500/30 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 hover:text-slate-300 transition-all disabled:opacity-50"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  title="Okay"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h8" />
+                  </svg>
+                </motion.button>
+                <motion.button
+                  onClick={() => saveFeedbackAndEndConversation('not_helpful')}
+                  disabled={savingMood}
+                  className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-all disabled:opacity-50"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.95 }}
+                  title="Not helpful"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
+                  </svg>
+                </motion.button>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Was this chat helpful?</h3>
-              <p className="text-sm text-[#d1d5db]">
-                Your feedback helps Elya improve.
-              </p>
-            </div>
 
-            {/* Feedback Options - now just selects, doesn't submit */}
-            <div className="flex justify-center gap-3 mb-4">
-              {CHAT_FEEDBACK_OPTIONS.map(({ id, label }) => {
-                const isSelected = selectedFeedback === id;
-                return (
-                  <motion.button
-                    key={id}
-                    onClick={() => setSelectedFeedback(id)}
-                    disabled={savingMood}
-                    className={`px-5 py-2.5 rounded-lg border transition-all text-sm font-medium disabled:opacity-50 ${
-                      id === 'helpful'
-                        ? isSelected
-                          ? 'border-emerald-500 bg-emerald-500/30 text-emerald-200 ring-2 ring-emerald-500/50'
-                          : 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 hover:border-emerald-500/50'
-                        : id === 'okay'
-                        ? isSelected
-                          ? 'border-slate-400 bg-slate-600/50 text-slate-100 ring-2 ring-slate-400/50'
-                          : 'border-slate-600 bg-slate-700/30 hover:bg-slate-700/50 text-slate-300 hover:border-slate-500'
-                        : isSelected
-                          ? 'border-rose-500 bg-rose-500/30 text-rose-200 ring-2 ring-rose-500/50'
-                          : 'border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:border-rose-500/50'
-                    }`}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    {label}
-                  </motion.button>
-                );
-              })}
-            </div>
-
-            {/* Optional Feedback Text */}
-            <div className="mb-5">
-              <label className="block text-xs text-slate-400 mb-2">
-                Anything else you'd like to share? (optional)
-              </label>
-              <textarea
-                value={feedbackText}
-                onChange={(e) => setFeedbackText(e.target.value)}
-                placeholder="What worked well? What could be better?"
-                rows={2}
-                className="w-full px-3 py-2 rounded-lg border border-[#252d46] bg-[#252d46]/30 text-slate-200 placeholder-slate-500 text-sm focus:outline-none focus:ring-1 focus:ring-[#a855f7] resize-none"
-              />
-            </div>
-
-            {/* Done Button */}
-            <div className="flex gap-3">
+              {/* Skip button */}
               <button
                 onClick={() => saveFeedbackAndEndConversation(null)}
                 disabled={savingMood}
-                className="flex-1 px-4 py-2.5 rounded-lg border border-[#252d46] text-[#d1d5db] hover:bg-[#252d46] transition-colors font-medium text-sm disabled:opacity-50"
+                className="text-xs text-slate-500 hover:text-slate-400 transition-colors disabled:opacity-50"
               >
                 Skip
-              </button>
-              <button
-                onClick={() => saveFeedbackAndEndConversation(selectedFeedback)}
-                disabled={savingMood}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-[#a855f7] hover:bg-[#9333ea] text-white font-medium text-sm transition-colors disabled:opacity-50"
-              >
-                {savingMood ? "Saving..." : "Done"}
               </button>
             </div>
           </motion.div>

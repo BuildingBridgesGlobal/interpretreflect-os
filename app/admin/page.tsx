@@ -6,6 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import AdminNavBar from "@/components/AdminNavBar";
 import CEUAdminDashboard from "@/components/admin/CEUAdminDashboard";
+import WorkshopManager from "@/components/admin/WorkshopManager";
 
 type Organization = {
   id: string;
@@ -63,7 +64,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [userData, setUserData] = useState<any>(null);
-  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials" | "agencies" | "ceu" | "elya-feedback">("overview");
+  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials" | "agencies" | "ceu" | "workshops" | "elya-feedback">("overview");
 
   // Agency management state
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -583,6 +584,7 @@ export default function AdminPage() {
           {[
             { key: "overview", label: "Overview" },
             { key: "ceu", label: "CEU Management" },
+            { key: "workshops", label: "Workshop Manager" },
             { key: "agencies", label: "Agencies" },
             { key: "pipeline", label: "Pipeline Health" },
             { key: "competency", label: "Competency Growth" },
@@ -688,6 +690,11 @@ export default function AdminPage() {
         {/* CEU Management Tab */}
         {selectedView === "ceu" && (
           <CEUAdminDashboard />
+        )}
+
+        {/* Workshop Manager Tab */}
+        {selectedView === "workshops" && (
+          <WorkshopManager />
         )}
 
         {/* Agencies Tab */}

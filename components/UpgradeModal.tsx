@@ -11,7 +11,6 @@ type UpgradeModalProps = {
 export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
   const [selectedTier, setSelectedTier] = useState<"growth" | "pro">("growth");
   const [selectedCycle, setSelectedCycle] = useState<"monthly" | "yearly">("monthly");
-  const [isStudent, setIsStudent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,9 +53,6 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
 
       const priceInfo = prices[0] as any;
 
-      // Apply student discount if user checked the checkbox
-      const applyStudentDiscount = isStudent;
-
       // Call your API to create Stripe checkout session
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       const resp = await fetch("/api/create-checkout", {
@@ -70,7 +66,6 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
           mode: "subscription",
           tier: selectedTier,
           cycle: selectedCycle,
-          apply_student_discount: applyStudentDiscount,
         }),
       });
 
@@ -156,7 +151,7 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
                   CEU
                 </div>
                 <div className="text-lg font-semibold text-slate-50">Pro</div>
-                <div className="text-sm text-slate-400">Growth + 4 CEU credits/mo</div>
+                <div className="text-sm text-slate-400">Growth + 0.2 RID CEUs/mo</div>
                 <div className="text-xs text-teal-400 mt-1">$30/mo</div>
               </button>
             </div>
@@ -196,31 +191,6 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             </div>
           </div>
 
-          {/* Student Discount */}
-          <div className="mb-6">
-            <label className="flex items-center gap-3 p-4 bg-slate-800/50 border border-slate-700 rounded-lg cursor-pointer hover:border-teal-400/50 transition-colors">
-              <input
-                type="checkbox"
-                checked={isStudent}
-                onChange={(e) => setIsStudent(e.target.checked)}
-                className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-teal-400 focus:ring-teal-400 focus:ring-offset-slate-900"
-              />
-              <div className="flex-1">
-                <span className="text-sm font-medium text-slate-200">
-                  I'm a student or new interpreter (first 2 years)
-                </span>
-                <p className="mt-1 text-xs text-slate-400">
-                  Get 50% off your subscription automatically
-                </p>
-              </div>
-              {isStudent && (
-                <span className="text-xs font-semibold text-teal-400 bg-teal-400/10 px-2 py-1 rounded">
-                  -50%
-                </span>
-              )}
-            </label>
-          </div>
-
           {/* Error */}
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
@@ -238,28 +208,10 @@ export default function UpgradeModal({ isOpen, onClose }: UpgradeModalProps) {
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-300">Total:</span>
-              <div className="text-right">
-                {isStudent ? (
-                  <>
-                    <div className="text-sm text-slate-400 line-through">
-                      ${currentPrice}
-                    </div>
-                    <div className="text-2xl text-teal-400 font-bold">
-                      ${currentPrice / 2}{selectedCycle === "monthly" ? "/mo" : "/yr"}
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-2xl text-teal-400 font-bold">
-                    ${currentPrice}{selectedCycle === "monthly" ? "/mo" : "/yr"}
-                  </span>
-                )}
-              </div>
+              <span className="text-2xl text-teal-400 font-bold">
+                ${currentPrice}{selectedCycle === "monthly" ? "/mo" : "/yr"}
+              </span>
             </div>
-            {isStudent && (
-              <div className="mt-2 text-xs text-teal-400">
-                Student discount (50% off) will be applied at checkout
-              </div>
-            )}
           </div>
 
           {/* Actions */}

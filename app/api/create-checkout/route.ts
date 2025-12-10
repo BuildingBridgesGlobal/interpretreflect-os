@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     // Get request body
     const body = await req.json();
-    let { price_id, mode, tier, cycle, apply_student_discount } = body;
+    let { price_id, mode, tier, cycle } = body;
 
     // If tier/cycle provided, look up price_id
     if (tier && cycle && !price_id) {
@@ -61,9 +61,6 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    // Stripe Promotion Code ID for STUDENT50 (50% off forever)
-    const STUDENT_PROMO_CODE_ID = "promo_1SYf081ouyG60O9h";
 
     // Get or create Stripe customer
     const { data: profile } = await supabase
@@ -101,14 +98,6 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         },
       ],
-      // Auto-apply student discount using promotion code ID
-      discounts: apply_student_discount
-        ? [
-            {
-              promotion_code: STUDENT_PROMO_CODE_ID,
-            },
-          ]
-        : undefined,
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
       metadata: {
@@ -116,7 +105,6 @@ export async function POST(req: NextRequest) {
         supabase_user_id: user.id, // legacy compatibility
         tier: tier || "",
         cycle: cycle || "",
-        student_discount_applied: apply_student_discount ? "true" : "false",
       },
       ...(mode === "subscription" ? {
         subscription_data: {
@@ -125,7 +113,6 @@ export async function POST(req: NextRequest) {
             supabase_user_id: user.id,
             tier: tier || "",
             cycle: cycle || "",
-            student_discount_applied: apply_student_discount ? "true" : "false",
           },
         },
       } : {}),
