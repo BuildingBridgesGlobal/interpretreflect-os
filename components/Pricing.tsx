@@ -23,7 +23,7 @@ export const Pricing: React.FC = () => {
             <ul className="mt-4 space-y-2 text-sm text-slate-300">
               <li className="flex items-start gap-2">
                 <span className="text-slate-500 mt-0.5">•</span>
-                <span>5 Elya conversations/month</span>
+                <span>10 Elya conversations/day</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-slate-500 mt-0.5">•</span>

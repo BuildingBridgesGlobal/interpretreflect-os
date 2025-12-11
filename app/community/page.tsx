@@ -2071,28 +2071,25 @@ export default function CommunityPage() {
               )}
 
               {/* Community Guidelines */}
-              <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-purple-500/5 p-4 premium-card hover:border-violet-500/50">
-                <div className="flex items-center gap-2 mb-3">
+              <Link
+                href="/community/guidelines"
+                className="block rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-purple-500/5 p-4 premium-card hover:border-violet-500/50 transition-all hover:scale-[1.02]"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <h4 className="text-sm font-semibold text-violet-400">Community Guidelines</h4>
+                  </div>
                   <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  <h4 className="text-sm font-semibold text-violet-400">Community Guidelines</h4>
                 </div>
-                <ul className="space-y-2 text-sm text-slate-300">
-                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
-                    <span className="text-violet-400 mt-0.5">·</span>
-                    <span><span className="text-slate-100 font-medium">Respect confidentiality</span> - Never share client info</span>
-                  </li>
-                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
-                    <span className="text-violet-400 mt-0.5">·</span>
-                    <span><span className="text-slate-100 font-medium">Support each other</span> - We all have hard days</span>
-                  </li>
-                  <li className="flex items-start gap-2 premium-transition hover:translate-x-1">
-                    <span className="text-violet-400 mt-0.5">·</span>
-                    <span><span className="text-slate-100 font-medium">Be constructive</span> - Offer help, not judgment</span>
-                  </li>
-                </ul>
-              </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  Our standards for a safe, respectful, and welcoming community for all interpreters.
+                </p>
+              </Link>
               </div>
             </div>
           </div>

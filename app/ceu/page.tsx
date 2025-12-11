@@ -692,7 +692,7 @@ export default function CEUDashboard() {
                 <p className="text-slate-400 text-sm">
                   <span className="text-2xl font-bold text-teal-400">$30</span>
                   <span className="text-slate-500">/month</span>
-                  <span className="text-slate-400 ml-2">• 4 workshop credits/month (up to 2 CEUs) • Track RID compliance</span>
+                  <span className="text-slate-400 ml-2">• 0.3 RID CEUs/month (3 hrs of workshops) • Track RID compliance</span>
                 </p>
               </div>
               <button

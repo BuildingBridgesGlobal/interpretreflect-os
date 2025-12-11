@@ -15,6 +15,34 @@ const openai = new OpenAI({
 const supabase = supabaseAdmin;
 
 // ============================================================================
+// RATE LIMIT HANDLING - Retry with exponential backoff
+// ============================================================================
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 5,
+  baseDelayMs: number = 3000
+): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      // Only retry on rate limit (429) or overloaded (529) errors
+      if (error?.status === 429 || error?.status === 529) {
+        const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 2000;
+        console.log(`Rate limited, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error; // Non-retryable error
+    }
+  }
+  throw lastError;
+}
+
+// ============================================================================
 // OMNIPOTENT ELYA - Memory System
 // ============================================================================
 
@@ -118,11 +146,11 @@ Examples of what NOT to extract:
 
 Return ONLY the JSON array, nothing else:`;
 
-    const extraction = await anthropic.messages.create({
+    const extraction = await withRetry(() => anthropic.messages.create({
       model: "claude-3-5-haiku-20241022",
       max_tokens: 1000,
       messages: [{ role: "user", content: extractionPrompt }],
-    });
+    }));
 
     const extractedText = (extraction.content[0] as any)?.text || "[]";
 
@@ -204,11 +232,11 @@ If no clear skill observation, return: {"found": false}
 
 Return ONLY JSON:`;
 
-    const detection = await anthropic.messages.create({
+    const detection = await withRetry(() => anthropic.messages.create({
       model: "claude-3-5-haiku-20241022",
       max_tokens: 500,
       messages: [{ role: "user", content: detectionPrompt }],
-    });
+    }));
 
     const detectedText = (detection.content[0] as any)?.text || '{"found": false}';
 
@@ -605,15 +633,29 @@ export async function POST(req: NextRequest) {
       console.error("Error checking Elya limit:", limitError);
       // Don't block on limit check errors, just log
     } else if (limitCheck && !limitCheck.allowed) {
+      console.log("FREE TIER DAILY LIMIT REACHED:", {
+        userId,
+        limit: limitCheck.limit,
+        used: limitCheck.used
+      });
+
+      // Return a warm, friendly message from Elya instead of a cold error
+      const warmMessage = `Hey friend 💜 We've had ${limitCheck.used} wonderful conversations today, and I've loved every one of them. I need to rest for now, but I'll be here bright and early tomorrow, ready to connect and support you again.
+
+Take care of yourself tonight. Maybe journal a bit, or just breathe. You're doing amazing work, and I'm proud of you.
+
+See you tomorrow! 🌙`;
+
       return NextResponse.json(
         {
-          error: "Monthly conversation limit reached",
-          limit_reached: true,
+          response: warmMessage,
+          reply: warmMessage,
+          daily_limit_reached: true,
           limit: limitCheck.limit,
           used: limitCheck.used,
-          upgrade_message: "Upgrade to Growth for unlimited Elya conversations"
+          resets_at: limitCheck.resets_at
         },
-        { status: 429 }
+        { status: 200 }  // Return 200 so it displays as a normal message
       );
     }
 
@@ -2067,15 +2109,15 @@ Remember: Your goal is for them to walk into that assignment feeling CONFIDENT a
       }
     ];
 
-    // Call Claude API with full context and tools
+    // Call Claude API with full context and tools (with retry for rate limits)
     // In Free Write mode, don't include tools (no assignment creation, etc.)
-    const message = await anthropic.messages.create({
+    const message = await withRetry(() => anthropic.messages.create({
       model: "claude-3-5-haiku-20241022",
       max_tokens: 2048, // Increased for more detailed responses
       system: finalSystemPrompt,
       messages: claudeMessages.length > 0 ? claudeMessages : [{ role: "user", content: "Hello" }],
       ...(isFreeWriteMode ? {} : { tools: tools }), // Only include tools in non-Free Write mode
-    });
+    }));
 
     // Check if Claude wants to use a tool
     if (message.stop_reason === "tool_use") {
@@ -2115,13 +2157,13 @@ Remember: Your goal is for them to walk into that assignment feeling CONFIDENT a
           },
         ];
 
-        const followUpMessage = await anthropic.messages.create({
+        const followUpMessage = await withRetry(() => anthropic.messages.create({
           model: "claude-3-5-haiku-20241022",
           max_tokens: 2048,
           system: systemPrompt,
           messages: followUpMessages,
           tools: tools,
-        });
+        }));
 
         const followUpTextBlock = followUpMessage.content.find((block: any) => block.type === "text") as any;
         const followUpText = followUpTextBlock?.text || "";
@@ -2132,11 +2174,16 @@ Remember: Your goal is for them to walk into that assignment feeling CONFIDENT a
         }
 
         // OMNIPOTENT ELYA: Extract memories from tool use conversation too
+        // Delayed to avoid rate limiting
         if (userId && userMessage && followUpText) {
-          Promise.all([
-            extractAndStoreMemories(userId, userMessage, followUpText, "dashboard"),
-            detectAndRecordSkillObservation(userId, userMessage, context),
-          ]).catch(err => console.error("Background memory processing error:", err));
+          setTimeout(() => {
+            Promise.all([
+              extractAndStoreMemories(userId, userMessage, followUpText, "dashboard"),
+              new Promise(resolve => setTimeout(resolve, 2000)).then(() =>
+                detectAndRecordSkillObservation(userId, userMessage, context)
+              ),
+            ]).catch(err => console.error("Background memory processing error:", err));
+          }, 3000);
         }
 
         return NextResponse.json({
@@ -2162,12 +2209,17 @@ Remember: Your goal is for them to walk into that assignment feeling CONFIDENT a
     // OMNIPOTENT ELYA: Extract & Store Memories (async, non-blocking)
     // ============================================================
     // We do this after returning the response so we don't slow down the UX
+    // Note: Delayed by 2s to avoid rate limiting on the Anthropic API
     if (userId && userMessage && responseText && !isFreeWriteMode) {
-      // Fire-and-forget: Extract memories and detect skill observations
-      Promise.all([
-        extractAndStoreMemories(userId, userMessage, responseText, messageContext),
-        detectAndRecordSkillObservation(userId, userMessage, context),
-      ]).catch(err => console.error("Background memory processing error:", err));
+      // Fire-and-forget with delay: Extract memories and detect skill observations
+      setTimeout(() => {
+        Promise.all([
+          extractAndStoreMemories(userId, userMessage, responseText, messageContext),
+          new Promise(resolve => setTimeout(resolve, 2000)).then(() =>
+            detectAndRecordSkillObservation(userId, userMessage, context)
+          ),
+        ]).catch(err => console.error("Background memory processing error:", err));
+      }, 3000); // Wait 3 seconds after response before starting memory extraction
     }
 
     return NextResponse.json({
@@ -2179,6 +2231,26 @@ Remember: Your goal is for them to walk into that assignment feeling CONFIDENT a
     });
   } catch (error: any) {
     console.error("Claude API error:", error);
+    console.error("ANTHROPIC API ERROR - Full error details:", {
+      status: error?.status,
+      message: error?.message,
+      type: error?.type,
+      code: error?.code,
+      headers: error?.headers
+    });
+
+    // Handle rate limit errors with a friendly message
+    if (error?.status === 429) {
+      console.log("ANTHROPIC RATE LIMIT - API returned 429");
+      return NextResponse.json(
+        {
+          error: "Elya is experiencing high demand right now. Please try again in a moment.",
+          isRateLimit: true
+        },
+        { status: 429 }
+      );
+    }
+
     return NextResponse.json(
       { error: error.message || "Failed to get response from Elya" },
       { status: 500 }

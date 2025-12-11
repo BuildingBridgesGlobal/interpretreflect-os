@@ -58,7 +58,7 @@ function UpgradeBanner({ tier, onUpgrade }: { tier: string; onUpgrade: () => voi
           {tier === 'free' ? 'Basic' : 'Growth'}
         </span>
         <span className="text-sm text-slate-400">
-          Upgrade to Pro for CEU workshops & unlimited features
+          {tier === 'free' ? 'Upgrade for unlimited Elya & CEU workshops' : 'Upgrade to Pro for 0.3 RID CEUs/month'}
         </span>
       </div>
       <button

@@ -394,7 +394,7 @@ function BillingTab({ userData, showMessage }: { userData: any; showMessage: (ty
             <tbody className="divide-y divide-slate-800">
               <tr>
                 <td className="py-2 px-3 text-slate-300">Elya Conversations</td>
-                <td className="py-2 px-3 text-center text-slate-300">Unlimited</td>
+                <td className="py-2 px-3 text-center text-slate-300">10/day</td>
                 <td className="py-2 px-3 text-center text-teal-400">Unlimited</td>
                 <td className="py-2 px-3 text-center text-violet-400">Unlimited</td>
               </tr>

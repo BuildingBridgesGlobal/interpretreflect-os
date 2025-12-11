@@ -19,7 +19,7 @@ export const Hero: React.FC<HeroProps> = ({
   subhead = "Meet Elya, your AI companion for prep, debriefs, and reflection. Earn RID-approved CEUs with interactive workshops. Track wellness, build skills, prevent burnout—all in one place.",
   primary = { label: "Get Started Free", href: "/start" },
   secondary = { label: "See How It Works", href: "#interpreter-os" },
-  microcopy = "Basic plan is free forever. No credit card required.",
+  microcopy = "Free plan forever. No credit card required.",
   primaryHref,
   secondaryHref,
 }) => {
@@ -136,7 +136,7 @@ export const Hero: React.FC<HeroProps> = ({
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <span className="h-1 w-1 rounded-full bg-violet-400 flex-shrink-0" />
-                    <span>0.2 CEUs/month</span>
+                    <span>Up to 0.3 CEUs/month</span>
                   </div>
                 </div>
               </div>
@@ -171,8 +171,8 @@ export const Hero: React.FC<HeroProps> = ({
               <div className="rounded-xl border border-slate-600/50 bg-gradient-to-br from-slate-700/20 to-transparent p-5 flex flex-col justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Simple Pricing</p>
-                  <p className="text-base font-semibold text-slate-100 mb-2">Basic: Free Forever</p>
-                  <p className="text-xs text-slate-400">Pro: $30/mo for CEU workshops</p>
+                  <p className="text-base font-semibold text-slate-100 mb-2">Free: 10 chats/day</p>
+                  <p className="text-xs text-slate-400">Growth: $15/mo • Pro: $30/mo</p>
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-700">
                   <p className="text-xs text-slate-400 leading-relaxed">
