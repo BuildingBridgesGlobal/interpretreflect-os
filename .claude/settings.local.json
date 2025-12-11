@@ -45,7 +45,11 @@
       "Bash(powershell -Command \"Stop-Process -Id 6184 -Force\")",
       "Bash(npx tsc:*)",
       "Bash(node scripts/create-comment-likes.js:*)",
-      "Bash(timeout 90 npx tsc:*)"
+      "Bash(timeout 90 npx tsc:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)",
+      "Bash(npx eslint:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

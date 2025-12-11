@@ -84,6 +84,19 @@ function AssignmentsPageContent() {
   const [teamEmails, setTeamEmails] = useState<string[]>([""]);
   const [teamRoles, setTeamRoles] = useState<string[]>(["team"]);
 
+  // Community friends state for team invitations
+  type CommunityFriend = {
+    user_id: string;
+    display_name: string;
+    avatar_url?: string;
+  };
+  const [communityFriends, setCommunityFriends] = useState<CommunityFriend[]>([]);
+  const [selectedFriends, setSelectedFriends] = useState<{ userId: string; role: string }[]>([]);
+  const [friendRoles, setFriendRoles] = useState<Record<string, string>>({});
+  const [teamInviteTab, setTeamInviteTab] = useState<"friends" | "email">("friends");
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [friendSearchQuery, setFriendSearchQuery] = useState("");
+
   useEffect(() => {
     // Check for tab parameter from URL (for redirects from /history)
     const tab = searchParams.get('tab');
@@ -305,6 +318,68 @@ function AssignmentsPageContent() {
     setTeamRoles(newRoles);
   };
 
+  // Load community friends (accepted connections)
+  const loadCommunityFriends = async () => {
+    if (!user?.id) return;
+    setLoadingFriends(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        `/api/community/connections?user_id=${user.id}&status=accepted`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      );
+      const data = await response.json();
+
+      if (response.ok && data.connections) {
+        const friends: CommunityFriend[] = data.connections
+          .map((c: any) => c.user)
+          .filter((u: any) => u?.user_id)
+          .map((u: any) => ({
+            user_id: u.user_id,
+            display_name: u.display_name || "Unknown",
+            avatar_url: u.avatar_url
+          }));
+        setCommunityFriends(friends);
+      }
+    } catch (error) {
+      console.error("Error loading community friends:", error);
+    } finally {
+      setLoadingFriends(false);
+    }
+  };
+
+  // Toggle friend selection
+  const toggleFriendSelection = (userId: string) => {
+    setSelectedFriends(prev => {
+      const exists = prev.find(f => f.userId === userId);
+      if (exists) {
+        return prev.filter(f => f.userId !== userId);
+      } else {
+        return [...prev, { userId, role: friendRoles[userId] || "team" }];
+      }
+    });
+  };
+
+  // Update friend role
+  const updateFriendRole = (userId: string, role: string) => {
+    setFriendRoles(prev => ({ ...prev, [userId]: role }));
+    setSelectedFriends(prev =>
+      prev.map(f => f.userId === userId ? { ...f, role } : f)
+    );
+  };
+
+  // Get initials for avatar
+  const getInitials = (name: string) => {
+    return name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
+  };
+
+  // Filter friends by search
+  const filteredFriends = communityFriends.filter(f =>
+    f.display_name.toLowerCase().includes(friendSearchQuery.toLowerCase())
+  );
+
   const handleCreateAssignment = async () => {
     if (!formData.title || !formData.date) {
       alert("Please fill in the required fields: Title and Date");
@@ -353,43 +428,127 @@ function AssignmentsPageContent() {
       }
 
       // If team assignment, add team members (non-blocking - don't fail assignment creation)
-      if (formData.is_team_assignment && newAssignment) {
-        const validEmails = teamEmails.filter(email => email.trim() !== "");
+      const allTeamMemberIds: string[] = [];
 
-        if (validEmails.length > 0) {
-          try {
-            // For MVP: look up users by email and add them as confirmed team members
+      if (formData.is_team_assignment && newAssignment) {
+        try {
+          // 1. Add selected friends (direct user_ids - these are already on the platform)
+          if (selectedFriends.length > 0) {
+            const friendMembersToAdd = selectedFriends.map((friend) => ({
+              assignment_id: newAssignment.id,
+              user_id: friend.userId,
+              role: friend.role || "team",
+              status: "confirmed",
+              invited_by: user.id,
+              invited_at: new Date().toISOString(),
+              confirmed_at: new Date().toISOString(),
+              can_edit_assignment: false,
+              can_invite_others: false
+            }));
+
+            const { error: friendError } = await supabase
+              .from("assignment_team_members")
+              .insert(friendMembersToAdd);
+
+            if (friendError) {
+              console.warn("Could not add friend team members:", friendError.message);
+            } else {
+              allTeamMemberIds.push(...selectedFriends.map(f => f.userId));
+            }
+          }
+
+          // 2. Add email invites (look up users by email)
+          const validEmails = teamEmails.filter(email => email.trim() !== "");
+          if (validEmails.length > 0) {
             const { data: profiles } = await supabase
               .from("profiles")
               .select("id, email")
               .in("email", validEmails);
 
             if (profiles && profiles.length > 0) {
-              const teamMembersToAdd = profiles.map((profile) => ({
-                assignment_id: newAssignment.id,
-                user_id: profile.id,
-                role: teamRoles[teamEmails.indexOf(profile.email || "")] || "team",
-                status: "confirmed",
-                invited_by: user.id,
-                invited_at: new Date().toISOString(),
-                confirmed_at: new Date().toISOString(),
-                can_edit_assignment: false,
-                can_invite_others: false
-              }));
+              // Filter out any profiles that were already added as friends
+              const newProfiles = profiles.filter(p => !allTeamMemberIds.includes(p.id));
 
-              const { error: teamError } = await supabase
-                .from("assignment_team_members")
-                .insert(teamMembersToAdd);
+              if (newProfiles.length > 0) {
+                const emailMembersToAdd = newProfiles.map((profile) => ({
+                  assignment_id: newAssignment.id,
+                  user_id: profile.id,
+                  role: teamRoles[teamEmails.indexOf(profile.email || "")] || "team",
+                  status: "confirmed",
+                  invited_by: user.id,
+                  invited_at: new Date().toISOString(),
+                  confirmed_at: new Date().toISOString(),
+                  can_edit_assignment: false,
+                  can_invite_others: false
+                }));
 
-              if (teamError) {
-                console.warn("Could not add team members:", teamError.message);
-                // Don't fail the whole assignment - just log the warning
+                const { error: emailError } = await supabase
+                  .from("assignment_team_members")
+                  .insert(emailMembersToAdd);
+
+                if (emailError) {
+                  console.warn("Could not add email team members:", emailError.message);
+                } else {
+                  allTeamMemberIds.push(...newProfiles.map(p => p.id));
+                }
               }
             }
-          } catch (teamErr) {
-            console.warn("Team member addition failed:", teamErr);
-            // Continue with assignment creation
           }
+
+          // 3. Create team chat if we have team members (2+ people including creator makes a group)
+          if (allTeamMemberIds.length > 0) {
+            try {
+              // Create conversation for the team with teaming type
+              const { data: conversation, error: convError } = await supabase
+                .from("conversations")
+                .insert({
+                  name: `${formData.title} Team`,
+                  is_group: allTeamMemberIds.length >= 2, // Group if 3+ total (creator + 2 members)
+                  created_by: user.id,
+                  assignment_id: newAssignment.id,
+                  conversation_type: 'teaming' // Mark as work/assignment chat
+                })
+                .select()
+                .single();
+
+              if (!convError && conversation) {
+                // Add creator first (for RLS)
+                await supabase
+                  .from("conversation_participants")
+                  .insert({ conversation_id: conversation.id, user_id: user.id, is_admin: true });
+
+                // Add team members
+                const participantsToAdd = allTeamMemberIds.map(memberId => ({
+                  conversation_id: conversation.id,
+                  user_id: memberId,
+                  is_admin: false
+                }));
+
+                await supabase
+                  .from("conversation_participants")
+                  .insert(participantsToAdd);
+
+                // Add welcome message (without is_system_message to avoid potential schema issues)
+                await supabase
+                  .from("messages")
+                  .insert({
+                    conversation_id: conversation.id,
+                    sender_id: user.id,
+                    content: `👋 Welcome to the team chat for "${formData.title}"! Use this space to coordinate before, during, and after the assignment.`
+                  });
+
+                console.log("Team chat created:", conversation.id);
+              } else if (convError) {
+                console.warn("Conversation creation failed:", convError.message);
+              }
+            } catch (chatErr) {
+              console.warn("Team chat creation failed:", chatErr);
+              // Continue - assignment is still created
+            }
+          }
+        } catch (teamErr) {
+          console.warn("Team member addition failed:", teamErr);
+          // Continue with assignment creation
         }
       }
 
@@ -411,6 +570,10 @@ function AssignmentsPageContent() {
       });
       setTeamEmails([""]);
       setTeamRoles(["team"]);
+      setSelectedFriends([]);
+      setFriendRoles({});
+      setTeamInviteTab("friends");
+      setFriendSearchQuery("");
       setShowMoreDetails(false);
       setShowNewAssignmentModal(false);
 
@@ -1167,55 +1330,215 @@ function AssignmentsPageContent() {
 
                       {formData.is_team_assignment && (
                         <div className="space-y-3 pl-7">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-medium text-slate-400">Team Members</h4>
+                          {/* Tabs: Friends / Email */}
+                          <div className="flex gap-2 border-b border-slate-700 pb-2">
                             <button
                               type="button"
-                              onClick={addTeamMemberField}
-                              className="text-sm text-teal-400 hover:text-teal-300 font-medium"
+                              onClick={() => {
+                                setTeamInviteTab("friends");
+                                if (communityFriends.length === 0) loadCommunityFriends();
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                teamInviteTab === "friends"
+                                  ? "bg-teal-500 text-slate-950"
+                                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                              }`}
                             >
-                              + Add Member
+                              <span className="flex items-center gap-1.5">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                Community Friends
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTeamInviteTab("email")}
+                              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                teamInviteTab === "email"
+                                  ? "bg-teal-500 text-slate-950"
+                                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                Invite by Email
+                              </span>
                             </button>
                           </div>
 
-                          <div className="space-y-2">
-                            {teamEmails.map((email, index) => (
-                              <div key={index} className="flex gap-2">
-                                <input
-                                  type="email"
-                                  value={email}
-                                  onChange={(e) => updateTeamEmail(index, e.target.value)}
-                                  placeholder="team.member@example.com"
-                                  className="flex-1 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                                />
-                                <select
-                                  value={teamRoles[index]}
-                                  onChange={(e) => updateTeamRole(index, e.target.value)}
-                                  className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                                >
-                                  <option value="team">Team</option>
-                                  <option value="lead">Lead</option>
-                                  <option value="support">Support</option>
-                                  <option value="feed">Feed</option>
-                                  <option value="shadow">Shadow</option>
-                                  <option value="mentor">Mentor</option>
-                                </select>
-                                {index > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => removeTeamMemberField(index)}
-                                    className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 transition-colors text-lg leading-none"
-                                  >
-                                    &times;
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                          {/* Friends Tab */}
+                          {teamInviteTab === "friends" && (
+                            <div className="space-y-3">
+                              {/* Selected Friends Count */}
+                              {selectedFriends.length > 0 && (
+                                <div className="flex items-center gap-2 text-sm text-teal-400">
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                  {selectedFriends.length} team member{selectedFriends.length !== 1 ? "s" : ""} selected
+                                </div>
+                              )}
 
-                          <p className="text-xs text-slate-500">
-                            Team members must have InterpretReflect accounts
-                          </p>
+                              {/* Search */}
+                              <div className="relative">
+                                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                  type="text"
+                                  value={friendSearchQuery}
+                                  onChange={(e) => setFriendSearchQuery(e.target.value)}
+                                  placeholder="Search friends..."
+                                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                />
+                              </div>
+
+                              {/* Friends List */}
+                              {loadingFriends ? (
+                                <div className="text-center py-4 text-slate-500 text-sm">Loading friends...</div>
+                              ) : filteredFriends.length === 0 ? (
+                                <div className="text-center py-4">
+                                  <p className="text-slate-500 text-sm">
+                                    {communityFriends.length === 0
+                                      ? "No community friends yet. Connect with interpreters in the Community tab!"
+                                      : "No friends match your search"
+                                    }
+                                  </p>
+                                  {communityFriends.length === 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setTeamInviteTab("email")}
+                                      className="mt-2 text-sm text-teal-400 hover:text-teal-300"
+                                    >
+                                      Use email invite instead
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-700 rounded-lg p-2">
+                                  {filteredFriends.map((friend) => {
+                                    const isSelected = selectedFriends.some(f => f.userId === friend.user_id);
+                                    return (
+                                      <div
+                                        key={friend.user_id}
+                                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                                          isSelected
+                                            ? "bg-teal-500/20 border border-teal-500/50"
+                                            : "hover:bg-slate-800 border border-transparent"
+                                        }`}
+                                        onClick={() => toggleFriendSelection(friend.user_id)}
+                                      >
+                                        {/* Avatar */}
+                                        {friend.avatar_url ? (
+                                          <img
+                                            src={friend.avatar_url}
+                                            alt={friend.display_name}
+                                            className="w-8 h-8 rounded-full object-cover"
+                                          />
+                                        ) : (
+                                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white">
+                                            {getInitials(friend.display_name)}
+                                          </div>
+                                        )}
+
+                                        {/* Name */}
+                                        <span className="flex-1 text-sm text-slate-200">{friend.display_name}</span>
+
+                                        {/* Role selector (only when selected) */}
+                                        {isSelected && (
+                                          <select
+                                            value={friendRoles[friend.user_id] || "team"}
+                                            onChange={(e) => {
+                                              e.stopPropagation();
+                                              updateFriendRole(friend.user_id, e.target.value);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="px-2 py-1 rounded border border-slate-600 bg-slate-800 text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-teal-400"
+                                          >
+                                            <option value="team">Team</option>
+                                            <option value="lead">Lead</option>
+                                            <option value="support">Support</option>
+                                            <option value="feed">Feed</option>
+                                            <option value="shadow">Shadow</option>
+                                            <option value="mentor">Mentor</option>
+                                          </select>
+                                        )}
+
+                                        {/* Checkmark */}
+                                        {isSelected && (
+                                          <svg className="w-5 h-5 text-teal-400" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              <p className="text-xs text-slate-500">
+                                A team chat will be created automatically for coordination
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Email Tab */}
+                          {teamInviteTab === "email" && (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-medium text-slate-400">Invite by Email</h4>
+                                <button
+                                  type="button"
+                                  onClick={addTeamMemberField}
+                                  className="text-sm text-teal-400 hover:text-teal-300 font-medium"
+                                >
+                                  + Add Another
+                                </button>
+                              </div>
+
+                              <div className="space-y-2">
+                                {teamEmails.map((email, index) => (
+                                  <div key={index} className="flex gap-2">
+                                    <input
+                                      type="email"
+                                      value={email}
+                                      onChange={(e) => updateTeamEmail(index, e.target.value)}
+                                      placeholder="team.member@example.com"
+                                      className="flex-1 px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                    />
+                                    <select
+                                      value={teamRoles[index]}
+                                      onChange={(e) => updateTeamRole(index, e.target.value)}
+                                      className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                    >
+                                      <option value="team">Team</option>
+                                      <option value="lead">Lead</option>
+                                      <option value="support">Support</option>
+                                      <option value="feed">Feed</option>
+                                      <option value="shadow">Shadow</option>
+                                      <option value="mentor">Mentor</option>
+                                    </select>
+                                    {index > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeTeamMemberField(index)}
+                                        className="px-3 py-2 rounded-lg border border-slate-700 text-slate-400 hover:text-red-400 hover:border-red-500 transition-colors text-lg leading-none"
+                                      >
+                                        &times;
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+
+                              <p className="text-xs text-slate-500">
+                                Team members must have InterpretReflect accounts. A team chat will be created for coordination.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

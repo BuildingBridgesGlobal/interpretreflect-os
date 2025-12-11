@@ -42,16 +42,22 @@ export default function NavBar() {
   }, []);
 
   const checkAgencyAdmin = async (userId: string) => {
-    const { data: membership } = await (supabase as any)
-      .from("organization_members")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("is_active", true)
-      .in("role", ["admin", "owner", "manager"])
-      .limit(1)
-      .single();
+    try {
+      // Use the RPC function to avoid RLS recursion issues
+      const { data: isAdmin, error } = await (supabase as any)
+        .rpc("is_org_admin", { p_user_id: userId });
 
-    setIsAgencyAdmin(!!membership);
+      // Silently handle errors - user just won't see agency link
+      if (error) {
+        setIsAgencyAdmin(false);
+        return;
+      }
+
+      setIsAgencyAdmin(isAdmin === true);
+    } catch {
+      // Function might not exist or other error - silently fail
+      setIsAgencyAdmin(false);
+    }
   };
 
   const handleLogout = async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
@@ -271,13 +271,22 @@ interface Conversation {
   name: string | null;
   is_group: boolean;
   created_at: string | null;
-  participants: { user_id: string | null; display_name: string; avatar: string }[];
+  participants: { user_id: string | null; display_name: string; avatar: string; is_mentor?: boolean }[];
   last_message?: { content: string; created_at: string | null; sender_name: string };
   unread_count: number;
   conversation_type?: 'personal' | 'mentoring' | 'teaming';
   assignment_id?: string | null;
   assignment?: Assignment | null;
 }
+
+// Chat label types and colors
+type ChatLabel = 'assignment' | 'group' | 'mentor' | 'personal';
+const chatLabelConfig: Record<ChatLabel, { text: string; bgColor: string; textColor: string }> = {
+  assignment: { text: 'Assignment', bgColor: 'bg-orange-500/20', textColor: 'text-orange-400' },
+  group: { text: 'Group Chat', bgColor: 'bg-purple-500/20', textColor: 'text-purple-400' },
+  mentor: { text: 'Mentor', bgColor: 'bg-blue-500/20', textColor: 'text-blue-400' },
+  personal: { text: 'Personal', bgColor: 'bg-emerald-500/20', textColor: 'text-emerald-400' },
+};
 
 interface Message {
   id: string;
@@ -414,6 +423,8 @@ export default function CommunityPage() {
   const [showMyPosts, setShowMyPosts] = useState(false);
   const [showFriendsFeed, setShowFriendsFeed] = useState(false);
   const [showSavedPosts, setShowSavedPosts] = useState(false);
+  const [friendsFeedLastViewed, setFriendsFeedLastViewed] = useState<string | null>(null);
+  const [hasUnreadFriendsPosts, setHasUnreadFriendsPosts] = useState(false);
 
   // Connections State
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -429,6 +440,8 @@ export default function CommunityPage() {
   const [activeTab, setActiveTab] = useState<"feed" | "connections" | "discover" | "mentors">("feed");
   const [showMessagesPanel, setShowMessagesPanel] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [conversationFilter, setConversationFilter] = useState<'all' | 'teaming' | 'personal' | 'mentoring'>('all');
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [newPostContent, setNewPostContent] = useState("");
@@ -601,20 +614,24 @@ export default function CommunityPage() {
     }
   }, [userId, connections, pendingRequests]);
 
-  // Load conversations
+  // Load conversations - OPTIMIZED: batch queries instead of N+1
   const loadConversations = useCallback(async () => {
     if (!userId) return;
     setLoadingConversations(true);
 
+    // Step 1: Get all conversations for this user with participants in ONE query
     const { data: participations, error } = await supabase
       .from("conversation_participants")
       .select(`
         conversation_id,
+        last_read_at,
         conversations (
           id,
           name,
           is_group,
-          created_at
+          created_at,
+          assignment_id,
+          conversation_type
         )
       `)
       .eq("user_id", userId);
@@ -624,43 +641,103 @@ export default function CommunityPage() {
       return;
     }
 
+    const convIds = participations.map(p => (p as any).conversations?.id).filter(Boolean);
+    if (convIds.length === 0) {
+      setConversations([]);
+      setLoadingConversations(false);
+      return;
+    }
+
+    // Step 2: Get ALL participants for ALL conversations in ONE query
+    const { data: allParticipants } = await supabase
+      .from("conversation_participants")
+      .select("conversation_id, user_id")
+      .in("conversation_id", convIds);
+
+    // Step 3: Get unique user IDs and fetch ALL profiles in ONE query (include open_to_mentoring for mentor detection)
+    const uniqueUserIds = [...new Set((allParticipants || []).map(p => p.user_id).filter((id): id is string => id !== null))];
+    const { data: allProfiles } = await supabase
+      .from("community_profiles")
+      .select("user_id, display_name, open_to_mentoring")
+      .in("user_id", uniqueUserIds);
+
+    // Create a lookup map for profiles (includes mentor status)
+    const profileMap = new Map<string, { display_name: string; is_mentor: boolean }>();
+    (allProfiles || []).forEach(p => {
+      if (p.user_id) profileMap.set(p.user_id, {
+        display_name: p.display_name || "Unknown",
+        is_mentor: p.open_to_mentoring === true
+      });
+    });
+
+    // Step 4: Get last messages for ALL conversations in ONE query using a subquery approach
+    // We'll get recent messages and pick the latest per conversation
+    const { data: recentMessages } = await supabase
+      .from("messages")
+      .select("conversation_id, content, created_at, sender_id")
+      .in("conversation_id", convIds)
+      .order("created_at", { ascending: false })
+      .limit(convIds.length * 2); // Get enough to cover all convos
+
+    // Build last message map (first occurrence per conversation_id is the latest)
+    const lastMessageMap = new Map<string, { content: string | null; created_at: string | null; sender_id: string | null }>();
+    (recentMessages || []).forEach(msg => {
+      if (msg.conversation_id && !lastMessageMap.has(msg.conversation_id)) {
+        lastMessageMap.set(msg.conversation_id, msg);
+      }
+    });
+
+    // Step 5: Build conversations array (no more database calls!)
     const convs: Conversation[] = [];
 
     for (const p of participations) {
       const conv = (p as any).conversations;
       if (!conv) continue;
 
-      const { data: participants } = await supabase
-        .from("conversation_participants")
-        .select("user_id")
-        .eq("conversation_id", conv.id);
+      const lastReadAt = (p as any).last_read_at;
 
-      const participantList: { user_id: string | null; display_name: string; avatar: string }[] = [];
-      if (participants) {
-        for (const part of participants) {
-          if (!part.user_id || part.user_id === userId) continue;
-          const { data: profile } = await supabase
-            .from("community_profiles")
-            .select("display_name")
-            .eq("user_id", part.user_id)
-            .single();
+      // Get participants for this conversation from our batch data
+      const convParticipants = (allParticipants || []).filter(ap => ap.conversation_id === conv.id);
+      const participantList: { user_id: string | null; display_name: string; avatar: string; is_mentor?: boolean }[] = [];
+      let hasMentor = false;
 
-          const name = profile?.display_name || "Unknown";
-          participantList.push({
-            user_id: part.user_id,
-            display_name: name,
-            avatar: name.split(" ").map((n: string) => n[0]).join("").substring(0, 2).toUpperCase()
-          });
+      for (const part of convParticipants) {
+        if (!part.user_id || part.user_id === userId) continue;
+        const profile = profileMap.get(part.user_id);
+        const name = profile?.display_name || "Unknown";
+        const isMentor = profile?.is_mentor || false;
+        if (isMentor) hasMentor = true;
+        participantList.push({
+          user_id: part.user_id,
+          display_name: name,
+          avatar: name.split(" ").map((n: string) => n[0]).join("").substring(0, 2).toUpperCase(),
+          is_mentor: isMentor
+        });
+      }
+
+      const lastMsg = lastMessageMap.get(conv.id);
+
+      // Count unread messages
+      let unreadCount = 0;
+      if (lastMsg && lastMsg.sender_id !== userId && lastMsg.created_at) {
+        if (!lastReadAt || new Date(lastMsg.created_at) > new Date(lastReadAt)) {
+          unreadCount = 1;
         }
       }
 
-      const { data: lastMsg } = await supabase
-        .from("messages")
-        .select("content, created_at, sender_id")
-        .eq("conversation_id", conv.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
+      // Determine conversation type:
+      // 1. Use the stored conversation_type from the database (if set)
+      // 2. If has assignment -> teaming (work)
+      // 3. If participant is a mentor (open_to_mentoring) -> mentoring
+      // 4. Otherwise -> personal
+      let conversationType: 'personal' | 'mentoring' | 'teaming' = 'personal';
+      if (conv.conversation_type && ['personal', 'mentoring', 'teaming'].includes(conv.conversation_type)) {
+        conversationType = conv.conversation_type as 'personal' | 'mentoring' | 'teaming';
+      } else if (conv.assignment_id) {
+        conversationType = 'teaming';
+      } else if (hasMentor && !conv.is_group) {
+        conversationType = 'mentoring';
+      }
 
       convs.push({
         id: conv.id,
@@ -669,19 +746,49 @@ export default function CommunityPage() {
         created_at: conv.created_at,
         participants: participantList,
         last_message: lastMsg ? {
-          content: lastMsg.content,
+          content: lastMsg.content || "",
           created_at: lastMsg.created_at,
           sender_name: lastMsg.sender_id === userId ? "You" : participantList.find(p => p.user_id === lastMsg.sender_id)?.display_name || "Unknown"
         } : undefined,
-        unread_count: 0
+        unread_count: unreadCount,
+        conversation_type: conversationType,
+        assignment_id: conv.assignment_id || null
       });
     }
+
+    // Fetch assignment details for teaming conversations
+    const assignmentIds = convs
+      .filter(c => c.assignment_id)
+      .map(c => c.assignment_id as string);
+
+    if (assignmentIds.length > 0) {
+      const { data: assignments } = await supabase
+        .from("assignments")
+        .select("id, title, date, time, setting, location_type, assignment_type")
+        .in("id", assignmentIds);
+
+      if (assignments) {
+        const assignmentMap = new Map(assignments.map(a => [a.id, a]));
+        convs.forEach(c => {
+          if (c.assignment_id && assignmentMap.has(c.assignment_id)) {
+            c.assignment = assignmentMap.get(c.assignment_id) as Assignment;
+          }
+        });
+      }
+    }
+
+    // Sort by most recent activity
+    convs.sort((a, b) => {
+      const aTime = a.last_message?.created_at || a.created_at || '';
+      const bTime = b.last_message?.created_at || b.created_at || '';
+      return new Date(bTime).getTime() - new Date(aTime).getTime();
+    });
 
     setConversations(convs);
     setLoadingConversations(false);
   }, [userId]);
 
-  // Load messages for selected conversation
+  // Load messages for selected conversation - OPTIMIZED: batch profile lookup
   const loadMessages = useCallback(async (conversationId: string) => {
     const { data: messages, error } = await supabase
       .from("messages")
@@ -690,28 +797,47 @@ export default function CommunityPage() {
       .order("created_at", { ascending: true });
 
     if (!error && messages) {
-      const msgs: Message[] = [];
-      for (const m of messages) {
-        let senderName = "Unknown";
-        if (m.sender_id === userId) {
-          senderName = "You";
-        } else {
-          const { data: profile } = await supabase
-            .from("community_profiles")
-            .select("display_name")
-            .eq("user_id", m.sender_id || "")
-            .single();
-          senderName = profile?.display_name || "Unknown";
-        }
-        msgs.push({
-          id: m.id,
-          content: m.content,
-          sender_id: m.sender_id,
-          sender_name: senderName,
-          created_at: m.created_at
+      // Get unique sender IDs (excluding current user)
+      const senderIds = [...new Set(messages.map(m => m.sender_id).filter((id): id is string => id !== null && id !== userId))];
+
+      // Fetch ALL sender profiles in ONE query
+      const profileMap = new Map<string, string>();
+      if (senderIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("community_profiles")
+          .select("user_id, display_name")
+          .in("user_id", senderIds);
+
+        (profiles || []).forEach(p => {
+          if (p.user_id) profileMap.set(p.user_id, p.display_name || "Unknown");
         });
       }
+
+      // Build messages array (no more database calls!)
+      const msgs: Message[] = messages.map(m => ({
+        id: m.id,
+        content: m.content,
+        sender_id: m.sender_id,
+        sender_name: m.sender_id === userId ? "You" : profileMap.get(m.sender_id || "") || "Unknown",
+        created_at: m.created_at
+      }));
+
       setCurrentMessages(msgs);
+
+      // Mark conversation as read (fire and forget - don't await)
+      if (userId) {
+        supabase
+          .from("conversation_participants")
+          .update({ last_read_at: new Date().toISOString() })
+          .eq("conversation_id", conversationId)
+          .eq("user_id", userId)
+          .then(() => {
+            // Update local state to clear unread indicator
+            setConversations(prev => prev.map(conv =>
+              conv.id === conversationId ? { ...conv, unread_count: 0 } : conv
+            ));
+          });
+      }
     }
   }, [userId]);
 
@@ -733,7 +859,7 @@ export default function CommunityPage() {
         .from("profiles")
         .select("*")
         .eq("id", session.user.id)
-        .single();
+        .maybeSingle();
 
       const authUserName = session.user.user_metadata?.full_name ||
                           session.user.user_metadata?.name ||
@@ -753,7 +879,7 @@ export default function CommunityPage() {
         .from("community_profiles")
         .select("*")
         .eq("user_id", session.user.id)
-        .single();
+        .maybeSingle();
 
       if (commProfile) {
         setCommunityProfile(commProfile);
@@ -790,6 +916,50 @@ export default function CommunityPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, hasProfile, connections]);
+
+  // Initialize friends feed last viewed from localStorage
+  useEffect(() => {
+    if (userId) {
+      const stored = localStorage.getItem(`friendsFeedLastViewed_${userId}`);
+      if (stored) {
+        setFriendsFeedLastViewed(stored);
+      }
+    }
+  }, [userId]);
+
+  // Check for unread friends posts
+  useEffect(() => {
+    if (connections.length === 0) {
+      setHasUnreadFriendsPosts(false);
+      return;
+    }
+
+    // Get friend IDs
+    const friendIds = connections.map(c => c.user?.user_id).filter(Boolean);
+    if (friendIds.length === 0) {
+      setHasUnreadFriendsPosts(false);
+      return;
+    }
+
+    // Check if any post from a friend is newer than last viewed
+    const friendPosts = posts.filter(p => friendIds.includes(p.user_id));
+    if (friendPosts.length === 0) {
+      setHasUnreadFriendsPosts(false);
+      return;
+    }
+
+    // If never viewed, show dot if there are any friend posts
+    if (!friendsFeedLastViewed) {
+      setHasUnreadFriendsPosts(true);
+      return;
+    }
+
+    // Check if any friend post is newer than last viewed
+    const hasNewer = friendPosts.some(p =>
+      p.created_at && new Date(p.created_at) > new Date(friendsFeedLastViewed)
+    );
+    setHasUnreadFriendsPosts(hasNewer);
+  }, [posts, connections, friendsFeedLastViewed]);
 
   // Load messages when conversation is selected
   useEffect(() => {
@@ -1561,7 +1731,63 @@ export default function CommunityPage() {
     checkConnectionStatus(member.user_id);
   };
 
-  // Create chat
+  // Open existing conversation with a user, or show new chat modal if none exists
+  const openOrCreateChat = async (otherUserId: string) => {
+    if (!userId) return;
+
+    // FAST PATH: Check local state first (already loaded conversations)
+    const existingConv = conversations.find(conv =>
+      !conv.is_group &&
+      conv.participants.some(p => p.user_id === otherUserId)
+    );
+
+    if (existingConv) {
+      // Found in local state - open immediately (no database call needed)
+      setSelectedConversation(existingConv.id);
+      setShowMessagesPanel(true);
+      return;
+    }
+
+    // SLOW PATH: Check database for conversation not yet loaded
+    const { data: sharedConvos } = await supabase
+      .from("conversation_participants")
+      .select(`
+        conversation_id,
+        conversations!inner (id, is_group)
+      `)
+      .eq("user_id", otherUserId)
+      .eq("conversations.is_group", false);
+
+    if (sharedConvos && sharedConvos.length > 0) {
+      // Find one where current user is also a participant
+      for (const shared of sharedConvos) {
+        const convId = shared.conversation_id;
+        if (!convId) continue;
+
+        const { data: isParticipant } = await supabase
+          .from("conversation_participants")
+          .select("conversation_id")
+          .eq("conversation_id", convId)
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (isParticipant) {
+          // Found existing conversation - open immediately, refresh in background
+          setSelectedConversation(convId);
+          setShowMessagesPanel(true);
+          loadConversations(); // Don't await - refresh in background
+          return;
+        }
+      }
+    }
+
+    // No existing conversation - open new chat modal with user pre-selected
+    setSelectedMembers([otherUserId]);
+    setNewChatType("direct");
+    setShowNewChatModal(true);
+  };
+
+  // Create chat (or open existing one for direct messages)
   const handleCreateChat = async () => {
     if (selectedMembers.length === 0) return;
     if (newChatType === "group" && !newGroupName.trim()) {
@@ -1574,6 +1800,55 @@ export default function CommunityPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
+      // For direct messages, check if conversation already exists
+      if (newChatType === "direct" && selectedMembers.length === 1) {
+        const otherUserId = selectedMembers[0];
+
+        // Find existing 1:1 conversation between these two users
+        const { data: myConvos } = await supabase
+          .from("conversation_participants")
+          .select("conversation_id")
+          .eq("user_id", session.user.id);
+
+        if (myConvos && myConvos.length > 0) {
+          const myConvoIds = myConvos.map(c => c.conversation_id);
+
+          // Check if the other user is in any of my conversations
+          const { data: sharedConvos } = await supabase
+            .from("conversation_participants")
+            .select("conversation_id")
+            .eq("user_id", otherUserId)
+            .in("conversation_id", myConvoIds);
+
+          if (sharedConvos && sharedConvos.length > 0) {
+            // Check each shared conversation to find a 1:1 (not group)
+            for (const shared of sharedConvos) {
+              if (!shared.conversation_id) continue;
+              const { data: convData } = await supabase
+                .from("conversations")
+                .select("id, is_group")
+                .eq("id", shared.conversation_id)
+                .eq("is_group", false)
+                .maybeSingle();
+
+              if (convData) {
+                // Found existing 1:1 conversation - open it
+                setNewGroupName("");
+                setSelectedMembers([]);
+                setNewChatType("direct");
+                setShowNewChatModal(false);
+                await loadConversations();
+                setSelectedConversation(convData.id);
+                setShowMessagesPanel(true); // Open the messages panel
+                setCreatingChat(false);
+                return;
+              }
+            }
+          }
+        }
+      }
+
+      // No existing conversation found, create new one
       const { data: conversation, error: convError } = await supabase
         .from("conversations")
         .insert({
@@ -1586,16 +1861,26 @@ export default function CommunityPage() {
 
       if (convError) throw convError;
 
-      const participants = [
-        { conversation_id: conversation.id, user_id: session.user.id, is_admin: true },
-        ...selectedMembers.map(memberId => ({
+      // IMPORTANT: Insert creator first (so RLS allows adding others)
+      // The RLS policy checks if user is in conversation before allowing inserts
+      const { error: creatorError } = await supabase
+        .from("conversation_participants")
+        .insert({ conversation_id: conversation.id, user_id: session.user.id, is_admin: true });
+
+      if (creatorError) throw creatorError;
+
+      // Now add other members (RLS will allow since creator is now in the conversation)
+      if (selectedMembers.length > 0) {
+        const otherParticipants = selectedMembers.map(memberId => ({
           conversation_id: conversation.id,
           user_id: memberId,
           is_admin: false
-        }))
-      ];
-
-      await supabase.from("conversation_participants").insert(participants);
+        }));
+        const { error: membersError } = await supabase
+          .from("conversation_participants")
+          .insert(otherParticipants);
+        if (membersError) throw membersError;
+      }
 
       setNewGroupName("");
       setSelectedMembers([]);
@@ -1681,7 +1966,54 @@ export default function CommunityPage() {
     return conv.participants[0]?.avatar || "?";
   };
 
+  // Get chat label based on conversation type and properties
+  const getChatLabel = (conv: Conversation): ChatLabel => {
+    // Group chats always get "group" label (purple)
+    if (conv.is_group) return 'group';
+    // Assignment/work chats get "assignment" label (orange)
+    if (conv.assignment_id || conv.conversation_type === 'teaming') return 'assignment';
+    // Mentor chats get "mentor" label (blue)
+    if (conv.conversation_type === 'mentoring' || conv.participants.some(p => p.is_mentor)) return 'mentor';
+    // Default to personal (green)
+    return 'personal';
+  };
+
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
+
+  // Filter conversations by search text and type filter
+  const filteredConversations = useMemo(() => {
+    let filtered = conversations;
+
+    // Apply type filter first
+    if (conversationFilter !== 'all') {
+      filtered = filtered.filter(conv => conv.conversation_type === conversationFilter);
+    }
+
+    // Then apply search filter
+    if (conversationSearch.trim()) {
+      const searchLower = conversationSearch.toLowerCase();
+      filtered = filtered.filter(conv => {
+        // Search by conversation name (group name or participant names)
+        const convName = conv.is_group && conv.name ? conv.name : conv.participants.map(p => p.display_name).join(", ");
+        if (convName.toLowerCase().includes(searchLower)) return true;
+        // Search by last message content
+        if (conv.last_message?.content?.toLowerCase().includes(searchLower)) return true;
+        // Search by assignment title if it's a teaming conversation
+        if (conv.assignment?.title?.toLowerCase().includes(searchLower)) return true;
+        return false;
+      });
+    }
+
+    return filtered;
+  }, [conversations, conversationSearch, conversationFilter]);
+
+  // Count conversations per type for filter badges
+  const conversationCounts = useMemo(() => ({
+    all: conversations.length,
+    teaming: conversations.filter(c => c.conversation_type === 'teaming').length,
+    personal: conversations.filter(c => c.conversation_type === 'personal').length,
+    mentoring: conversations.filter(c => c.conversation_type === 'mentoring').length,
+  }), [conversations]);
 
   // ============================================
   // RENDER LOADING
@@ -2001,6 +2333,13 @@ export default function CommunityPage() {
                         setShowFriendsFeed(true);
                         setShowSavedPosts(false);
                         setShowMyPosts(false);
+                        // Mark as viewed when clicked
+                        const now = new Date().toISOString();
+                        setFriendsFeedLastViewed(now);
+                        setHasUnreadFriendsPosts(false);
+                        if (userId) {
+                          localStorage.setItem(`friendsFeedLastViewed_${userId}`, now);
+                        }
                       }}
                       className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium premium-transition ${
                         showFriendsFeed
@@ -2012,12 +2351,9 @@ export default function CommunityPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                       </svg>
                       Friends Feed
-                      {connections.length > 0 && (
-                        <span className={`ml-auto px-1.5 py-0.5 rounded-full text-xs ${
-                          showFriendsFeed ? "bg-white/20" : "bg-slate-700"
-                        }`}>
-                          {connections.length}
-                        </span>
+                      {/* Blue dot indicator for unread friend posts */}
+                      {hasUnreadFriendsPosts && !showFriendsFeed && (
+                        <span className="ml-auto w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
                       )}
                     </button>
 
@@ -2467,8 +2803,7 @@ export default function CommunityPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedMembers([conn.user.user_id]);
-                              setShowNewChatModal(true);
+                              openOrCreateChat(conn.user.user_id);
                             }}
                             className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-sm font-medium premium-transition hover:bg-teal-500 hover:text-slate-950 active:scale-95"
                           >
@@ -2791,10 +3126,7 @@ export default function CommunityPage() {
                                 )}
                                 {mentor.isConnected ? (
                                   <button
-                                    onClick={() => {
-                                      setSelectedMembers([mentor.user_id]);
-                                      setShowNewChatModal(true);
-                                    }}
+                                    onClick={() => openOrCreateChat(mentor.user_id)}
                                     className="px-4 py-2 rounded-lg text-sm font-medium premium-button bg-teal-500 text-slate-950"
                                   >
                                     Message
@@ -3496,119 +3828,309 @@ export default function CommunityPage() {
               </div>
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden">
               {!selectedConversation ? (
-                <div className="flex-1 overflow-y-auto">
+                <>
+                  {/* Search Bar */}
+                  <div className="p-3 border-b border-slate-800">
+                    <div className="relative">
+                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={conversationSearch}
+                        onChange={(e) => setConversationSearch(e.target.value)}
+                        placeholder="Search conversations..."
+                        className="w-full pl-10 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 premium-transition"
+                      />
+                      {conversationSearch && (
+                        <button
+                          onClick={() => setConversationSearch("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Filter Tabs */}
+                  <div className="px-2 py-2 border-b border-slate-800 flex gap-1 overflow-x-auto">
+                    <button
+                      onClick={() => setConversationFilter('all')}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap premium-transition ${
+                        conversationFilter === 'all'
+                          ? 'bg-slate-700 text-white'
+                          : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800'
+                      }`}
+                    >
+                      All {conversationCounts.all > 0 && <span className="ml-1 text-slate-500">({conversationCounts.all})</span>}
+                    </button>
+                    <button
+                      onClick={() => setConversationFilter('personal')}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap premium-transition flex items-center gap-1.5 ${
+                        conversationFilter === 'personal'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      Personal {conversationCounts.personal > 0 && <span className="text-emerald-400/60">({conversationCounts.personal})</span>}
+                    </button>
+                    <button
+                      onClick={() => setConversationFilter('mentoring')}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap premium-transition flex items-center gap-1.5 ${
+                        conversationFilter === 'mentoring'
+                          ? 'bg-blue-500/20 text-blue-400'
+                          : 'text-slate-400 hover:text-blue-400 hover:bg-blue-500/10'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      Mentors {conversationCounts.mentoring > 0 && <span className="text-blue-400/60">({conversationCounts.mentoring})</span>}
+                    </button>
+                    <button
+                      onClick={() => setConversationFilter('teaming')}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap premium-transition flex items-center gap-1.5 ${
+                        conversationFilter === 'teaming'
+                          ? 'bg-orange-500/20 text-orange-400'
+                          : 'text-slate-400 hover:text-orange-400 hover:bg-orange-500/10'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-orange-500" />
+                      Work {conversationCounts.teaming > 0 && <span className="text-orange-400/60">({conversationCounts.teaming})</span>}
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto">
                   {loadingConversations ? (
                     <div>
                       <ConversationSkeleton />
                       <ConversationSkeleton />
                       <ConversationSkeleton />
                     </div>
-                  ) : conversations.length === 0 ? (
+                  ) : filteredConversations.length === 0 ? (
                     <div className="p-8 text-center animate-fade-in-up">
                       <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center opacity-50">
                         <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                       </div>
-                      <p className="text-slate-400 mb-4">No conversations yet</p>
-                      <button
-                        onClick={() => setShowNewChatModal(true)}
-                        className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium premium-button"
-                      >
-                        Start a Conversation
-                      </button>
+                      <p className="text-slate-400 mb-4">{conversationSearch ? "No conversations match your search" : "No conversations yet"}</p>
+                      {!conversationSearch && (
+                        <button
+                          onClick={() => setShowNewChatModal(true)}
+                          className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium premium-button"
+                        >
+                          Start a Conversation
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <>
-                      {/* Teaming / Work Section */}
-                      {conversations.filter(c => c.conversation_type === 'teaming').length > 0 && (
+                      {/* SECTION 1: Assignments / Work (Orange) */}
+                      {filteredConversations.filter(c => c.conversation_type === 'teaming').length > 0 && (
                         <div className="mb-2">
                           <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700 sticky top-0 z-10">
                             <span className="text-xs font-semibold text-orange-400 uppercase tracking-wider flex items-center gap-2">
                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                               </svg>
-                              Teaming / Work
+                              Assignments / Work
                             </span>
                           </div>
-                          {conversations.filter(c => c.conversation_type === 'teaming').map((conv, index) => (
-                            <button
-                              key={conv.id}
-                              onClick={() => setSelectedConversation(conv.id)}
-                              className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/50 premium-transition border-b border-slate-800 group stagger-item"
-                              style={{ animationDelay: `${index * 50}ms` }}
-                            >
-                              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105">
-                                {getConversationAvatar(conv)}
-                              </div>
-                              <div className="flex-1 text-left min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="font-medium text-slate-100 truncate group-hover:text-orange-400 premium-transition">{getConversationName(conv)}</span>
-                                  {conv.last_message && (
-                                    <span className="text-xs text-slate-500">{formatTime(conv.last_message.created_at || "")}</span>
+                          {filteredConversations.filter(c => c.conversation_type === 'teaming').map((conv, index) => {
+                            const label = getChatLabel(conv);
+                            const labelStyle = chatLabelConfig[label];
+                            return (
+                              <button
+                                key={conv.id}
+                                onClick={() => setSelectedConversation(conv.id)}
+                                className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/50 premium-transition border-b border-slate-800 group stagger-item"
+                                style={{ animationDelay: `${index * 50}ms` }}
+                              >
+                                {/* Avatar - show stacked for groups */}
+                                {conv.is_group && conv.participants.length > 1 ? (
+                                  <div className="w-12 h-12 relative flex-shrink-0">
+                                    <div className="absolute top-0 left-0 w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-xs font-bold text-white border-2 border-slate-900">
+                                      {conv.participants[0]?.avatar || "?"}
+                                    </div>
+                                    <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold text-white border-2 border-slate-900">
+                                      {conv.participants[1]?.avatar || "+"}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105">
+                                    {getConversationAvatar(conv)}
+                                  </div>
+                                )}
+                                <div className="flex-1 text-left min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className={`font-medium truncate group-hover:text-orange-400 premium-transition ${conv.unread_count > 0 ? 'text-white font-semibold' : 'text-slate-100'}`}>{getConversationName(conv)}</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${labelStyle.bgColor} ${labelStyle.textColor}`}>
+                                        {labelStyle.text}
+                                      </span>
+                                      {conv.unread_count > 0 && (
+                                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0 animate-pulse" />
+                                      )}
+                                    </div>
+                                    {conv.last_message && (
+                                      <span className="text-xs text-slate-500 flex-shrink-0 ml-2">{formatTime(conv.last_message.created_at || "")}</span>
+                                    )}
+                                  </div>
+                                  {conv.assignment && (
+                                    <p className="text-xs text-orange-400/80 truncate mb-0.5">
+                                      {conv.assignment.title}
+                                    </p>
+                                  )}
+                                  {conv.last_message ? (
+                                    <p className={`text-sm truncate ${conv.unread_count > 0 ? 'text-slate-200 font-medium' : 'text-slate-400'}`}>
+                                      {conv.last_message.sender_name === "You" ? "You: " : ""}{conv.last_message.content}
+                                    </p>
+                                  ) : (
+                                    <p className="text-sm text-slate-500 italic">No messages yet</p>
                                   )}
                                 </div>
-                                {conv.assignment && (
-                                  <p className="text-xs text-orange-400/80 truncate mb-0.5">
-                                    {conv.assignment.title}
-                                  </p>
-                                )}
-                                {conv.last_message ? (
-                                  <p className="text-sm text-slate-400 truncate">
-                                    {conv.last_message.sender_name === "You" ? "You: " : ""}{conv.last_message.content}
-                                  </p>
-                                ) : (
-                                  <p className="text-sm text-slate-500 italic">No messages yet</p>
-                                )}
-                              </div>
-                            </button>
-                          ))}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
 
-                      {/* Personal / Mentoring Section */}
-                      <div>
-                        <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700 sticky top-0 z-10">
-                          <span className="text-xs font-semibold text-teal-400 uppercase tracking-wider flex items-center gap-2">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
-                            </svg>
-                            Personal / Mentoring
-                          </span>
-                        </div>
-                        {conversations.filter(c => c.conversation_type !== 'teaming').map((conv, index) => (
-                          <button
-                            key={conv.id}
-                            onClick={() => setSelectedConversation(conv.id)}
-                            className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/50 premium-transition border-b border-slate-800 group stagger-item"
-                            style={{ animationDelay: `${index * 50}ms` }}
-                          >
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105">
-                              {getConversationAvatar(conv)}
-                            </div>
-                            <div className="flex-1 text-left min-w-0">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-medium text-slate-100 truncate group-hover:text-teal-400 premium-transition">{getConversationName(conv)}</span>
-                                {conv.last_message && (
-                                  <span className="text-xs text-slate-500">{formatTime(conv.last_message.created_at || "")}</span>
+                      {/* SECTION 2: Personal / Friends (Green/Teal) */}
+                      {filteredConversations.filter(c => c.conversation_type === 'personal').length > 0 && (
+                        <div className="mb-2">
+                          <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700 sticky top-0 z-10">
+                            <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                              </svg>
+                              Personal / Friends
+                            </span>
+                          </div>
+                          {filteredConversations.filter(c => c.conversation_type === 'personal').map((conv, index) => {
+                            const label = getChatLabel(conv);
+                            const labelStyle = chatLabelConfig[label];
+                            return (
+                              <button
+                                key={conv.id}
+                                onClick={() => setSelectedConversation(conv.id)}
+                                className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/50 premium-transition border-b border-slate-800 group stagger-item"
+                                style={{ animationDelay: `${index * 50}ms` }}
+                              >
+                                {/* Avatar - show stacked for groups */}
+                                {conv.is_group && conv.participants.length > 1 ? (
+                                  <div className="w-12 h-12 relative flex-shrink-0">
+                                    <div className="absolute top-0 left-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-xs font-bold text-white border-2 border-slate-900">
+                                      {conv.participants[0]?.avatar || "?"}
+                                    </div>
+                                    <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold text-white border-2 border-slate-900">
+                                      {conv.participants[1]?.avatar || "+"}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105">
+                                    {getConversationAvatar(conv)}
+                                  </div>
                                 )}
-                              </div>
-                              {conv.last_message ? (
-                                <p className="text-sm text-slate-400 truncate">
-                                  {conv.last_message.sender_name === "You" ? "You: " : ""}{conv.last_message.content}
-                                </p>
-                              ) : (
-                                <p className="text-sm text-slate-500 italic">No messages yet</p>
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
+                                <div className="flex-1 text-left min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className={`font-medium truncate group-hover:text-emerald-400 premium-transition ${conv.unread_count > 0 ? 'text-white font-semibold' : 'text-slate-100'}`}>{getConversationName(conv)}</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${labelStyle.bgColor} ${labelStyle.textColor}`}>
+                                        {labelStyle.text}
+                                      </span>
+                                      {conv.unread_count > 0 && (
+                                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0 animate-pulse" />
+                                      )}
+                                    </div>
+                                    {conv.last_message && (
+                                      <span className="text-xs text-slate-500 flex-shrink-0 ml-2">{formatTime(conv.last_message.created_at || "")}</span>
+                                    )}
+                                  </div>
+                                  {conv.last_message ? (
+                                    <p className={`text-sm truncate ${conv.unread_count > 0 ? 'text-slate-200 font-medium' : 'text-slate-400'}`}>
+                                      {conv.last_message.sender_name === "You" ? "You: " : ""}{conv.last_message.content}
+                                    </p>
+                                  ) : (
+                                    <p className="text-sm text-slate-500 italic">No messages yet</p>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* SECTION 3: Mentors (Blue) */}
+                      {filteredConversations.filter(c => c.conversation_type === 'mentoring').length > 0 && (
+                        <div className="mb-2">
+                          <div className="px-4 py-2 bg-slate-800/50 border-b border-slate-700 sticky top-0 z-10">
+                            <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                              </svg>
+                              Mentors
+                            </span>
+                          </div>
+                          {filteredConversations.filter(c => c.conversation_type === 'mentoring').map((conv, index) => {
+                            const label = getChatLabel(conv);
+                            const labelStyle = chatLabelConfig[label];
+                            return (
+                              <button
+                                key={conv.id}
+                                onClick={() => setSelectedConversation(conv.id)}
+                                className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/50 premium-transition border-b border-slate-800 group stagger-item"
+                                style={{ animationDelay: `${index * 50}ms` }}
+                              >
+                                {/* Avatar - show stacked for groups */}
+                                {conv.is_group && conv.participants.length > 1 ? (
+                                  <div className="w-12 h-12 relative flex-shrink-0">
+                                    <div className="absolute top-0 left-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white border-2 border-slate-900">
+                                      {conv.participants[0]?.avatar || "?"}
+                                    </div>
+                                    <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold text-white border-2 border-slate-900">
+                                      {conv.participants[1]?.avatar || "+"}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-sm font-bold text-white premium-transition group-hover:scale-105">
+                                    {getConversationAvatar(conv)}
+                                  </div>
+                                )}
+                                <div className="flex-1 text-left min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className={`font-medium truncate group-hover:text-blue-400 premium-transition ${conv.unread_count > 0 ? 'text-white font-semibold' : 'text-slate-100'}`}>{getConversationName(conv)}</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${labelStyle.bgColor} ${labelStyle.textColor}`}>
+                                        {labelStyle.text}
+                                      </span>
+                                      {conv.unread_count > 0 && (
+                                        <span className="w-2.5 h-2.5 rounded-full bg-blue-500 flex-shrink-0 animate-pulse" />
+                                      )}
+                                    </div>
+                                    {conv.last_message && (
+                                      <span className="text-xs text-slate-500 flex-shrink-0 ml-2">{formatTime(conv.last_message.created_at || "")}</span>
+                                    )}
+                                  </div>
+                                  {conv.last_message ? (
+                                    <p className={`text-sm truncate ${conv.unread_count > 0 ? 'text-slate-200 font-medium' : 'text-slate-400'}`}>
+                                      {conv.last_message.sender_name === "You" ? "You: " : ""}{conv.last_message.content}
+                                    </p>
+                                  ) : (
+                                    <p className="text-sm text-slate-500 italic">No messages yet</p>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </>
                   )}
-                </div>
+                  </div>
+                </>
               ) : (
                 <div className="flex-1 flex flex-col">
                   <div className="flex items-center gap-3 p-4 border-b border-slate-800">
@@ -3618,16 +4140,32 @@ export default function CommunityPage() {
                     >
                       ←
                     </button>
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-md ${
-                      conversations.find(c => c.id === selectedConversation)?.conversation_type === 'teaming'
+                    {(() => {
+                      const conv = conversations.find(c => c.id === selectedConversation);
+                      if (!conv) return null;
+                      const label = getChatLabel(conv);
+                      const labelStyle = chatLabelConfig[label];
+                      const avatarGradient = conv.conversation_type === 'teaming'
                         ? 'bg-gradient-to-br from-orange-500 to-amber-500'
-                        : 'bg-gradient-to-br from-teal-500 to-blue-500'
-                    }`}>
-                      {getConversationAvatar(conversations.find(c => c.id === selectedConversation)!)}
-                    </div>
-                    <span className="font-medium text-slate-100">
-                      {getConversationName(conversations.find(c => c.id === selectedConversation)!)}
-                    </span>
+                        : conv.conversation_type === 'mentoring'
+                          ? 'bg-gradient-to-br from-blue-500 to-indigo-500'
+                          : 'bg-gradient-to-br from-emerald-500 to-teal-500';
+                      return (
+                        <>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-md ${avatarGradient}`}>
+                            {getConversationAvatar(conv)}
+                          </div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium text-slate-100 truncate">
+                              {getConversationName(conv)}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${labelStyle.bgColor} ${labelStyle.textColor}`}>
+                              {labelStyle.text}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* Assignment Link Banner for Teaming Conversations */}
