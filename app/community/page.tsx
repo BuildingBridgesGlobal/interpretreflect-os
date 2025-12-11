@@ -418,6 +418,7 @@ export default function CommunityPage() {
   // Connections State
   const [connections, setConnections] = useState<Connection[]>([]);
   const [pendingRequests, setPendingRequests] = useState<Connection[]>([]);
+  const [sentRequests, setSentRequests] = useState<string[]>([]); // User IDs of sent pending requests
   const [discoverMembers, setDiscoverMembers] = useState<CommunityProfile[]>([]);
 
   // Conversations State
@@ -555,6 +556,15 @@ export default function CommunityPage() {
       const pendingData = await pendingRes.json();
       if (pendingRes.ok) {
         setPendingRequests(pendingData.connections || []);
+      }
+
+      // Load pending requests sent (to show "Pending" status in discover)
+      const sentRes = await fetch(`/api/community/connections?user_id=${userId}&type=pending_sent`, { headers });
+      const sentData = await sentRes.json();
+      if (sentRes.ok) {
+        // Extract addressee_ids from sent requests
+        const sentUserIds = (sentData.connections || []).map((c: any) => c.user?.user_id).filter(Boolean);
+        setSentRequests(sentUserIds);
       }
     } catch (error) {
       console.error("Error loading connections:", error);
@@ -1467,8 +1477,8 @@ export default function CommunityPage() {
 
       const data = await response.json();
       if (response.ok) {
-        // Remove from discover and close modal
-        setDiscoverMembers(prev => prev.filter(m => m.user_id !== targetUserId));
+        // Add to sent requests so button shows "Pending" instead of "Connect"
+        setSentRequests(prev => [...prev, targetUserId]);
         setShowMemberModal(false);
         setSelectedMember(null);
       } else {
@@ -1892,83 +1902,51 @@ export default function CommunityPage() {
                 </div>
               )}
 
-              {/* Feed Filter Buttons */}
-              {activeTab === "feed" && hasProfile && (
-                <div className="space-y-2">
-                  {/* All Posts Button */}
-                  <button
-                    onClick={() => {
-                      setShowMyPosts(false);
-                      setShowFriendsFeed(false);
-                      setShowSavedPosts(false);
-                    }}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold premium-transition ${
-                      !showMyPosts && !showFriendsFeed && !showSavedPosts
-                        ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/25"
-                        : "border border-slate-700 bg-slate-900/50 text-slate-300 hover:border-violet-500/50 hover:text-white"
-                    }`}
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-                    </svg>
-                    {!showMyPosts && !showFriendsFeed && !showSavedPosts ? "Viewing All Posts" : "All Posts"}
-                  </button>
 
-                  {/* Friends Feed Toggle */}
-                  <button
-                    onClick={() => {
-                      setShowFriendsFeed(!showFriendsFeed);
-                      if (!showFriendsFeed) {
-                        setShowMyPosts(false);
-                        setShowSavedPosts(false);
-                      }
-                    }}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold premium-transition ${
-                      showFriendsFeed
-                        ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-lg shadow-blue-500/25"
-                        : "border border-slate-700 bg-slate-900/50 text-slate-300 hover:border-blue-500/50 hover:text-white"
-                    }`}
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                    {showFriendsFeed ? "Viewing Friends" : "Friends Feed"}
-                    {connections.length > 0 && (
-                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
-                        showFriendsFeed ? "bg-white/20" : "bg-slate-700"
-                      }`}>
-                        {connections.length}
-                      </span>
-                    )}
-                  </button>
-
-                  {/* Saved Posts Toggle */}
-                  <button
-                    onClick={() => {
-                      setShowSavedPosts(!showSavedPosts);
-                      if (!showSavedPosts) {
-                        setShowMyPosts(false);
-                        setShowFriendsFeed(false);
-                      }
-                    }}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold premium-transition ${
-                      showSavedPosts
-                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25"
-                        : "border border-slate-700 bg-slate-900/50 text-slate-300 hover:border-amber-500/50 hover:text-white"
-                    }`}
-                  >
-                    <svg className="w-5 h-5" fill={showSavedPosts ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                    </svg>
-                    {showSavedPosts ? "Viewing Saved" : "Saved Posts"}
-                    {posts.filter(p => p.bookmarked_by_user).length > 0 && (
-                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
-                        showSavedPosts ? "bg-white/20" : "bg-slate-700"
-                      }`}>
-                        {posts.filter(p => p.bookmarked_by_user).length}
-                      </span>
-                    )}
-                  </button>
+              {/* Friend Requests Section - Always visible in sidebar when there are pending requests */}
+              {pendingRequests.length > 0 && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 premium-card">
+                  <h4 className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    FRIEND REQUESTS ({pendingRequests.length})
+                  </h4>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {pendingRequests.map((req) => (
+                      <div
+                        key={req.connection_id}
+                        className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/50 hover:bg-slate-800/50 premium-transition"
+                      >
+                        <Link href={`/community/profile/${req.user?.user_id}`} className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                          {getInitials(req.user?.display_name || "?")}
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <Link href={`/community/profile/${req.user?.user_id}`} className="text-sm font-medium text-slate-200 hover:text-amber-400 premium-transition truncate block">
+                            {req.user?.display_name}
+                          </Link>
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => handleConnectionAction(req.connection_id, "accept")}
+                            className="p-1.5 rounded-md bg-teal-500 text-white hover:bg-teal-400 premium-transition"
+                            title="Accept"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleConnectionAction(req.connection_id, "decline")}
+                            className="p-1.5 rounded-md bg-slate-700 text-slate-300 hover:bg-slate-600 premium-transition"
+                            title="Decline"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1976,62 +1954,100 @@ export default function CommunityPage() {
               {activeTab === "feed" && (
                 <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 premium-card hover:border-slate-700">
                   <h4 className="text-sm font-semibold text-slate-400 mb-3">SORT BY</h4>
-                  <div className="flex gap-1 p-1 bg-slate-800/50 rounded-lg">
+                  <div className="space-y-2">
+                    {/* View All Posts */}
                     <button
                       onClick={() => {
                         setFeedSort("recent");
                         setShowFriendsFeed(false);
+                        setShowSavedPosts(false);
+                        setShowMyPosts(false);
                       }}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium premium-transition ${
-                        feedSort === "recent"
-                          ? "bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-md"
-                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Recent
-                    </button>
-                    <button
-                      onClick={() => {
-                        setFeedSort("top");
-                        setShowFriendsFeed(false);
-                      }}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium premium-transition ${
-                        feedSort === "top"
-                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
-                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                      </svg>
-                      Top
-                    </button>
-                    <button
-                      onClick={() => {
-                        setFeedSort("following");
-                        setShowFriendsFeed(false);
-                      }}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium premium-transition ${
-                        feedSort === "following"
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium premium-transition ${
+                        !showFriendsFeed && !showSavedPosts && feedSort === "recent"
                           ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-md"
                           : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
                       }`}
                     >
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
                       </svg>
-                      Following
+                      Viewing All Posts
+                    </button>
+
+                    {/* Top Posts */}
+                    <button
+                      onClick={() => {
+                        setFeedSort("top");
+                        setShowFriendsFeed(false);
+                        setShowSavedPosts(false);
+                        setShowMyPosts(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium premium-transition ${
+                        !showFriendsFeed && !showSavedPosts && feedSort === "top"
+                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      Top Posts
+                    </button>
+
+                    {/* Friends Feed */}
+                    <button
+                      onClick={() => {
+                        setShowFriendsFeed(true);
+                        setShowSavedPosts(false);
+                        setShowMyPosts(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium premium-transition ${
+                        showFriendsFeed
+                          ? "bg-gradient-to-r from-blue-500 to-violet-500 text-white shadow-md"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      Friends Feed
+                      {connections.length > 0 && (
+                        <span className={`ml-auto px-1.5 py-0.5 rounded-full text-xs ${
+                          showFriendsFeed ? "bg-white/20" : "bg-slate-700"
+                        }`}>
+                          {connections.length}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Saved Posts */}
+                    <button
+                      onClick={() => {
+                        setShowSavedPosts(true);
+                        setShowFriendsFeed(false);
+                        setShowMyPosts(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium premium-transition ${
+                        showSavedPosts
+                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill={showSavedPosts ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                      </svg>
+                      Saved Posts
+                      {posts.filter(p => p.bookmarked_by_user).length > 0 && (
+                        <span className={`ml-auto px-1.5 py-0.5 rounded-full text-xs ${
+                          showSavedPosts ? "bg-white/20" : "bg-slate-700"
+                        }`}>
+                          {posts.filter(p => p.bookmarked_by_user).length}
+                        </span>
+                      )}
                     </button>
                   </div>
-                  {feedSort === "top" && (
-                    <p className="mt-2 text-xs text-slate-500 text-center">
-                      Showing posts ranked by engagement
-                    </p>
-                  )}
-                  {feedSort === "following" && connections.length === 0 && (
+                  {showFriendsFeed && connections.length === 0 && (
                     <p className="mt-2 text-xs text-amber-400 text-center">
                       Connect with members to see their posts
                     </p>
@@ -2563,15 +2579,21 @@ export default function CommunityPage() {
                               {member.specialties?.length ? ` · ${member.specialties.slice(0, 2).join(", ")}` : ""}
                             </p>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConnect(member.user_id);
-                            }}
-                            className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-500 to-violet-500 text-white text-sm font-medium premium-button"
-                          >
-                            Connect
-                          </button>
+                          {sentRequests.includes(member.user_id) ? (
+                            <span className="px-4 py-2 rounded-lg bg-slate-700 text-slate-400 text-sm font-medium cursor-default">
+                              Pending
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConnect(member.user_id);
+                              }}
+                              className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-500 to-violet-500 text-white text-sm font-medium premium-button"
+                            >
+                              Connect
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2767,23 +2789,28 @@ export default function CommunityPage() {
                                 {mentor.bio && (
                                   <p className="text-sm text-slate-300 mb-3 line-clamp-2">{mentor.bio}</p>
                                 )}
-                                <button
-                                  onClick={() => {
-                                    if (mentor.isConnected) {
+                                {mentor.isConnected ? (
+                                  <button
+                                    onClick={() => {
                                       setSelectedMembers([mentor.user_id]);
                                       setShowNewChatModal(true);
-                                    } else {
-                                      handleConnect(mentor.user_id);
-                                    }
-                                  }}
-                                  className={`px-4 py-2 rounded-lg text-sm font-medium premium-button ${
-                                    mentor.isConnected
-                                      ? "bg-teal-500 text-slate-950"
-                                      : "bg-gradient-to-r from-amber-500 to-orange-500 text-white"
-                                  }`}
-                                >
-                                  {mentor.isConnected ? "Message" : "Connect"}
-                                </button>
+                                    }}
+                                    className="px-4 py-2 rounded-lg text-sm font-medium premium-button bg-teal-500 text-slate-950"
+                                  >
+                                    Message
+                                  </button>
+                                ) : sentRequests.includes(mentor.user_id) ? (
+                                  <span className="px-4 py-2 rounded-lg bg-slate-700 text-slate-400 text-sm font-medium cursor-default">
+                                    Pending
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleConnect(mentor.user_id)}
+                                    className="px-4 py-2 rounded-lg text-sm font-medium premium-button bg-gradient-to-r from-amber-500 to-orange-500 text-white"
+                                  >
+                                    Connect
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -3416,7 +3443,7 @@ export default function CommunityPage() {
                 >
                   Message
                 </button>
-              ) : connectionStatus?.status === "pending" ? (
+              ) : connectionStatus?.status === "pending" || sentRequests.includes(selectedMember.user_id) ? (
                 <button
                   disabled
                   className="flex-1 px-4 py-2.5 rounded-xl bg-slate-700 text-slate-400 font-semibold cursor-not-allowed"

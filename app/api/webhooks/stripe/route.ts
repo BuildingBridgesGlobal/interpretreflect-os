@@ -431,19 +431,23 @@ function getTierFromPriceId(priceId: string): string {
   return "free";
 }
 
-// Add monthly credits for Pro users
-async function addMonthlyCreditsForPro(userId: string, tier: string) {
-  if (tier !== "pro") return;
+// Add monthly credits for Growth and Pro users
+async function addMonthlyCredits(userId: string, tier: string) {
+  // Only Growth and Pro tiers get monthly credits
+  if (tier !== "pro" && tier !== "growth") return;
 
   try {
     const { error } = await supabase.rpc("add_monthly_credits", { p_user_id: userId });
     if (error) {
       console.error("[Credits] Error adding monthly credits:", error);
     } else {
-      console.log(`[Credits] Added monthly credits for Pro user ${userId}`);
+      console.log(`[Credits] Added monthly credits for ${tier} user ${userId}`);
     }
   } catch (error) {
     console.error("[Credits] Exception adding monthly credits:", error);
     // Non-critical - don't fail the webhook
   }
 }
+
+// Alias for backwards compatibility
+const addMonthlyCreditsForPro = addMonthlyCredits;

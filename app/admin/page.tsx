@@ -64,7 +64,20 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [userData, setUserData] = useState<any>(null);
-  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials" | "agencies" | "ceu" | "workshops" | "elya-feedback">("overview");
+  const [selectedView, setSelectedView] = useState<"overview" | "pipeline" | "competency" | "community" | "wellness" | "compliance" | "credentials" | "agencies" | "ceu" | "workshops" | "elya-feedback" | "moderation">("overview");
+
+  // Community moderation state
+  const [moderationUsers, setModerationUsers] = useState<any[]>([]);
+  const [moderationLogs, setModerationLogs] = useState<any[]>([]);
+  const [loadingModeration, setLoadingModeration] = useState(false);
+  const [moderationTab, setModerationTab] = useState<"users" | "logs">("users");
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [banReason, setBanReason] = useState("");
+  const [suspendReason, setSuspendReason] = useState("");
+  const [suspendDays, setSuspendDays] = useState(7);
+  const [processingAction, setProcessingAction] = useState(false);
 
   // Agency management state
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -170,6 +183,173 @@ export default function AdminPage() {
       loadElyaFeedback();
     }
   }, [selectedView]);
+
+  // Load moderation data when that tab is selected
+  useEffect(() => {
+    if (selectedView === "moderation") {
+      loadModerationData();
+    }
+  }, [selectedView]);
+
+  const loadModerationData = async () => {
+    setLoadingModeration(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Load community users with their moderation status
+      const response = await fetch("/api/admin/community?view=users", {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setModerationUsers(data.users || []);
+      }
+
+      // Load moderation logs
+      const logsResponse = await fetch("/api/admin/community?view=moderation_log", {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (logsResponse.ok) {
+        const logsData = await logsResponse.json();
+        setModerationLogs(logsData.logs || []);
+      }
+    } catch (error) {
+      console.error("Error loading moderation data:", error);
+    } finally {
+      setLoadingModeration(false);
+    }
+  };
+
+  const handleBanUser = async () => {
+    if (!selectedUser || !banReason.trim()) return;
+    setProcessingAction(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch("/api/admin/community", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "ban",
+          user_id: selectedUser.user_id,
+          reason: banReason,
+        }),
+      });
+
+      if (response.ok) {
+        setShowBanModal(false);
+        setSelectedUser(null);
+        setBanReason("");
+        loadModerationData();
+      }
+    } catch (error) {
+      console.error("Error banning user:", error);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleUnbanUser = async (userId: string) => {
+    setProcessingAction(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch("/api/admin/community", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "unban",
+          user_id: userId,
+        }),
+      });
+
+      if (response.ok) {
+        loadModerationData();
+      }
+    } catch (error) {
+      console.error("Error unbanning user:", error);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleSuspendUser = async () => {
+    if (!selectedUser || !suspendReason.trim()) return;
+    setProcessingAction(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch("/api/admin/community", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "suspend",
+          user_id: selectedUser.user_id,
+          reason: suspendReason,
+          days: suspendDays,
+        }),
+      });
+
+      if (response.ok) {
+        setShowSuspendModal(false);
+        setSelectedUser(null);
+        setSuspendReason("");
+        setSuspendDays(7);
+        loadModerationData();
+      }
+    } catch (error) {
+      console.error("Error suspending user:", error);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleUnsuspendUser = async (userId: string) => {
+    setProcessingAction(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch("/api/admin/community", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "unsuspend",
+          user_id: userId,
+        }),
+      });
+
+      if (response.ok) {
+        loadModerationData();
+      }
+    } catch (error) {
+      console.error("Error unsuspending user:", error);
+    } finally {
+      setProcessingAction(false);
+    }
+  };
 
   const loadElyaFeedback = async () => {
     setLoadingFeedback(true);
@@ -592,7 +772,8 @@ export default function AdminPage() {
             { key: "wellness", label: "Wellness Indicators" },
             { key: "compliance", label: "Compliance & CEUs" },
             { key: "credentials", label: "Credentials" },
-            { key: "elya-feedback", label: "Elya Feedback" }
+            { key: "elya-feedback", label: "Elya Feedback" },
+            { key: "moderation", label: "Moderation" }
           ].map((tab) => (
             <button
               key={tab.key}
@@ -1933,6 +2114,386 @@ export default function AdminPage() {
               </p>
             </div>
           </div>
+        )}
+
+        {/* Moderation Tab */}
+        {selectedView === "moderation" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-100">Community Moderation</h3>
+                <p className="text-sm text-slate-400 mt-1">Manage user bans, suspensions, and review moderation history</p>
+              </div>
+              <button
+                onClick={loadModerationData}
+                disabled={loadingModeration}
+                className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800 transition-colors text-sm flex items-center gap-2"
+              >
+                <svg className={`w-4 h-4 ${loadingModeration ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-5">
+                <p className="text-3xl font-bold text-violet-400">{moderationUsers.length}</p>
+                <p className="text-sm text-slate-300 mt-1">Total Users</p>
+              </div>
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+                <p className="text-3xl font-bold text-emerald-400">
+                  {moderationUsers.filter(u => !u.is_banned && !u.is_suspended).length}
+                </p>
+                <p className="text-sm text-slate-300 mt-1">Active</p>
+              </div>
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
+                <p className="text-3xl font-bold text-amber-400">
+                  {moderationUsers.filter(u => u.is_suspended).length}
+                </p>
+                <p className="text-sm text-slate-300 mt-1">Suspended</p>
+              </div>
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-5">
+                <p className="text-3xl font-bold text-rose-400">
+                  {moderationUsers.filter(u => u.is_banned).length}
+                </p>
+                <p className="text-sm text-slate-300 mt-1">Banned</p>
+              </div>
+            </div>
+
+            {/* Sub-tabs */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModerationTab("users")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  moderationTab === "users"
+                    ? "bg-violet-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-slate-300 border border-slate-700"
+                }`}
+              >
+                Users
+              </button>
+              <button
+                onClick={() => setModerationTab("logs")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  moderationTab === "logs"
+                    ? "bg-violet-500 text-white"
+                    : "bg-slate-800 text-slate-400 hover:text-slate-300 border border-slate-700"
+                }`}
+              >
+                Moderation Log
+              </button>
+            </div>
+
+            {/* Users Tab */}
+            {moderationTab === "users" && (
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+                <div className="p-6">
+                  <h4 className="text-sm font-medium text-slate-300 mb-4">Community Members ({moderationUsers.length})</h4>
+
+                  {loadingModeration ? (
+                    <div className="text-center py-8 text-slate-400">Loading users...</div>
+                  ) : moderationUsers.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-medium text-slate-200 mb-2">No Community Users</h3>
+                      <p className="text-sm text-slate-400">Users will appear here when they join the community</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-slate-800">
+                            <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">User</th>
+                            <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Display Name</th>
+                            <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Status</th>
+                            <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Joined</th>
+                            <th className="text-right text-xs font-medium text-slate-400 uppercase tracking-wider pb-3">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {moderationUsers.map((user) => (
+                            <tr key={user.user_id} className="hover:bg-slate-800/30 transition-colors">
+                              <td className="py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center text-white font-medium">
+                                    {user.display_name?.[0]?.toUpperCase() || user.user_id?.[0]?.toUpperCase() || "?"}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-slate-100">
+                                      {user.profiles?.full_name || "Unknown"}
+                                    </p>
+                                    <p className="text-xs text-slate-500">{user.profiles?.email || user.user_id?.slice(0, 8)}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4">
+                                <p className="text-sm text-slate-300">{user.display_name || "-"}</p>
+                              </td>
+                              <td className="py-4">
+                                {user.is_banned ? (
+                                  <span className="px-2 py-1 rounded-md text-xs font-medium bg-rose-500/20 text-rose-400">
+                                    Banned
+                                  </span>
+                                ) : user.is_suspended ? (
+                                  <span className="px-2 py-1 rounded-md text-xs font-medium bg-amber-500/20 text-amber-400">
+                                    Suspended until {user.suspended_until ? new Date(user.suspended_until).toLocaleDateString() : "N/A"}
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-1 rounded-md text-xs font-medium bg-emerald-500/20 text-emerald-400">
+                                    Active
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-4">
+                                <p className="text-sm text-slate-400">
+                                  {user.created_at ? formatDate(user.created_at) : "-"}
+                                </p>
+                              </td>
+                              <td className="py-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  {user.is_banned ? (
+                                    <button
+                                      onClick={() => handleUnbanUser(user.user_id)}
+                                      disabled={processingAction}
+                                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+                                    >
+                                      Unban
+                                    </button>
+                                  ) : user.is_suspended ? (
+                                    <button
+                                      onClick={() => handleUnsuspendUser(user.user_id)}
+                                      disabled={processingAction}
+                                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+                                    >
+                                      Unsuspend
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setSelectedUser(user);
+                                          setShowSuspendModal(true);
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
+                                      >
+                                        Suspend
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setSelectedUser(user);
+                                          setShowBanModal(true);
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 transition-colors"
+                                      >
+                                        Ban
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Logs Tab */}
+            {moderationTab === "logs" && (
+              <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+                <div className="p-6">
+                  <h4 className="text-sm font-medium text-slate-300 mb-4">Moderation History ({moderationLogs.length})</h4>
+
+                  {loadingModeration ? (
+                    <div className="text-center py-8 text-slate-400">Loading logs...</div>
+                  ) : moderationLogs.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 rounded-full bg-slate-700/50 border border-slate-600 flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-medium text-slate-200 mb-2">No Moderation Actions Yet</h3>
+                      <p className="text-sm text-slate-400">A history of all moderation actions will appear here</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {moderationLogs.map((log: any) => (
+                        <div key={log.id} className="p-4 rounded-lg border border-slate-700 bg-slate-800/30">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                log.action === "ban" ? "bg-rose-500/20" :
+                                log.action === "unban" ? "bg-emerald-500/20" :
+                                log.action === "suspend" ? "bg-amber-500/20" :
+                                log.action === "unsuspend" ? "bg-teal-500/20" :
+                                "bg-slate-700"
+                              }`}>
+                                <svg className={`w-4 h-4 ${
+                                  log.action === "ban" ? "text-rose-400" :
+                                  log.action === "unban" ? "text-emerald-400" :
+                                  log.action === "suspend" ? "text-amber-400" :
+                                  log.action === "unsuspend" ? "text-teal-400" :
+                                  "text-slate-400"
+                                }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  {log.action === "ban" || log.action === "suspend" ? (
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                  ) : (
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  )}
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-slate-100">
+                                  <span className={`capitalize ${
+                                    log.action === "ban" ? "text-rose-400" :
+                                    log.action === "unban" ? "text-emerald-400" :
+                                    log.action === "suspend" ? "text-amber-400" :
+                                    log.action === "unsuspend" ? "text-teal-400" :
+                                    "text-slate-300"
+                                  }`}>{log.action}</span>
+                                  {" - "}
+                                  {log.target_user?.display_name || log.target_user?.profiles?.full_name || "Unknown User"}
+                                </p>
+                                {log.reason && (
+                                  <p className="text-sm text-slate-400 mt-1">Reason: {log.reason}</p>
+                                )}
+                                <p className="text-xs text-slate-500 mt-2">
+                                  By {log.admin_user?.full_name || "Admin"} on {log.created_at ? formatDate(log.created_at) : "-"}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Info Card */}
+            <div className="rounded-xl border border-rose-500/50 bg-rose-500/10 p-5">
+              <h3 className="text-sm font-semibold text-rose-400 mb-2">Moderation Guidelines</h3>
+              <ul className="text-sm text-slate-300 space-y-1">
+                <li>&bull; <strong>Suspend:</strong> Temporary restriction (1-30 days). User cannot post or comment.</li>
+                <li>&bull; <strong>Ban:</strong> Permanent removal from the community. Use for serious violations.</li>
+                <li>&bull; All actions are logged and visible in the moderation history.</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Ban Modal */}
+        {showBanModal && selectedUser && (
+          <>
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40" onClick={() => setShowBanModal(false)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6">
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">Ban User</h3>
+                <p className="text-sm text-slate-400 mb-4">
+                  Are you sure you want to permanently ban <strong className="text-slate-200">{selectedUser.display_name || selectedUser.profiles?.full_name || "this user"}</strong> from the community?
+                </p>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Reason for ban</label>
+                  <textarea
+                    value={banReason}
+                    onChange={(e) => setBanReason(e.target.value)}
+                    placeholder="Enter the reason for this ban..."
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowBanModal(false);
+                      setSelectedUser(null);
+                      setBanReason("");
+                    }}
+                    className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBanUser}
+                    disabled={!banReason.trim() || processingAction}
+                    className="flex-1 px-4 py-2 rounded-lg bg-rose-500 text-white font-medium hover:bg-rose-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processingAction ? "Banning..." : "Ban User"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Suspend Modal */}
+        {showSuspendModal && selectedUser && (
+          <>
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40" onClick={() => setShowSuspendModal(false)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6">
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">Suspend User</h3>
+                <p className="text-sm text-slate-400 mb-4">
+                  Temporarily suspend <strong className="text-slate-200">{selectedUser.display_name || selectedUser.profiles?.full_name || "this user"}</strong> from the community.
+                </p>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Suspension duration</label>
+                  <select
+                    value={suspendDays}
+                    onChange={(e) => setSuspendDays(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    <option value={1}>1 day</option>
+                    <option value={3}>3 days</option>
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={30}>30 days</option>
+                  </select>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Reason for suspension</label>
+                  <textarea
+                    value={suspendReason}
+                    onChange={(e) => setSuspendReason(e.target.value)}
+                    placeholder="Enter the reason for this suspension..."
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowSuspendModal(false);
+                      setSelectedUser(null);
+                      setSuspendReason("");
+                    }}
+                    className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSuspendUser}
+                    disabled={!suspendReason.trim() || processingAction}
+                    className="flex-1 px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-medium hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processingAction ? "Suspending..." : "Suspend User"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

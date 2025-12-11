@@ -142,8 +142,8 @@ export default function CEUDashboard() {
       setUserTier(tier);
       setTierChecked(true);
 
-      // Fetch credit balance for Pro users
-      if (tier === "pro") {
+      // Fetch credit balance for Growth and Pro users (both get monthly credits)
+      if (tier === "pro" || tier === "growth") {
         try {
           const creditsResponse = await fetch("/api/ceu?action=credits", {
             headers: {
@@ -187,9 +187,9 @@ export default function CEUDashboard() {
         setAvailableWorkshops(workshops as unknown as Workshop[]);
       }
 
-      // If not pro, don't load full CEU data (they'll see the upgrade prompt with workshops)
-      if (tier !== "pro") {
-        console.log("[CEU Page] User is not pro, showing upgrade prompt");
+      // If not pro or growth, don't load full CEU data (they'll see the upgrade prompt with workshops)
+      if (tier !== "pro" && tier !== "growth") {
+        console.log("[CEU Page] User is free tier, showing upgrade prompt");
         setLoading(false);
         return;
       }
@@ -498,10 +498,10 @@ export default function CEUDashboard() {
     );
   }
 
-  // Show upgrade prompt for Basic users (or any non-pro tier)
-  // IMPORTANT: This MUST block anyone who is not explicitly "pro"
-  if (userTier !== "pro") {
-    console.log("[CEU Page Render] Blocking user with tier:", userTier);
+  // Show upgrade prompt for Free users only
+  // Growth and Pro users have access to CEU workshops
+  if (userTier !== "pro" && userTier !== "growth") {
+    console.log("[CEU Page Render] Blocking free tier user:", userTier);
 
     // Calculate total available CEUs from workshops
     const totalAvailableCEUs = availableWorkshops.reduce((sum, w) => sum + (w.ceu_value || 0), 0);
@@ -1048,6 +1048,28 @@ export default function CEUDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Growth tier upsell - show banner to upgrade for more credits */}
+            {userTier === "growth" && (
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-100">
+                      Want more CEU workshops?
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Upgrade to Pro for 4 credits/month (0.3+ CEUs) instead of 1 credit
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => router.push("/settings?tab=billing")}
+                    className="px-4 py-2 bg-violet-500 hover:bg-violet-400 text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    Upgrade to Pro
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Workshop count info */}
             {availableWorkshops.length > 0 && (
