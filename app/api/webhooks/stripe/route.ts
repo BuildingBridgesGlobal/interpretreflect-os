@@ -91,8 +91,8 @@ export async function POST(req: NextRequest) {
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   console.log(`[Checkout] Session completed: ${session.id}`);
 
-  // Check if this is a top-up purchase
-  if (session.metadata?.type === "topup") {
+  // Check if this is a top-up purchase (supports both old "topup" and new "credit_topup")
+  if (session.metadata?.type === "topup" || session.metadata?.type === "credit_topup") {
     await handleTopUpPurchase(session);
     return;
   }

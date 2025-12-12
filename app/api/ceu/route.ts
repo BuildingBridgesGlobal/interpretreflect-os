@@ -294,6 +294,62 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action } = body;
 
+    // Update watch time (for RID time-on-task compliance)
+    if (action === "update_watch_time") {
+      const { progress_id, time_spent_seconds, video_watch_seconds } = body;
+
+      if (!progress_id || time_spent_seconds === undefined) {
+        return NextResponse.json(
+          { error: "progress_id and time_spent_seconds are required" },
+          { status: 400 }
+        );
+      }
+
+      // Verify progress belongs to user
+      const { data: progress, error: progressError } = await supabaseAdmin
+        .from("user_module_progress")
+        .select("id, user_id, time_spent_seconds")
+        .eq("id", progress_id)
+        .eq("user_id", userId)
+        .single();
+
+      if (progressError || !progress) {
+        return NextResponse.json(
+          { error: "Progress record not found" },
+          { status: 404 }
+        );
+      }
+
+      // Update time spent (use max of existing and new to prevent going backwards)
+      const newTimeSpent = Math.max(
+        progress.time_spent_seconds || 0,
+        time_spent_seconds
+      );
+
+      const updateData: Record<string, any> = {
+        time_spent_seconds: newTimeSpent,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Also track video watch time separately if provided
+      if (video_watch_seconds !== undefined) {
+        updateData.video_watch_seconds = Math.max(
+          0,
+          video_watch_seconds
+        );
+      }
+
+      await supabaseAdmin
+        .from("user_module_progress")
+        .update(updateData)
+        .eq("id", progress_id);
+
+      return NextResponse.json({
+        success: true,
+        time_spent_seconds: newTimeSpent,
+      });
+    }
+
     // Submit module assessment
     if (action === "submit_assessment") {
       const { module_id, answers, started_at } = body;
@@ -626,6 +682,174 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Submit evaluation and issue certificate (combined endpoint for reliability)
+    if (action === "submit_evaluation") {
+      const { module_id, progress_id, evaluation_data } = body;
+
+      if (!module_id || !progress_id || !evaluation_data) {
+        return NextResponse.json(
+          { error: "module_id, progress_id, and evaluation_data are required" },
+          { status: 400 }
+        );
+      }
+
+      // Validate required evaluation fields
+      const { q1ObjectivesClear, q2ContentRelevant, q3ApplicableToWork, q4PresenterEffective } = evaluation_data;
+      if (!q1ObjectivesClear || !q2ContentRelevant || !q3ApplicableToWork || !q4PresenterEffective) {
+        return NextResponse.json(
+          { error: "All required evaluation questions must be answered" },
+          { status: 400 }
+        );
+      }
+
+      // Verify progress exists and belongs to user
+      const { data: progress, error: progressError } = await supabaseAdmin
+        .from("user_module_progress")
+        .select("*")
+        .eq("id", progress_id)
+        .eq("user_id", userId)
+        .single();
+
+      if (progressError || !progress) {
+        return NextResponse.json(
+          { error: "Progress record not found" },
+          { status: 404 }
+        );
+      }
+
+      // Verify assessment was passed
+      if (!progress.assessment_passed) {
+        return NextResponse.json(
+          { error: "Assessment must be passed before submitting evaluation" },
+          { status: 400 }
+        );
+      }
+
+      // Check if evaluation already exists
+      const { data: existingEval } = await supabaseAdmin
+        .from("ceu_evaluations")
+        .select("id")
+        .eq("progress_id", progress_id)
+        .single();
+
+      let evaluationId = existingEval?.id;
+
+      // Insert evaluation if not exists
+      if (!evaluationId) {
+        const { data: evaluation, error: evalError } = await supabaseAdmin
+          .from("ceu_evaluations")
+          .insert({
+            user_id: userId,
+            module_id,
+            progress_id,
+            q1_objectives_clear: evaluation_data.q1ObjectivesClear,
+            q2_content_relevant: evaluation_data.q2ContentRelevant,
+            q3_applicable_to_work: evaluation_data.q3ApplicableToWork,
+            q4_presenter_effective: evaluation_data.q4PresenterEffective,
+            q5_most_valuable: evaluation_data.q5MostValuable?.trim() || null,
+            q6_suggestions: evaluation_data.q6Suggestions?.trim() || null,
+          })
+          .select("id")
+          .single();
+
+        if (evalError) {
+          console.error("Error inserting evaluation:", evalError);
+          return NextResponse.json(
+            { error: "Failed to save evaluation" },
+            { status: 500 }
+          );
+        }
+
+        evaluationId = evaluation.id;
+
+        // Update progress to mark evaluation complete
+        await supabaseAdmin
+          .from("user_module_progress")
+          .update({
+            evaluation_completed: true,
+            evaluation_id: evaluationId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", progress_id);
+      }
+
+      // Now issue certificate with retry logic
+      const { data: module } = await supabaseAdmin
+        .from("skill_modules")
+        .select("*")
+        .eq("id", module_id)
+        .single();
+
+      if (!module) {
+        return NextResponse.json(
+          { error: "Module not found" },
+          { status: 404 }
+        );
+      }
+
+      // Check if certificate already exists
+      if (progress.certificate_id) {
+        const { data: existingCert } = await supabaseAdmin
+          .from("ceu_certificates")
+          .select("*")
+          .eq("id", progress.certificate_id)
+          .single();
+
+        return NextResponse.json({
+          success: true,
+          certificate: existingCert,
+          message: "Certificate already issued",
+        });
+      }
+
+      // Issue certificate with retry
+      let certificate: any = null;
+      let lastError: string | undefined = undefined;
+      const maxRetries = 3;
+
+      for (let retry = 0; retry < maxRetries; retry++) {
+        const result = await issueCertificate(userId, module);
+        if (result.success) {
+          certificate = result.certificate;
+          break;
+        }
+        lastError = result.error;
+        console.warn(`Certificate issuance attempt ${retry + 1} failed:`, lastError);
+        // Brief delay before retry
+        await new Promise(resolve => setTimeout(resolve, 500 * (retry + 1)));
+      }
+
+      if (!certificate) {
+        return NextResponse.json(
+          { error: lastError || "Failed to issue certificate after multiple attempts" },
+          { status: 500 }
+        );
+      }
+
+      // Link certificate to progress and evaluation
+      await supabaseAdmin
+        .from("user_module_progress")
+        .update({
+          certificate_id: certificate.id,
+          status: "completed",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", progress_id);
+
+      if (evaluationId) {
+        await supabaseAdmin
+          .from("ceu_evaluations")
+          .update({ certificate_id: certificate.id })
+          .eq("id", evaluationId);
+      }
+
+      return NextResponse.json({
+        success: true,
+        certificate,
+        message: "Evaluation saved and certificate issued successfully!",
+      });
+    }
+
     return NextResponse.json(
       { error: "Invalid action" },
       { status: 400 }
@@ -642,6 +866,7 @@ export async function POST(req: NextRequest) {
 /**
  * Helper function to issue a CEU certificate
  * Uses the database function for safe certificate number generation
+ * Also deducts a credit from the user's balance
  */
 async function issueCertificate(
   userId: string,
@@ -649,6 +874,27 @@ async function issueCertificate(
   assessmentAttemptId?: string
 ): Promise<{ success: boolean; certificate?: any; error?: string }> {
   try {
+    // First, deduct a credit from the user's balance
+    // This uses monthly credits first, then top-up credits
+    const { data: creditDeducted, error: creditError } = await supabaseAdmin
+      .rpc("deduct_workshop_credit", {
+        p_user_id: userId,
+        p_module_id: module.id,
+        p_description: `Workshop: ${module.title}`,
+      });
+
+    if (creditError) {
+      console.error("Error deducting credit:", creditError);
+      // Don't fail certificate issuance if credit deduction fails
+      // (user may have unlimited access or be grandfathered in)
+    } else if (creditDeducted === false) {
+      // User has no credits - they shouldn't be able to complete workshops
+      // But don't block certificate if they somehow got here
+      console.warn(`User ${userId} has no credits but completed workshop ${module.id}`);
+    } else {
+      console.log(`Credit deducted for user ${userId}, workshop: ${module.title}`);
+    }
+
     // Get assessment score if applicable
     let assessmentScore = null;
     if (assessmentAttemptId) {
@@ -699,45 +945,62 @@ async function issueCertificate(
       .eq("module_id", module.id)
       .single();
 
-    // Generate certificate number (fallback method)
+    // Generate certificate number with retry logic to handle race conditions
+    // Uses unique constraint on certificate_number as the safety net
     const year = new Date().getFullYear();
-    const { count } = await supabaseAdmin
-      .from("ceu_certificates")
-      .select("*", { count: "exact", head: true })
-      .like("certificate_number", `IR-${year}-%`);
+    let certificate = null;
+    let attempts = 0;
+    const maxAttempts = 5;
 
-    const sequence = ((count || 0) + 1).toString().padStart(6, "0");
-    const certificateNumber = `IR-${year}-${sequence}`;
+    while (!certificate && attempts < maxAttempts) {
+      attempts++;
 
-    // Create certificate (fallback)
-    const { data: certificate, error } = await supabaseAdmin
-      .from("ceu_certificates")
-      .insert({
-        user_id: userId,
-        module_id: module.id,
-        certificate_number: certificateNumber,
-        title: module.title,
-        description: module.description,
-        ceu_value: module.ceu_value,
-        rid_category: module.rid_category || "Professional Studies",
-        rid_subcategory: module.rid_subcategory,
-        learning_objectives_achieved: module.learning_objectives || [],
-        assessment_score: assessmentScore,
-        assessment_passed: true,
-        started_at: progress?.started_at,
-        completed_at: progress?.completed_at || new Date().toISOString(),
-        time_spent_minutes: progress?.time_spent_seconds
-          ? Math.round(progress.time_spent_seconds / 60)
-          : module.duration_minutes,
-        rid_activity_type: "SIA",
-        status: "active",
-      })
-      .select()
-      .single();
+      // Generate certificate number using timestamp + random for uniqueness
+      const timestamp = Date.now().toString(36).toUpperCase();
+      const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const certificateNumber = `IR-${year}-${timestamp}${random}`;
 
-    if (error) {
-      console.error("Error issuing certificate:", error);
-      return { success: false, error: "Failed to issue certificate" };
+      // Try to create certificate - if duplicate, loop will retry with new number
+      const { data: cert, error } = await supabaseAdmin
+        .from("ceu_certificates")
+        .insert({
+          user_id: userId,
+          module_id: module.id,
+          certificate_number: certificateNumber,
+          title: module.title,
+          description: module.description,
+          ceu_value: module.ceu_value,
+          rid_category: module.rid_category || "Professional Studies",
+          rid_subcategory: module.rid_subcategory,
+          learning_objectives_achieved: module.learning_objectives || [],
+          assessment_score: assessmentScore,
+          assessment_passed: true,
+          started_at: progress?.started_at,
+          completed_at: progress?.completed_at || new Date().toISOString(),
+          time_spent_minutes: progress?.time_spent_seconds
+            ? Math.round(progress.time_spent_seconds / 60)
+            : module.duration_minutes,
+          rid_activity_type: "SIA",
+          status: "active",
+        })
+        .select()
+        .single();
+
+      if (!error) {
+        certificate = cert;
+      } else if (error.code === "23505") {
+        // Unique constraint violation - retry with new number
+        console.warn(`Certificate number collision on attempt ${attempts}, retrying...`);
+        continue;
+      } else {
+        console.error("Error issuing certificate:", error);
+        return { success: false, error: "Failed to issue certificate" };
+      }
+    }
+
+    if (!certificate) {
+      console.error("Failed to generate unique certificate number after", maxAttempts, "attempts");
+      return { success: false, error: "Failed to generate certificate number" };
     }
 
     // Send certificate email (don't block on failure)
