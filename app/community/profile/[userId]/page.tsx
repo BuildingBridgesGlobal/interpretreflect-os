@@ -192,7 +192,7 @@ export default function ProfilePage() {
     try {
       const token = await getAuthToken();
       if (!token) {
-        router.push("/login");
+        router.push("/signin");
         return;
       }
 
@@ -331,7 +331,7 @@ export default function ProfilePage() {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        router.push("/login");
+        router.push("/signin");
         return;
       }
       setCurrentUserId(session.user.id);
