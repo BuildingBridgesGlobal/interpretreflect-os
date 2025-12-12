@@ -159,7 +159,7 @@ export default function AgencyLoginPage() {
                 <label htmlFor="password" className="block text-sm font-medium text-slate-300">
                   Password
                 </label>
-                <a href="/forgot-password" className="text-xs text-violet-400 hover:text-violet-300">
+                <a href="/agency/forgot-password" className="text-xs text-violet-400 hover:text-violet-300">
                   Forgot password?
                 </a>
               </div>
