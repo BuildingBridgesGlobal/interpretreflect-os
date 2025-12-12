@@ -6,12 +6,13 @@ const supabase = supabaseAdmin;
 
 // Calculate engagement score for a post using hybrid time decay + engagement algorithm
 function calculateEngagementScore(
-  likesCount: number,
+  reactionsCount: number,
   commentsCount: number,
   createdAt: string
 ): number {
-  // Engagement weight: comments are worth 2x likes (encourage discussion)
-  const engagementScore = likesCount + (commentsCount * 2);
+  // Engagement weight: comments are worth 2x reactions (encourage discussion)
+  // Reactions include: celebration, thinking, fire, solidarity
+  const engagementScore = reactionsCount + (commentsCount * 2);
 
   // Time decay: posts lose points over time
   // Using a decay factor that gives new posts a fair chance
@@ -161,15 +162,10 @@ export async function GET(req: NextRequest) {
 
     const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
 
-    // Get user's likes and bookmarks for these posts
+    // Get user's bookmarks and reactions for these posts
     const postIds = posts.map(p => p.id);
 
-    const [likesResult, bookmarksResult, reactionsResult] = await Promise.all([
-      supabase
-        .from("post_likes")
-        .select("post_id")
-        .eq("user_id", userId)
-        .in("post_id", postIds),
+    const [bookmarksResult, reactionsResult] = await Promise.all([
       supabase
         .from("post_bookmarks")
         .select("post_id")
@@ -182,7 +178,6 @@ export async function GET(req: NextRequest) {
         .in("post_id", postIds)
     ]);
 
-    const likedPostIds = new Set(likesResult.data?.map(l => l.post_id) || []);
     const bookmarkedPostIds = new Set(bookmarksResult.data?.map(b => b.post_id) || []);
 
     // Build map of user's reactions per post
@@ -193,15 +188,15 @@ export async function GET(req: NextRequest) {
       userReactionsMap.set(r.post_id, existing);
     });
 
-    // Get counts for each post
+    // Get counts for each post (reactions + comments for engagement)
     const statsPromises = postIds.map(async (postId) => {
-      const [likesCount, commentsCount] = await Promise.all([
-        supabase.from("post_likes").select("id", { count: "exact", head: true }).eq("post_id", postId),
+      const [reactionsCount, commentsCount] = await Promise.all([
+        supabase.from("post_reactions").select("id", { count: "exact", head: true }).eq("post_id", postId),
         supabase.from("post_comments").select("id", { count: "exact", head: true }).eq("post_id", postId).eq("is_deleted", false)
       ]);
       return {
         post_id: postId,
-        likes_count: likesCount.count || 0,
+        reactions_count: reactionsCount.count || 0,
         comments_count: commentsCount.count || 0
       };
     });
@@ -213,7 +208,7 @@ export async function GET(req: NextRequest) {
     let postsWithUserData = posts.map(post => {
       const postStats = statsMap.get(post.id);
       const authorProfile = profileMap.get(post.user_id);
-      const likesCount = postStats?.likes_count || 0;
+      const reactionsCount = postStats?.reactions_count || 0;
       const commentsCount = postStats?.comments_count || 0;
 
       return {
@@ -239,9 +234,7 @@ export async function GET(req: NextRequest) {
           open_to_mentoring: false,
           avatar_url: null
         },
-        likes_count: likesCount,
         comments_count: commentsCount,
-        liked_by_user: likedPostIds.has(post.id),
         bookmarked_by_user: bookmarkedPostIds.has(post.id),
         // Story-telling reactions
         reactions: {
@@ -250,9 +243,10 @@ export async function GET(req: NextRequest) {
           fire_count: post.fire_count || 0,
           solidarity_count: post.solidarity_count || 0
         },
+        reactions_count: reactionsCount,
         user_reactions: userReactionsMap.get(post.id) || [],
-        // Include engagement score for potential client-side use
-        engagement_score: calculateEngagementScore(likesCount, commentsCount, post.created_at)
+        // Include engagement score for potential client-side use (reactions + comments)
+        engagement_score: calculateEngagementScore(reactionsCount, commentsCount, post.created_at)
       };
     });
 
@@ -382,9 +376,7 @@ export async function POST(req: NextRequest) {
           open_to_mentoring: false,
           avatar_url: null
         },
-        likes_count: 0,
         comments_count: 0,
-        liked_by_user: false,
         bookmarked_by_user: false,
         reactions: {
           celebration_count: 0,
@@ -392,6 +384,7 @@ export async function POST(req: NextRequest) {
           fire_count: 0,
           solidarity_count: 0
         },
+        reactions_count: 0,
         user_reactions: []
       }
     });
