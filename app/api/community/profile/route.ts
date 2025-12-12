@@ -137,6 +137,25 @@ export async function POST(req: NextRequest) {
       seeking_guidance_in,
       open_to_mentoring,
       looking_for_mentor,
+      // Enhanced professional fields
+      interpreter_certifications,
+      work_settings,
+      location_city,
+      location_state,
+      location_country,
+      availability_status,
+      timezone,
+      languages_worked,
+      headline,
+      professional_background,
+      education,
+      itp_program,
+      graduation_year,
+      current_employer,
+      website_url,
+      linkedin_url,
+      show_location,
+      show_employer,
       // Legacy fields (for backward compatibility)
       specialties,
       strong_domains,
@@ -181,12 +200,31 @@ export async function POST(req: NextRequest) {
         seeking_guidance_in: seeking_guidance_in || weak_domains || [],
         looking_for_mentor: looking_for_mentor || seeking_mentor || false,
         open_to_mentoring: open_to_mentoring || false,
+        // Enhanced professional fields
+        interpreter_certifications: interpreter_certifications || certifications || [],
+        work_settings: work_settings || [],
+        location_city: location_city || null,
+        location_state: location_state || null,
+        location_country: location_country || 'United States',
+        availability_status: availability_status || 'available',
+        timezone: timezone || null,
+        languages_worked: languages_worked || ['ASL', 'English'],
+        headline: headline || null,
+        professional_background: professional_background || null,
+        education: education || null,
+        itp_program: itp_program || null,
+        graduation_year: graduation_year || null,
+        current_employer: current_employer || null,
+        website_url: website_url || null,
+        linkedin_url: linkedin_url || null,
+        show_location: show_location !== undefined ? show_location : true,
+        show_employer: show_employer !== undefined ? show_employer : false,
         // Legacy fields (also save for backward compatibility)
         specialties: settings_work_in || specialties || [],
         strong_domains: offer_support_in || strong_domains || [],
         weak_domains: seeking_guidance_in || weak_domains || [],
         seeking_mentor: looking_for_mentor || seeking_mentor || false,
-        certifications: certifications || [],
+        certifications: interpreter_certifications || certifications || [],
         is_searchable: true
       })
       .select()
@@ -235,6 +273,25 @@ export async function PUT(req: NextRequest) {
       open_to_mentoring,
       looking_for_mentor,
       is_searchable,
+      // Enhanced professional fields
+      interpreter_certifications,
+      work_settings,
+      location_city,
+      location_state,
+      location_country,
+      availability_status,
+      timezone,
+      languages_worked,
+      headline,
+      professional_background,
+      education,
+      itp_program,
+      graduation_year,
+      current_employer,
+      website_url,
+      linkedin_url,
+      show_location,
+      show_employer,
       // Legacy fields (for backward compatibility)
       specialties,
       strong_domains,
@@ -269,6 +326,29 @@ export async function PUT(req: NextRequest) {
     }
     if (open_to_mentoring !== undefined) updates.open_to_mentoring = open_to_mentoring;
     if (is_searchable !== undefined) updates.is_searchable = is_searchable;
+
+    // Enhanced professional fields
+    if (interpreter_certifications !== undefined) {
+      updates.interpreter_certifications = interpreter_certifications;
+      updates.certifications = interpreter_certifications; // Also update legacy
+    }
+    if (work_settings !== undefined) updates.work_settings = work_settings;
+    if (location_city !== undefined) updates.location_city = location_city;
+    if (location_state !== undefined) updates.location_state = location_state;
+    if (location_country !== undefined) updates.location_country = location_country;
+    if (availability_status !== undefined) updates.availability_status = availability_status;
+    if (timezone !== undefined) updates.timezone = timezone;
+    if (languages_worked !== undefined) updates.languages_worked = languages_worked;
+    if (headline !== undefined) updates.headline = headline;
+    if (professional_background !== undefined) updates.professional_background = professional_background;
+    if (education !== undefined) updates.education = education;
+    if (itp_program !== undefined) updates.itp_program = itp_program;
+    if (graduation_year !== undefined) updates.graduation_year = graduation_year;
+    if (current_employer !== undefined) updates.current_employer = current_employer;
+    if (website_url !== undefined) updates.website_url = website_url;
+    if (linkedin_url !== undefined) updates.linkedin_url = linkedin_url;
+    if (show_location !== undefined) updates.show_location = show_location;
+    if (show_employer !== undefined) updates.show_employer = show_employer;
 
     // Legacy fields (if new fields not provided)
     if (specialties !== undefined && settings_work_in === undefined) {

@@ -224,8 +224,8 @@ export default function CEUWorkshopPage() {
     );
   }
 
-  // Block non-Pro users
-  if (userTier !== "pro") {
+  // Block free tier users - both Pro and Growth have CEU access
+  if (userTier !== "pro" && userTier !== "growth") {
     return (
       <div className="min-h-screen bg-slate-950">
         <NavBar />
@@ -438,6 +438,8 @@ export default function CEUWorkshopPage() {
                 onComplete={handleVideoComplete}
                 onAttestation={handleVideoComplete}
                 initiallyCompleted={progress?.video_completed || false}
+                progressId={progress?.id}
+                accessToken={accessToken}
               />
 
               {progress?.video_completed && (

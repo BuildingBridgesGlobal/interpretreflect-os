@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { supabase } from "@/lib/supabaseClient";
 
 type CEUEvaluationProps = {
   userId: string;
@@ -59,7 +58,7 @@ export default function CEUEvaluation({
     formData.q3ApplicableToWork > 0 &&
     formData.q4PresenterEffective > 0;
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!isComplete) {
       setError("Please answer all required questions");
       return;
@@ -69,67 +68,38 @@ export default function CEUEvaluation({
     setError("");
 
     try {
-      // Insert evaluation (using type assertion for new table not yet in generated types)
-      const { data: evaluation, error: evalError } = await (supabase as any)
-        .from("ceu_evaluations")
-        .insert({
-          user_id: userId,
-          module_id: moduleId,
-          progress_id: progressId,
-          q1_objectives_clear: formData.q1ObjectivesClear,
-          q2_content_relevant: formData.q2ContentRelevant,
-          q3_applicable_to_work: formData.q3ApplicableToWork,
-          q4_presenter_effective: formData.q4PresenterEffective,
-          q5_most_valuable: formData.q5MostValuable.trim() || null,
-          q6_suggestions: formData.q6Suggestions.trim() || null,
-        })
-        .select()
-        .single();
-
-      if (evalError) throw evalError;
-
-      // Update progress to mark evaluation complete (using type assertion for new columns)
-      const { error: progressError } = await (supabase as any)
-        .from("user_module_progress")
-        .update({
-          evaluation_completed: true,
-          evaluation_id: evaluation.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", progressId);
-
-      if (progressError) throw progressError;
-
-      // NOW issue the certificate (RID requires evaluation before certificate)
-      const certResponse = await fetch("/api/ceu", {
+      // Use combined API endpoint that handles evaluation + certificate issuance
+      // This is more reliable than two separate operations
+      const response = await fetch("/api/ceu", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
         },
         body: JSON.stringify({
-          action: "issue_certificate_after_evaluation",
+          action: "submit_evaluation",
           module_id: moduleId,
-          evaluation_id: evaluation.id,
+          progress_id: progressId,
+          evaluation_data: formData,
         }),
       });
 
-      const certData = await certResponse.json();
+      const data = await response.json();
 
-      if (!certResponse.ok || !certData.success) {
-        console.error("Certificate issuance failed:", certData.error);
-        setError("Evaluation saved, but certificate generation failed. Please contact support.");
+      if (!response.ok || !data.success) {
+        console.error("Evaluation/certificate failed:", data.error);
+        setError(data.error || "Failed to complete evaluation. Please try again.");
         return;
       }
 
-      onComplete(certData.certificate);
+      onComplete(data.certificate);
     } catch (err) {
       console.error("Error submitting evaluation:", err);
-      setError("Failed to submit evaluation. Please try again.");
+      setError("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [isComplete, accessToken, moduleId, progressId, formData, onComplete]);
 
   const RatingQuestion = ({
     question,

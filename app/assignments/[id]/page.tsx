@@ -441,6 +441,16 @@ export default function AssignmentDetailPage() {
                   </button>
                 )}
 
+                {assignment.is_team_assignment && isUpcoming && (
+                  <button
+                    onClick={() => router.push(`/assignments/${assignmentId}/live`)}
+                    className="px-4 py-3 rounded-lg bg-green-500 text-slate-950 font-medium hover:bg-green-400 transition-colors text-left flex items-center gap-2"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-slate-950" />
+                    Go Live
+                  </button>
+                )}
+
                 {isPast && (
                   <button
                     onClick={() => router.push(`/dashboard?mode=debrief&assignment=${assignmentId}`)}

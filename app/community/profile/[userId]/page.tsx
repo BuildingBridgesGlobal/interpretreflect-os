@@ -456,7 +456,9 @@ export default function ProfilePage() {
                   <div className="flex flex-wrap items-center gap-2 justify-center md:justify-start mb-4">
                     {profile.years_experience && (
                       <span className="text-sm text-slate-400">
-                        {profile.years_experience} years experience
+                        {String(profile.years_experience).toLowerCase().includes('year')
+                          ? profile.years_experience
+                          : `${profile.years_experience} years experience`}
                       </span>
                     )}
                     {profile.is_deaf_interpreter && (

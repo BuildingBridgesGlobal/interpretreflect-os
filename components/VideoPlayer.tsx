@@ -12,6 +12,10 @@ type VideoPlayerProps = {
   requireFullCompletion?: boolean; // For CEU compliance - must watch 100%
   onAttestation?: () => void; // Callback when user attests they watched embedded video
   initiallyCompleted?: boolean; // If already marked as completed
+  // Time tracking props for RID compliance
+  progressId?: string; // user_module_progress ID for saving time
+  accessToken?: string; // Auth token for API calls
+  onTimeUpdate?: (seconds: number) => void; // Callback with total time watched
 };
 
 export default function VideoPlayer({
@@ -23,6 +27,9 @@ export default function VideoPlayer({
   requireFullCompletion = false,
   onAttestation,
   initiallyCompleted = false,
+  progressId,
+  accessToken,
+  onTimeUpdate,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -34,7 +41,17 @@ export default function VideoPlayer({
   const [hasCompleted, setHasCompleted] = useState(initiallyCompleted);
   const [showAttestationModal, setShowAttestationModal] = useState(false);
   const [attestationChecked, setAttestationChecked] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Time tracking for RID compliance
+  const [totalWatchTime, setTotalWatchTime] = useState(0); // Total seconds watched
+  const watchStartTimeRef = useRef<number | null>(null); // When current watch session started
+  const lastSaveTimeRef = useRef<number>(0); // Last time we saved to server
+  const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const iframewatchIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detect if the URL is a YouTube or Vimeo embed
   const isYouTube = videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be");
@@ -146,14 +163,131 @@ export default function VideoPlayer({
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
+  // Save watch time to server (RID compliance)
+  const saveWatchTime = async (seconds: number) => {
+    if (!progressId || !accessToken || seconds <= lastSaveTimeRef.current) return;
+
+    try {
+      await fetch("/api/ceu", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          action: "update_watch_time",
+          progress_id: progressId,
+          time_spent_seconds: seconds,
+          video_watch_seconds: seconds,
+        }),
+      });
+      lastSaveTimeRef.current = seconds;
+      onTimeUpdate?.(seconds);
+    } catch (err) {
+      console.error("Failed to save watch time:", err);
+    }
+  };
+
+  // Start tracking when video plays (for direct videos)
+  useEffect(() => {
+    if (isPlaying && !isEmbed) {
+      watchStartTimeRef.current = Date.now();
+
+      // Save every 30 seconds while playing
+      saveIntervalRef.current = setInterval(() => {
+        if (watchStartTimeRef.current) {
+          const sessionSeconds = Math.floor((Date.now() - watchStartTimeRef.current) / 1000);
+          const newTotal = totalWatchTime + sessionSeconds;
+          saveWatchTime(newTotal);
+        }
+      }, 30000);
+    } else if (!isPlaying && watchStartTimeRef.current) {
+      // Video paused - add session time to total
+      const sessionSeconds = Math.floor((Date.now() - watchStartTimeRef.current) / 1000);
+      const newTotal = totalWatchTime + sessionSeconds;
+      setTotalWatchTime(newTotal);
+      saveWatchTime(newTotal);
+      watchStartTimeRef.current = null;
+
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+        saveIntervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+      }
+    };
+  }, [isPlaying, isEmbed]);
+
+  // Track time for iframe embeds (can't detect actual playback, so track time on page)
+  useEffect(() => {
+    if (isEmbed && iframeLoaded && !hasCompleted && progressId) {
+      // Start tracking time when iframe loads
+      const startTime = Date.now();
+      let accumulatedSeconds = 0;
+
+      iframewatchIntervalRef.current = setInterval(() => {
+        accumulatedSeconds = Math.floor((Date.now() - startTime) / 1000);
+        setTotalWatchTime(accumulatedSeconds);
+
+        // Save every 30 seconds
+        if (accumulatedSeconds % 30 === 0 && accumulatedSeconds > 0) {
+          saveWatchTime(accumulatedSeconds);
+        }
+      }, 1000);
+
+      return () => {
+        if (iframewatchIntervalRef.current) {
+          clearInterval(iframewatchIntervalRef.current);
+        }
+        // Final save when leaving
+        if (accumulatedSeconds > 0) {
+          saveWatchTime(accumulatedSeconds);
+        }
+      };
+    }
+  }, [isEmbed, iframeLoaded, hasCompleted, progressId]);
+
+  // Cleanup on unmount - save final time
+  useEffect(() => {
+    return () => {
+      if (watchStartTimeRef.current) {
+        const sessionSeconds = Math.floor((Date.now() - watchStartTimeRef.current) / 1000);
+        const finalTotal = totalWatchTime + sessionSeconds;
+        saveWatchTime(finalTotal);
+      }
+      if (saveIntervalRef.current) clearInterval(saveIntervalRef.current);
+      if (iframewatchIntervalRef.current) clearInterval(iframewatchIntervalRef.current);
+    };
+  }, []);
+
   // Handle attestation submission for embedded videos
   const handleAttestation = () => {
     if (attestationChecked) {
+      // Save final watch time before completing
+      if (totalWatchTime > 0) {
+        saveWatchTime(totalWatchTime);
+      }
+      // Stop tracking
+      if (iframewatchIntervalRef.current) {
+        clearInterval(iframewatchIntervalRef.current);
+        iframewatchIntervalRef.current = null;
+      }
       setHasCompleted(true);
       setShowAttestationModal(false);
       onAttestation?.();
       onComplete?.();
     }
+  };
+
+  // Format seconds to MM:SS
+  const formatWatchTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   // For embedded videos (YouTube, Vimeo), use iframe with attestation
@@ -179,6 +313,15 @@ export default function VideoPlayer({
                   <p className="text-slate-400 text-sm">{duration} min video</p>
                 )}
               </div>
+              {/* Time tracking display for CEU compliance */}
+              {progressId && totalWatchTime > 0 && !hasCompleted && (
+                <div className="ml-auto px-2 py-1 rounded-full bg-violet-500/20 text-violet-400 text-xs font-medium flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {formatWatchTime(totalWatchTime)}
+                </div>
+              )}
               {hasCompleted && (
                 <div className="ml-auto px-2 py-1 rounded-full bg-teal-500/20 text-teal-400 text-xs font-medium flex items-center gap-1">
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -191,15 +334,49 @@ export default function VideoPlayer({
           </div>
 
           {/* Iframe Embed */}
-          <div className="aspect-video w-full">
+          <div className="aspect-video w-full relative">
+            {/* Loading state */}
+            {!iframeLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-10 h-10 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin"></div>
+                  <p className="text-slate-400 text-sm">Loading video...</p>
+                </div>
+              </div>
+            )}
             <iframe
               src={getEmbedUrl(videoUrl)}
-              className="w-full h-full"
+              className={`w-full h-full ${!iframeLoaded ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               title={title}
+              onLoad={() => setIframeLoaded(true)}
+              onError={() => setVideoError("Failed to load video. Please check your connection and try again.")}
             />
           </div>
+
+          {/* Error state */}
+          {videoError && (
+            <div className="p-4 bg-rose-500/10 border-t border-rose-500/30">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 text-rose-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-rose-300 text-sm">{videoError}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setVideoError(null);
+                    setIframeLoaded(false);
+                  }}
+                  className="px-3 py-1 text-xs bg-rose-500/20 text-rose-300 rounded hover:bg-rose-500/30 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Completion/Attestation section */}
           <div className="p-4 border-t border-slate-700 bg-slate-800/30">
@@ -343,14 +520,80 @@ export default function VideoPlayer({
 
       {/* Video Element */}
       <div className="relative aspect-video bg-black">
+        {/* Loading state for direct video */}
+        {isLoading && !videoError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-800 z-10">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-10 h-10 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin"></div>
+              <p className="text-slate-400 text-sm">Loading video...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error state for direct video */}
+        {videoError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-800 z-10">
+            <div className="flex flex-col items-center gap-4 p-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center">
+                <svg className="w-8 h-8 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-rose-300 font-medium mb-1">Video Failed to Load</p>
+                <p className="text-slate-400 text-sm">{videoError}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setVideoError(null);
+                  setIsLoading(true);
+                  if (videoRef.current) {
+                    videoRef.current.load();
+                  }
+                }}
+                className="px-4 py-2 bg-teal-500 text-slate-950 rounded-lg font-medium hover:bg-teal-400 transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        )}
+
         <video
           ref={videoRef}
           src={videoUrl}
           className="w-full h-full"
           onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
+          onLoadedMetadata={() => {
+            handleLoadedMetadata();
+            setIsLoading(false);
+          }}
+          onCanPlay={() => setIsLoading(false)}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
+          onError={(e) => {
+            const target = e.target as HTMLVideoElement;
+            const error = target.error;
+            let message = "Please check your connection and try again.";
+            if (error) {
+              switch (error.code) {
+                case MediaError.MEDIA_ERR_ABORTED:
+                  message = "Video loading was aborted.";
+                  break;
+                case MediaError.MEDIA_ERR_NETWORK:
+                  message = "Network error. Please check your connection.";
+                  break;
+                case MediaError.MEDIA_ERR_DECODE:
+                  message = "Video format is not supported.";
+                  break;
+                case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                  message = "Video source is not supported or unavailable.";
+                  break;
+              }
+            }
+            setVideoError(message);
+            setIsLoading(false);
+          }}
           onEnded={() => {
             setIsPlaying(false);
             if (!hasCompleted) {

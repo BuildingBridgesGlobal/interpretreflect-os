@@ -6,6 +6,10 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 import EssenceProfileOnboarding from "@/components/community/EssenceProfileOnboarding";
+import CommentThread from "@/components/community/CommentThread";
+import FilterChips from "@/components/community/FilterChips";
+import GuidelinesModal from "@/components/community/GuidelinesModal";
+import { communityStorage } from "@/lib/communityStorage";
 
 // ============================================
 // PREMIUM ANIMATION STYLES
@@ -224,6 +228,16 @@ interface CommunityProfile {
   avatar_url?: string | null;
 }
 
+// Reaction types mapped to post types for story-telling reactions
+type ReactionType = "celebration" | "thinking" | "fire" | "solidarity";
+
+interface PostReactions {
+  celebration_count: number;
+  thinking_count: number;
+  fire_count: number;
+  solidarity_count: number;
+}
+
 interface Post {
   id: string;
   user_id: string;
@@ -245,6 +259,9 @@ interface Post {
   comments_count: number;
   liked_by_user: boolean;
   bookmarked_by_user: boolean;
+  // Story-telling reactions
+  reactions: PostReactions;
+  user_reactions: ReactionType[];
 }
 
 interface Connection {
@@ -419,7 +436,7 @@ export default function CommunityPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [postFilter, setPostFilter] = useState<string | null>(null);
-  const [feedSort, setFeedSort] = useState<"recent" | "top" | "following">("recent");
+  const [feedSort, setFeedSort] = useState<"recent" | "top" | "following" | "trending">("recent");
   const [showMyPosts, setShowMyPosts] = useState(false);
   const [showFriendsFeed, setShowFriendsFeed] = useState(false);
   const [showSavedPosts, setShowSavedPosts] = useState(false);
@@ -444,6 +461,54 @@ export default function CommunityPage() {
   const [conversationFilter, setConversationFilter] = useState<'all' | 'teaming' | 'personal' | 'mentoring'>('all');
   const [showNewPostModal, setShowNewPostModal] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Initialize sidebar state from localStorage on mount (client-side only)
+  useEffect(() => {
+    const savedState = communityStorage.getSidebarCollapsed();
+    setSidebarCollapsed(savedState);
+  }, []);
+
+  // Handler to toggle and persist sidebar state
+  const handleSidebarToggle = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const newState = !prev;
+      communityStorage.setSidebarCollapsed(newState);
+      return newState;
+    });
+  }, []);
+
+  // Guidelines Modal State
+  const [showGuidelinesModal, setShowGuidelinesModal] = useState(false);
+  const [hasAcknowledgedGuidelines, setHasAcknowledgedGuidelines] = useState(false);
+
+  // Check guidelines acknowledgment on mount
+  useEffect(() => {
+    if (userId) {
+      const acknowledged = communityStorage.hasAcknowledgedGuidelines(userId);
+      setHasAcknowledgedGuidelines(acknowledged);
+    }
+  }, [userId]);
+
+  // Handler to open new post modal (checks guidelines first)
+  const handleOpenNewPostModal = useCallback(() => {
+    if (!userId) return;
+
+    if (!hasAcknowledgedGuidelines) {
+      setShowGuidelinesModal(true);
+    } else {
+      setShowNewPostModal(true);
+    }
+  }, [userId, hasAcknowledgedGuidelines]);
+
+  // Handler when user acknowledges guidelines
+  const handleAcknowledgeGuidelines = useCallback(() => {
+    if (userId) {
+      communityStorage.acknowledgeGuidelines(userId);
+      setHasAcknowledgedGuidelines(true);
+      setShowNewPostModal(true);
+    }
+  }, [userId]);
+
   const [newPostContent, setNewPostContent] = useState("");
   const [newPostType, setNewPostType] = useState<keyof typeof POST_TYPES>("general");
   const [newPostSettings, setNewPostSettings] = useState<string[]>([]);
@@ -469,10 +534,24 @@ export default function CommunityPage() {
   const [postToDelete, setPostToDelete] = useState<Post | null>(null);
   const [deletingPost, setDeletingPost] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
+
+  // Edit Post Modal
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Report Content Modal
+  const [reportingPost, setReportingPost] = useState<Post | null>(null);
+  const [reportReason, setReportReason] = useState<string>("");
+  const [reportDetails, setReportDetails] = useState("");
+  const [submittingReport, setSubmittingReport] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<{ status: string; connection_id?: string } | null>(null);
 
   // Animation States
   const [animatingLikes, setAnimatingLikes] = useState<Set<string>>(new Set());
+  const [animatingReactions, setAnimatingReactions] = useState<Set<string>>(new Set());
+  const [openReactionPicker, setOpenReactionPicker] = useState<string | null>(null);
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
   const [loadingConnections, setLoadingConnections] = useState(false);
   const [loadingDiscover, setLoadingDiscover] = useState(false);
@@ -483,6 +562,8 @@ export default function CommunityPage() {
   const [mentorSpecialtyFilter, setMentorSpecialtyFilter] = useState<string | null>(null);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [contentReady, setContentReady] = useState(false);
+  const [feedSearch, setFeedSearch] = useState("");
+  const feedSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Comments Modal State
   const [showCommentsModal, setShowCommentsModal] = useState(false);
@@ -516,6 +597,11 @@ export default function CommunityPage() {
       // Add sort parameter
       params.append("sort", feedSort);
 
+      // Add search parameter
+      if (feedSearch.trim()) {
+        params.append("search", feedSearch.trim());
+      }
+
       if (showMyPosts) {
         params.append("author_id", userId);
       } else if (showFriendsFeed && connections.length > 0) {
@@ -545,7 +631,31 @@ export default function CommunityPage() {
     } finally {
       setLoadingPosts(false);
     }
-  }, [userId, postFilter, feedSort, showMyPosts, showFriendsFeed, connections]);
+  }, [userId, postFilter, feedSort, feedSearch, showMyPosts, showFriendsFeed, connections]);
+
+  // Debounced search handler for feed
+  const handleFeedSearchChange = useCallback((value: string) => {
+    setFeedSearch(value);
+
+    // Clear any existing timeout
+    if (feedSearchTimeoutRef.current) {
+      clearTimeout(feedSearchTimeoutRef.current);
+    }
+
+    // Set a new timeout to trigger search after 400ms of no typing
+    feedSearchTimeoutRef.current = setTimeout(() => {
+      // loadPosts will be called automatically by the useEffect watching feedSearch
+    }, 400);
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (feedSearchTimeoutRef.current) {
+        clearTimeout(feedSearchTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load connections
   const loadConnections = useCallback(async () => {
@@ -1251,6 +1361,125 @@ export default function CommunityPage() {
     }
   };
 
+  // Story-telling reactions mapping with full Tailwind classes
+  const REACTION_CONFIG = {
+    celebration: {
+      emoji: "🙌",
+      label: "Celebrate",
+      activeClass: "bg-amber-500/20 text-amber-400 shadow-md shadow-amber-500/10",
+      inactiveClass: "bg-slate-800 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10",
+      pickerActiveClass: "bg-amber-500/20"
+    },
+    thinking: {
+      emoji: "💭",
+      label: "Thinking",
+      activeClass: "bg-blue-500/20 text-blue-400 shadow-md shadow-blue-500/10",
+      inactiveClass: "bg-slate-800 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10",
+      pickerActiveClass: "bg-blue-500/20"
+    },
+    fire: {
+      emoji: "🔥",
+      label: "Fire",
+      activeClass: "bg-orange-500/20 text-orange-400 shadow-md shadow-orange-500/10",
+      inactiveClass: "bg-slate-800 text-slate-400 hover:text-orange-400 hover:bg-orange-500/10",
+      pickerActiveClass: "bg-orange-500/20"
+    },
+    solidarity: {
+      emoji: "🫂",
+      label: "Support",
+      activeClass: "bg-purple-500/20 text-purple-400 shadow-md shadow-purple-500/10",
+      inactiveClass: "bg-slate-800 text-slate-400 hover:text-purple-400 hover:bg-purple-500/10",
+      pickerActiveClass: "bg-purple-500/20"
+    }
+  } as const;
+
+  // Get suggested reaction based on post type
+  const getSuggestedReaction = (postType: string): ReactionType => {
+    switch (postType) {
+      case "win": return "celebration";
+      case "question": return "thinking";
+      case "insight": return "fire";
+      case "reflection": return "solidarity";
+      default: return "celebration";
+    }
+  };
+
+  // Handle reaction toggle
+  const handleReaction = async (post: Post, reactionType: ReactionType) => {
+    if (!userId) return;
+
+    const isRemoving = post.user_reactions.includes(reactionType);
+    const animKey = `${post.id}-${reactionType}`;
+
+    // Trigger animation when adding
+    if (!isRemoving) {
+      setAnimatingReactions(prev => new Set(prev).add(animKey));
+      setTimeout(() => {
+        setAnimatingReactions(prev => {
+          const next = new Set(prev);
+          next.delete(animKey);
+          return next;
+        });
+      }, 400);
+    }
+
+    // Optimistic update
+    setPosts(prev => prev.map(p => {
+      if (p.id === post.id) {
+        const newUserReactions = isRemoving
+          ? p.user_reactions.filter(r => r !== reactionType)
+          : [...p.user_reactions, reactionType];
+
+        const countKey = `${reactionType}_count` as keyof PostReactions;
+        const newReactions = {
+          ...p.reactions,
+          [countKey]: isRemoving
+            ? Math.max(0, p.reactions[countKey] - 1)
+            : p.reactions[countKey] + 1
+        };
+
+        return { ...p, user_reactions: newUserReactions, reactions: newReactions };
+      }
+      return p;
+    }));
+
+    // Close picker
+    setOpenReactionPicker(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      if (isRemoving) {
+        await fetch(`/api/community/posts/${post.id}/react?reaction_type=${reactionType}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        });
+      } else {
+        await fetch(`/api/community/posts/${post.id}/react`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ reaction_type: reactionType })
+        });
+      }
+    } catch (error) {
+      // Revert on error
+      setPosts(prev => prev.map(p => {
+        if (p.id === post.id) {
+          return {
+            ...p,
+            user_reactions: post.user_reactions,
+            reactions: post.reactions
+          };
+        }
+        return p;
+      }));
+    }
+  };
+
   // Bookmark/unbookmark post
   const handleBookmarkPost = async (post: Post) => {
     if (!userId) return;
@@ -1369,6 +1598,106 @@ export default function CommunityPage() {
       alert("Failed to delete post");
     } finally {
       setDeletingPost(false);
+    }
+  };
+
+  // Open edit modal for a post
+  const handleEditPost = (post: Post) => {
+    if (!userId || post.user_id !== userId) return;
+    setEditingPost(post);
+    setEditContent(post.content);
+  };
+
+  // Save edited post
+  const saveEditedPost = async () => {
+    if (!editingPost || !userId || !editContent.trim()) return;
+
+    setSavingEdit(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setSavingEdit(false);
+        return;
+      }
+
+      const response = await fetch(`/api/community/posts`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          post_id: editingPost.id,
+          content: editContent.trim()
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update post in state
+        setPosts(prev => prev.map(p =>
+          p.id === editingPost.id
+            ? { ...p, content: editContent.trim(), is_edited: true }
+            : p
+        ));
+        setEditingPost(null);
+        setEditContent("");
+      } else {
+        alert(data.error || "Failed to update post");
+      }
+    } catch (error) {
+      console.error("Error updating post:", error);
+      alert("Failed to update post");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // Report content
+  const submitReport = async () => {
+    if (!reportingPost || !userId || !reportReason) return;
+
+    setSubmittingReport(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setSubmittingReport(false);
+        return;
+      }
+
+      const response = await fetch(`/api/community/report`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          content_type: "post",
+          content_id: reportingPost.id,
+          reason: reportReason,
+          additional_details: reportDetails.trim() || null
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setReportingPost(null);
+        setReportReason("");
+        setReportDetails("");
+        // Show subtle success message
+        alert("Thank you for your report. Our team will review it shortly.");
+      } else {
+        alert(data.error || "Failed to submit report");
+      }
+    } catch (error) {
+      console.error("Error submitting report:", error);
+      alert("Failed to submit report");
+    } finally {
+      setSubmittingReport(false);
     }
   };
 
@@ -2084,7 +2413,7 @@ export default function CommunityPage() {
                 if (!hasProfile) {
                   setShowOnboarding(true);
                 } else {
-                  setShowNewPostModal(true);
+                  handleOpenNewPostModal();
                 }
               }}
               className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-500 to-blue-500 hover:from-teal-400 hover:to-blue-400 text-white font-semibold premium-button"
@@ -2131,7 +2460,7 @@ export default function CommunityPage() {
             <div className="sticky top-24 space-y-4">
               {/* Collapse Toggle Button */}
               <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                onClick={handleSidebarToggle}
                 className="w-full flex items-center justify-center p-2 rounded-xl border border-slate-800 bg-slate-900/50 text-slate-400 hover:text-slate-200 hover:border-slate-700 premium-transition"
                 title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
@@ -2215,9 +2544,21 @@ export default function CommunityPage() {
                       <p className="text-lg font-bold text-violet-400">{posts.filter(p => p.user_id === userId).length}</p>
                       <p className="text-xs text-slate-500">Posts</p>
                     </div>
-                    <div className="premium-transition hover:scale-105 cursor-default">
-                      <p className="text-lg font-bold text-emerald-400">{conversations.length}</p>
-                      <p className="text-xs text-slate-500">Chats</p>
+                    <div
+                      onClick={() => setShowMessagesPanel(true)}
+                      className="premium-transition hover:scale-105 cursor-pointer group relative"
+                      title="Active direct message conversations"
+                    >
+                      <p className="text-lg font-bold text-emerald-400 group-hover:text-emerald-300">
+                        {conversations.length > 0 ? conversations.length : '-'}
+                      </p>
+                      <p className="text-xs text-slate-500 group-hover:text-slate-400">
+                        {conversations.length === 0 ? 'No chats' : 'Chats'}
+                      </p>
+                      {/* Tooltip on hover */}
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-xs text-slate-300 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        Click to view messages
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2325,6 +2666,26 @@ export default function CommunityPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                       </svg>
                       Top Posts
+                    </button>
+
+                    {/* Trending Posts */}
+                    <button
+                      onClick={() => {
+                        setFeedSort("trending");
+                        setShowFriendsFeed(false);
+                        setShowSavedPosts(false);
+                        setShowMyPosts(false);
+                      }}
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium premium-transition ${
+                        !showFriendsFeed && !showSavedPosts && feedSort === "trending"
+                          ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                      </svg>
+                      Trending
                     </button>
 
                     {/* Friends Feed */}
@@ -2451,6 +2812,76 @@ export default function CommunityPage() {
             {/* FEED TAB */}
             {activeTab === "feed" && (
               <div className="space-y-4">
+                {/* Search Bar */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={feedSearch}
+                    onChange={(e) => handleFeedSearchChange(e.target.value)}
+                    placeholder="Search posts by topic, keyword, or author..."
+                    className="w-full pl-11 pr-10 py-3 rounded-xl border border-slate-800 bg-slate-900/50 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent premium-transition"
+                  />
+                  {feedSearch && (
+                    <button
+                      onClick={() => {
+                        setFeedSearch("");
+                        loadPosts();
+                      }}
+                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-500 hover:text-slate-300 premium-transition"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
+                {/* Search Results Indicator */}
+                {feedSearch && (
+                  <div className="flex items-center justify-between px-1">
+                    <p className="text-sm text-slate-400">
+                      {loadingPosts ? (
+                        <span className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full border-2 border-slate-500 border-t-teal-400 animate-spin" />
+                          Searching...
+                        </span>
+                      ) : (
+                        <>Showing results for "<span className="text-teal-400">{feedSearch}</span>"</>
+                      )}
+                    </p>
+                    {!loadingPosts && (
+                      <button
+                        onClick={() => {
+                          setFeedSearch("");
+                          loadPosts();
+                        }}
+                        className="text-sm text-slate-500 hover:text-teal-400 premium-transition"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Active Filter Chips */}
+                {activeTab === "feed" && (
+                  <FilterChips
+                    sort={feedSort as any}
+                    postType={(postFilter || 'all') as any}
+                    onClearSort={() => setFeedSort("recent")}
+                    onClearPostType={() => setPostFilter(null)}
+                    onClearAll={() => {
+                      setFeedSort("recent");
+                      setPostFilter(null);
+                    }}
+                  />
+                )}
+
                 {/* Posts */}
                 {(() => {
                   const displayPosts = showSavedPosts ? posts.filter(p => p.bookmarked_by_user) : posts;
@@ -2513,10 +2944,28 @@ export default function CommunityPage() {
                         <h3 className="text-lg font-semibold text-slate-100 mb-2">No posts yet</h3>
                         <p className="text-slate-400 mb-4">You haven't shared anything yet. Start a conversation!</p>
                         <button
-                          onClick={() => setShowNewPostModal(true)}
+                          onClick={handleOpenNewPostModal}
                           className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium premium-button"
                         >
                           Create Your First Post
+                        </button>
+                      </>
+                    ) : feedSearch ? (
+                      <>
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-700/50 flex items-center justify-center">
+                          <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-100 mb-2">No results found</h3>
+                        <p className="text-slate-400 mb-4">
+                          No posts match "<span className="text-teal-400">{feedSearch}</span>". Try different keywords or browse all posts.
+                        </p>
+                        <button
+                          onClick={() => setFeedSearch("")}
+                          className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 font-medium premium-button hover:bg-slate-600"
+                        >
+                          Clear Search
                         </button>
                       </>
                     ) : (
@@ -2524,7 +2973,7 @@ export default function CommunityPage() {
                         <h3 className="text-lg font-semibold text-slate-100 mb-2">No posts yet</h3>
                         <p className="text-slate-400 mb-4">Be the first to share something with the community!</p>
                         <button
-                          onClick={() => setShowNewPostModal(true)}
+                          onClick={handleOpenNewPostModal}
                           className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium premium-button"
                         >
                           Create First Post
@@ -2563,6 +3012,9 @@ export default function CommunityPage() {
                               )}
                               <span className="text-slate-500 text-sm">·</span>
                               <span className="text-slate-500 text-sm">{formatTime(post.created_at)}</span>
+                              {post.is_edited && (
+                                <span className="text-slate-600 text-xs italic">(edited)</span>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               <span className={`px-2 py-0.5 rounded-full text-xs border premium-transition hover:scale-105 ${getPostTypeStyle(post.post_type)}`}>
@@ -2575,6 +3027,39 @@ export default function CommunityPage() {
                               ))}
                             </div>
                           </div>
+
+                          {/* More Menu (Report) - only visible for other users' posts */}
+                          {post.user_id !== userId && (
+                            <div className="relative">
+                              <button
+                                onClick={() => setShowMoreMenu(showMoreMenu === post.id ? null : post.id)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-800 premium-transition"
+                                title="More options"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                </svg>
+                              </button>
+
+                              {/* Dropdown Menu */}
+                              {showMoreMenu === post.id && (
+                                <div className="absolute right-0 top-full mt-1 w-40 rounded-lg bg-slate-800 border border-slate-700 shadow-xl animate-fade-in-scale z-20">
+                                  <button
+                                    onClick={() => {
+                                      setShowMoreMenu(null);
+                                      setReportingPost(post);
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 rounded-lg flex items-center gap-2 premium-transition"
+                                  >
+                                    <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    Report
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -2603,26 +3088,105 @@ export default function CommunityPage() {
                       </div>
 
                       {/* Post Actions */}
-                      <div className="px-4 pb-4 flex items-center gap-3">
-                        <button
-                          onClick={() => handleLikePost(post)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg premium-transition hover:scale-105 active:scale-95 ${
-                            post.liked_by_user
-                              ? "bg-rose-500/20 text-rose-400 shadow-md shadow-rose-500/10"
-                              : "bg-slate-800 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
-                          }`}
-                        >
-                          <svg
-                            className={`w-4 h-4 premium-transition ${animatingLikes.has(post.id) ? 'animate-heart-pop' : ''}`}
-                            fill={post.liked_by_user ? "currentColor" : "none"}
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                          </svg>
-                          <span className="text-sm font-medium">{post.likes_count || ""}</span>
-                        </button>
+                      <div className="px-4 pb-4 flex items-center gap-2 flex-wrap">
+                        {/* Story-telling Reactions */}
+                        <div className="relative flex items-center gap-1">
+                          {/* Suggested reaction based on post type */}
+                          {(() => {
+                            const suggestedReaction = getSuggestedReaction(post.post_type);
+                            const config = REACTION_CONFIG[suggestedReaction];
+                            const isActive = post.user_reactions?.includes(suggestedReaction);
+                            const count = post.reactions?.[`${suggestedReaction}_count` as keyof PostReactions] || 0;
+                            const animKey = `${post.id}-${suggestedReaction}`;
 
+                            return (
+                              <button
+                                onClick={() => handleReaction(post, suggestedReaction)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg premium-transition hover:scale-105 active:scale-95 ${
+                                  isActive ? config.activeClass : config.inactiveClass
+                                }`}
+                                title={config.label}
+                              >
+                                <span className={`text-base premium-transition ${animatingReactions.has(animKey) ? 'animate-bounce-in' : ''}`}>
+                                  {config.emoji}
+                                </span>
+                                {count > 0 && <span className="text-sm font-medium">{count}</span>}
+                              </button>
+                            );
+                          })()}
+
+                          {/* Other reactions with counts > 0 */}
+                          {(Object.keys(REACTION_CONFIG) as ReactionType[])
+                            .filter(type => {
+                              const suggested = getSuggestedReaction(post.post_type);
+                              if (type === suggested) return false;
+                              const count = post.reactions?.[`${type}_count` as keyof PostReactions] || 0;
+                              return count > 0 || post.user_reactions?.includes(type);
+                            })
+                            .map(type => {
+                              const config = REACTION_CONFIG[type];
+                              const isActive = post.user_reactions?.includes(type);
+                              const count = post.reactions?.[`${type}_count` as keyof PostReactions] || 0;
+                              const animKey = `${post.id}-${type}`;
+
+                              return (
+                                <button
+                                  key={type}
+                                  onClick={() => handleReaction(post, type)}
+                                  className={`flex items-center gap-1 px-2 py-1.5 rounded-lg premium-transition hover:scale-105 active:scale-95 ${
+                                    isActive
+                                      ? config.activeClass
+                                      : "bg-slate-800/50 text-slate-400 hover:bg-slate-700"
+                                  }`}
+                                  title={config.label}
+                                >
+                                  <span className={`text-sm ${animatingReactions.has(animKey) ? 'animate-bounce-in' : ''}`}>
+                                    {config.emoji}
+                                  </span>
+                                  {count > 0 && <span className="text-xs font-medium">{count}</span>}
+                                </button>
+                              );
+                            })}
+
+                          {/* Add reaction button */}
+                          <button
+                            onClick={() => setOpenReactionPicker(openReactionPicker === post.id ? null : post.id)}
+                            className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800/50 text-slate-500 hover:bg-slate-700 hover:text-slate-300 premium-transition"
+                            title="Add reaction"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                          </button>
+
+                          {/* Reaction picker dropdown */}
+                          {openReactionPicker === post.id && (
+                            <div className="absolute left-0 bottom-full mb-2 flex items-center gap-1 p-2 rounded-xl bg-slate-800 border border-slate-700 shadow-xl animate-fade-in-scale z-10">
+                              {(Object.keys(REACTION_CONFIG) as ReactionType[]).map(type => {
+                                const config = REACTION_CONFIG[type];
+                                const isActive = post.user_reactions?.includes(type);
+                                return (
+                                  <button
+                                    key={type}
+                                    onClick={() => handleReaction(post, type)}
+                                    className={`flex flex-col items-center p-2 rounded-lg premium-transition hover:scale-110 ${
+                                      isActive ? config.pickerActiveClass : "hover:bg-slate-700"
+                                    }`}
+                                    title={config.label}
+                                  >
+                                    <span className="text-xl">{config.emoji}</span>
+                                    <span className="text-[10px] text-slate-400 mt-0.5">{config.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Divider */}
+                        <div className="w-px h-6 bg-slate-700 mx-1" />
+
+                        {/* Comments button */}
                         <button
                           onClick={() => openCommentsModal(post)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 premium-transition hover:scale-105 active:scale-95"
@@ -2670,17 +3234,28 @@ export default function CommunityPage() {
                           )}
                         </button>
 
-                        {/* Delete button - only visible on own posts */}
+                        {/* Edit & Delete buttons - only visible on own posts */}
                         {post.user_id === userId && (
-                          <button
-                            onClick={() => handleDeletePost(post)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-red-500/10 premium-transition hover:scale-105 active:scale-95"
-                            title="Delete post"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleEditPost(post)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10 premium-transition hover:scale-105 active:scale-95"
+                              title="Edit post"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeletePost(post)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-red-400 hover:bg-red-500/10 premium-transition hover:scale-105 active:scale-95"
+                              title="Delete post"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -3257,6 +3832,220 @@ export default function CommunityPage() {
         </div>
       )}
 
+      {/* Edit Post Modal */}
+      {editingPost && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 modal-backdrop">
+          <div className="bg-slate-900 rounded-2xl border border-slate-700 max-w-lg w-full modal-content shadow-2xl shadow-black/50">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-slate-100">Edit Post</h3>
+                <button
+                  onClick={() => {
+                    setEditingPost(null);
+                    setEditContent("");
+                  }}
+                  disabled={savingEdit}
+                  className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 premium-transition disabled:opacity-50"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Post Type Badge */}
+              <div className="mb-4">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                  editingPost.post_type === "win" ? "bg-amber-500/20 text-amber-400" :
+                  editingPost.post_type === "question" ? "bg-blue-500/20 text-blue-400" :
+                  editingPost.post_type === "insight" ? "bg-purple-500/20 text-purple-400" :
+                  editingPost.post_type === "reflection" ? "bg-rose-500/20 text-rose-400" :
+                  "bg-slate-700 text-slate-300"
+                }`}>
+                  {editingPost.post_type === "win" ? "Win" :
+                   editingPost.post_type === "question" ? "Question" :
+                   editingPost.post_type === "insight" ? "Insight" :
+                   editingPost.post_type === "reflection" ? "Reflection" :
+                   "General"}
+                </span>
+              </div>
+
+              {/* Edit Content */}
+              <div className="mb-4">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  disabled={savingEdit}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none premium-transition disabled:opacity-50"
+                  rows={6}
+                  maxLength={2000}
+                  placeholder="What's on your mind?"
+                />
+                <div className="flex justify-between items-center mt-2">
+                  <p className="text-xs text-slate-500">
+                    {editContent.length > 0 ? `${2000 - editContent.length} characters remaining` : ""}
+                  </p>
+                  {editContent !== editingPost.content && (
+                    <p className="text-xs text-teal-400">Changes will be saved</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setEditingPost(null);
+                    setEditContent("");
+                  }}
+                  disabled={savingEdit}
+                  className="flex-1 py-3 rounded-xl border border-slate-700 text-slate-300 font-medium premium-transition hover:bg-slate-800 hover:border-slate-600 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEditedPost}
+                  disabled={savingEdit || !editContent.trim() || editContent === editingPost.content}
+                  className="flex-1 py-3 rounded-xl bg-teal-500 text-white font-medium premium-transition hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {savingEdit ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Post Modal - Subtle and non-intrusive */}
+      {reportingPost && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 modal-backdrop">
+          <div className="bg-slate-900 rounded-2xl border border-slate-700 max-w-md w-full modal-content shadow-2xl shadow-black/50">
+            <div className="p-6">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-slate-100">Report Content</h3>
+                <button
+                  onClick={() => {
+                    setReportingPost(null);
+                    setReportReason("");
+                    setReportDetails("");
+                  }}
+                  disabled={submittingReport}
+                  className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 premium-transition disabled:opacity-50"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Description */}
+              <p className="text-slate-400 text-sm mb-6">
+                Help us understand the problem. Your report is confidential.
+              </p>
+
+              {/* Reason Selection */}
+              <div className="space-y-2 mb-4">
+                <p className="text-sm font-medium text-slate-300">Why are you reporting this?</p>
+                {[
+                  { value: "spam", label: "Spam or scam" },
+                  { value: "harassment", label: "Harassment or bullying" },
+                  { value: "inappropriate", label: "Inappropriate content" },
+                  { value: "misinformation", label: "Misinformation" },
+                  { value: "other", label: "Something else" }
+                ].map(option => (
+                  <label
+                    key={option.value}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer premium-transition ${
+                      reportReason === option.value
+                        ? "bg-teal-500/10 border border-teal-500/30"
+                        : "bg-slate-800/50 border border-slate-700 hover:bg-slate-800"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="reportReason"
+                      value={option.value}
+                      checked={reportReason === option.value}
+                      onChange={(e) => setReportReason(e.target.value)}
+                      disabled={submittingReport}
+                      className="w-4 h-4 accent-teal-500"
+                    />
+                    <span className="text-sm text-slate-200">{option.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              {/* Additional Details (optional) */}
+              {reportReason && (
+                <div className="mb-4 animate-fade-in-up">
+                  <label className="text-sm font-medium text-slate-300 mb-2 block">
+                    Additional details (optional)
+                  </label>
+                  <textarea
+                    value={reportDetails}
+                    onChange={(e) => setReportDetails(e.target.value)}
+                    disabled={submittingReport}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none text-sm premium-transition disabled:opacity-50"
+                    rows={3}
+                    maxLength={500}
+                    placeholder="Provide any additional context..."
+                  />
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setReportingPost(null);
+                    setReportReason("");
+                    setReportDetails("");
+                  }}
+                  disabled={submittingReport}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-700 text-slate-300 font-medium text-sm premium-transition hover:bg-slate-800 hover:border-slate-600 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitReport}
+                  disabled={submittingReport || !reportReason}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 font-medium text-sm premium-transition hover:bg-rose-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {submittingReport ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Report"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Comments Modal - Instagram-style */}
       {showCommentsModal && commentsPost && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 modal-backdrop">
@@ -3318,128 +4107,23 @@ export default function CommunityPage() {
                   <p className="text-slate-600 text-sm">Be the first to comment!</p>
                 </div>
               ) : (
-                comments.map((comment) => (
-                  <div key={comment.id} className="space-y-3">
-                    {/* Top-level comment */}
-                    <div className="flex gap-3 group">
-                      <Link href={`/community/profile/${comment.user_id}`}>
-                        {comment.author?.avatar_url ? (
-                          <img
-                            src={comment.author.avatar_url}
-                            alt={comment.author.display_name || "User"}
-                            className="w-8 h-8 rounded-full object-cover flex-shrink-0 ring-2 ring-slate-700 hover:ring-teal-500/50 premium-transition"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0 hover:scale-105 premium-transition">
-                            {getInitials(comment.author?.display_name || "?")}
-                          </div>
-                        )}
-                      </Link>
-                      <div className="flex-1 min-w-0">
-                        <div className="bg-slate-800/50 rounded-2xl rounded-tl-sm px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <Link href={`/community/profile/${comment.user_id}`} className="font-semibold text-slate-200 text-sm hover:text-teal-400 premium-transition">{comment.author?.display_name}</Link>
-                            {comment.author?.years_experience && (
-                              <span className="text-slate-500 text-xs">{comment.author.years_experience}</span>
-                            )}
-                          </div>
-                          <p className="text-slate-300 text-sm mt-1">{renderCommentContent(comment.content)}</p>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1 ml-2">
-                          <span className="text-slate-500 text-xs">{formatTimeAgo(comment.created_at)}</span>
-                          <button
-                            onClick={() => handleLikeComment(comment)}
-                            className={`flex items-center gap-1 text-xs font-medium premium-transition ${
-                              comment.liked_by_user
-                                ? "text-red-400"
-                                : "text-slate-500 hover:text-red-400"
-                            }`}
-                          >
-                            <svg className="w-3.5 h-3.5" fill={comment.liked_by_user ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                            </svg>
-                            {comment.likes_count > 0 && <span>{comment.likes_count}</span>}
-                          </button>
-                          <button
-                            onClick={() => startReply(comment)}
-                            className="text-slate-500 text-xs font-medium hover:text-blue-400 premium-transition"
-                          >
-                            Reply
-                          </button>
-                          {comment.user_id === userId && (
-                            <button
-                              onClick={() => handleDeleteComment(comment)}
-                              className="text-slate-500 text-xs font-medium hover:text-red-400 premium-transition opacity-0 group-hover:opacity-100"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Replies - indented */}
-                    {comment.replies && comment.replies.length > 0 && (
-                      <div className="ml-11 space-y-3 border-l-2 border-slate-700 pl-4">
-                        {comment.replies.map((reply) => (
-                          <div key={reply.id} className="flex gap-3 group">
-                            <Link href={`/community/profile/${reply.user_id}`}>
-                              {reply.author?.avatar_url ? (
-                                <img
-                                  src={reply.author.avatar_url}
-                                  alt={reply.author.display_name || "User"}
-                                  className="w-7 h-7 rounded-full object-cover flex-shrink-0 ring-2 ring-slate-700 hover:ring-teal-500/50 premium-transition"
-                                />
-                              ) : (
-                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal-500 to-blue-500 flex items-center justify-center text-xs font-bold text-white flex-shrink-0 hover:scale-105 premium-transition">
-                                  {getInitials(reply.author?.display_name || "?")}
-                                </div>
-                              )}
-                            </Link>
-                            <div className="flex-1 min-w-0">
-                              <div className="bg-slate-800/30 rounded-2xl rounded-tl-sm px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <Link href={`/community/profile/${reply.user_id}`} className="font-semibold text-slate-200 text-sm hover:text-teal-400 premium-transition">{reply.author?.display_name}</Link>
-                                </div>
-                                <p className="text-slate-300 text-sm mt-1">{renderCommentContent(reply.content)}</p>
-                              </div>
-                              <div className="flex items-center gap-4 mt-1 ml-2">
-                                <span className="text-slate-500 text-xs">{formatTimeAgo(reply.created_at)}</span>
-                                <button
-                                  onClick={() => handleLikeComment(reply, comment.id)}
-                                  className={`flex items-center gap-1 text-xs font-medium premium-transition ${
-                                    reply.liked_by_user
-                                      ? "text-red-400"
-                                      : "text-slate-500 hover:text-red-400"
-                                  }`}
-                                >
-                                  <svg className="w-3.5 h-3.5" fill={reply.liked_by_user ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                  </svg>
-                                  {reply.likes_count > 0 && <span>{reply.likes_count}</span>}
-                                </button>
-                                <button
-                                  onClick={() => startReply(comment)}
-                                  className="text-slate-500 text-xs font-medium hover:text-blue-400 premium-transition"
-                                >
-                                  Reply
-                                </button>
-                                {reply.user_id === userId && (
-                                  <button
-                                    onClick={() => handleDeleteComment(reply)}
-                                    className="text-slate-500 text-xs font-medium hover:text-red-400 premium-transition opacity-0 group-hover:opacity-100"
-                                  >
-                                    Delete
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
+                <div className="space-y-4">
+                  {comments.map((comment) => (
+                    <CommentThread
+                      key={comment.id}
+                      comment={comment}
+                      currentUserId={userId}
+                      depth={0}
+                      maxDepth={3}
+                      onReply={startReply}
+                      onLike={handleLikeComment}
+                      onDelete={handleDeleteComment}
+                      formatTimeAgo={formatTimeAgo}
+                      renderContent={renderCommentContent}
+                      getInitials={getInitials}
+                    />
+                  ))}
+                </div>
               )}
             </div>
 
@@ -3512,6 +4196,13 @@ export default function CommunityPage() {
           </div>
         </div>
       )}
+
+      {/* Community Guidelines Modal */}
+      <GuidelinesModal
+        isOpen={showGuidelinesModal}
+        onClose={() => setShowGuidelinesModal(false)}
+        onAcknowledge={handleAcknowledgeGuidelines}
+      />
 
       {/* New Post Modal */}
       {showNewPostModal && (

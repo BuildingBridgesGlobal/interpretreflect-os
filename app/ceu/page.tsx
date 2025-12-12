@@ -97,12 +97,15 @@ export default function CEUDashboard() {
   const [moduleProgress, setModuleProgress] = useState<ModuleProgress[]>([]);
   const [availableCEUs, setAvailableCEUs] = useState(0);
   const [cycle, setCycle] = useState<CycleInfo | null>(null);
-  const [selectedTab, setSelectedTab] = useState<"overview" | "workshops" | "certificates" | "progress">("overview");
+  const [selectedTab, setSelectedTab] = useState<"overview" | "workshops" | "certificates" | "progress" | "credits">("overview");
+  const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null);
+  const [billingHistory, setBillingHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
   const [userTier, setUserTier] = useState<string>("free"); // Default to free
   const [tierChecked, setTierChecked] = useState(false);
   const [availableWorkshops, setAvailableWorkshops] = useState<Workshop[]>([]);
-  const [credits, setCredits] = useState<{ monthly: number; topup: number; total: number }>({
+  const [credits, setCredits] = useState<{ monthly: number; topup: number; total: number; reset_at?: string }>({
     monthly: 0,
     topup: 0,
     total: 0,
@@ -154,9 +157,28 @@ export default function CEUDashboard() {
             const creditsData = await creditsResponse.json();
             setCredits(creditsData.credits);
           }
+          // Also load billing history for pro/growth users
+          try {
+            const { data: historyData, error: historyError } = await (supabase as any)
+              .from("credit_transactions")
+              .select("*")
+              .eq("user_id", session.user.id)
+              .order("created_at", { ascending: false })
+              .limit(10);
+
+            if (!historyError && historyData) {
+              setBillingHistory(historyData);
+            }
+          } catch (historyErr) {
+            console.error("Error loading billing history:", historyErr);
+          }
+          setLoadingHistory(false);
         } catch (err) {
           console.error("Error fetching credits:", err);
+          setLoadingHistory(false);
         }
+      } else {
+        setLoadingHistory(false);
       }
 
       // Fetch available CEU workshops (only 30+ min content qualifies for CEUs)
@@ -230,6 +252,36 @@ export default function CEUDashboard() {
       month: "short",
       day: "numeric",
     });
+  };
+
+  // Handle top-up purchase
+  const handleTopUp = async (packageName: string) => {
+    setLoadingCheckout(`topup-${packageName}`);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setLoadingCheckout(null);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/credits/topup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ package: packageName }),
+      });
+
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error) {
+      console.error("Top-up error:", error);
+    } finally {
+      setLoadingCheckout(null);
+    }
   };
 
   const downloadCertificate = (cert: Certificate) => {
@@ -489,7 +541,7 @@ export default function CEUDashboard() {
 
   if (loading || !tierChecked) {
     return (
-      <div className="min-h-screen bg-slate-950">
+      <div className="min-h-screen bg-slate-950 relative overflow-hidden">
         <NavBar />
         <div className="flex items-center justify-center h-[calc(100vh-80px)]">
           <div className="text-teal-400">Loading...</div>
@@ -507,7 +559,7 @@ export default function CEUDashboard() {
     const totalAvailableCEUs = availableWorkshops.reduce((sum, w) => sum + (w.ceu_value || 0), 0);
 
     return (
-      <div className="min-h-screen bg-slate-950">
+      <div className="min-h-screen bg-slate-950 relative overflow-hidden">
         <NavBar />
         <main className="max-w-6xl mx-auto px-4 py-8">
           {/* Header */}
@@ -662,17 +714,54 @@ export default function CEUDashboard() {
 
             {/* No workshops - Coming Soon state */}
             {availableWorkshops.length === 0 && (
-              <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-12 text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-teal-500/10 border border-teal-500/30 flex items-center justify-center">
-                  <svg className="w-8 h-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
+              <div className="rounded-2xl border border-teal-500/20 bg-gradient-to-br from-slate-900 via-slate-900 to-teal-950/30 p-8 md:p-12 text-center">
+                {/* Animated gradient orb background */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-32 h-32 rounded-full bg-teal-500/5 blur-3xl animate-pulse" />
+                  </div>
+
+                  {/* Icon */}
+                  <div className="relative w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-teal-500/20 to-violet-500/20 border border-teal-500/30 flex items-center justify-center">
+                    <svg className="w-10 h-10 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+
+                  {/* Text */}
+                  <h3 className="text-2xl font-bold text-slate-100 mb-3">CEU Workshops Coming Soon</h3>
+                  <p className="text-slate-400 text-base max-w-lg mx-auto mb-6 leading-relaxed">
+                    We're preparing RID-approved workshops with professional video content, comprehensive assessments, and official certificates.
+                  </p>
+
+                  {/* Features preview */}
+                  <div className="flex flex-wrap justify-center gap-3 mb-8">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
+                      <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-xs text-slate-300">RID Approved</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
+                      <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-xs text-slate-300">Assessments</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
+                      <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                      </svg>
+                      <span className="text-xs text-slate-300">Certificates</span>
+                    </div>
+                  </div>
+
+                  {/* RID Badge */}
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-500/10 border border-teal-500/30">
+                    <span className="text-sm font-bold text-teal-400">RID</span>
+                    <span className="text-sm text-slate-400">CMP Sponsor #2309</span>
+                  </div>
                 </div>
-                <h3 className="text-lg font-semibold text-slate-100 mb-2">CEU Workshops Coming Soon</h3>
-                <p className="text-slate-400 text-sm max-w-md mx-auto">
-                  We're preparing RID-approved workshops with full video content, assessments, and certificates.
-                  Pro members will be the first to access new workshops.
-                </p>
               </div>
             )}
           </motion.div>
@@ -692,7 +781,7 @@ export default function CEUDashboard() {
                 <p className="text-slate-400 text-sm">
                   <span className="text-2xl font-bold text-teal-400">$30</span>
                   <span className="text-slate-500">/month</span>
-                  <span className="text-slate-400 ml-2">• 0.3 RID CEUs/month (3 hrs of workshops) • Track RID compliance</span>
+                  <span className="text-slate-400 ml-2">• 0.2 RID CEUs/month (2 hrs of workshops) • Track RID compliance</span>
                 </p>
               </div>
               <button
@@ -712,7 +801,7 @@ export default function CEUDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
       <NavBar />
 
       <main className="max-w-6xl mx-auto px-4 py-8">
@@ -890,7 +979,7 @@ export default function CEUDashboard() {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-slate-800 pb-2 overflow-x-auto">
-          {(["overview", "workshops", "certificates", "progress"] as const).map((tab) => (
+          {(["overview", "workshops", "certificates", "progress", "credits"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setSelectedTab(tab)}
@@ -904,6 +993,7 @@ export default function CEUDashboard() {
               {tab === "workshops" && `Workshops (${availableWorkshops.length})`}
               {tab === "certificates" && `Certificates (${certificates.length})`}
               {tab === "progress" && "Module Progress"}
+              {tab === "credits" && "Buy Credits"}
             </button>
           ))}
         </div>
@@ -1034,7 +1124,7 @@ export default function CEUDashboard() {
                       Credits Available
                       {credits.monthly > 0 && <span className="text-slate-400"> ({credits.monthly} monthly{credits.topup > 0 ? ` + ${credits.topup} top-up` : ""})</span>}
                     </p>
-                    <p className="text-xs text-slate-400">1 credit = 30 min (0.5 CEU) • 2 credits = 60 min (1.0 CEU)</p>
+                    <p className="text-xs text-slate-400">1 credit = 30 min (0.05 CEU) • 2 credits = 60 min (0.1 CEU)</p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -1058,7 +1148,7 @@ export default function CEUDashboard() {
                       Want more CEU workshops?
                     </p>
                     <p className="text-xs text-slate-400">
-                      Upgrade to Pro for 4 credits/month (0.3+ CEUs) instead of 1 credit
+                      Upgrade to Pro for 6 credits/month (0.3 CEUs) instead of 2 credits
                     </p>
                   </div>
                   <button
@@ -1169,17 +1259,54 @@ export default function CEUDashboard() {
 
             {/* No workshops - Coming Soon state */}
             {availableWorkshops.length === 0 && (
-              <div className="rounded-xl border border-teal-500/20 bg-teal-500/5 p-12 text-center">
-                <div className="w-16 h-16 rounded-full bg-teal-500/10 border border-teal-500/30 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
+              <div className="rounded-2xl border border-teal-500/20 bg-gradient-to-br from-slate-900 via-slate-900 to-teal-950/30 p-8 md:p-12 text-center">
+                {/* Animated gradient orb background */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-32 h-32 rounded-full bg-teal-500/5 blur-3xl animate-pulse" />
+                  </div>
+
+                  {/* Icon */}
+                  <div className="relative w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-teal-500/20 to-violet-500/20 border border-teal-500/30 flex items-center justify-center">
+                    <svg className="w-10 h-10 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+
+                  {/* Text */}
+                  <h3 className="text-2xl font-bold text-slate-100 mb-3">CEU Workshops Coming Soon</h3>
+                  <p className="text-slate-400 text-base max-w-lg mx-auto mb-6 leading-relaxed">
+                    We're preparing RID-approved workshops with professional video content, comprehensive assessments, and official certificates. You'll be notified when new workshops are available.
+                  </p>
+
+                  {/* Features preview */}
+                  <div className="flex flex-wrap justify-center gap-3 mb-8">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
+                      <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-xs text-slate-300">RID Approved</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
+                      <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-xs text-slate-300">Assessments</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
+                      <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                      </svg>
+                      <span className="text-xs text-slate-300">Certificates</span>
+                    </div>
+                  </div>
+
+                  {/* RID Badge */}
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-500/10 border border-teal-500/30">
+                    <span className="text-sm font-bold text-teal-400">RID</span>
+                    <span className="text-sm text-slate-400">CMP Sponsor #2309</span>
+                  </div>
                 </div>
-                <h3 className="text-lg font-semibold text-slate-100 mb-2">CEU Workshops Coming Soon</h3>
-                <p className="text-sm text-slate-400 max-w-md mx-auto">
-                  We're preparing RID-approved workshops with full video content, assessments, and certificates.
-                  You'll be notified when new workshops are available.
-                </p>
               </div>
             )}
 
@@ -1350,6 +1477,214 @@ export default function CEUDashboard() {
                   </div>
                 );
               })
+            )}
+          </div>
+        )}
+
+        {/* Credits Tab */}
+        {selectedTab === "credits" && (
+          <div className="space-y-6">
+            {/* Current Credits Card */}
+            <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-orange-500/5 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100">Your CEU Credits</h3>
+                  <p className="text-sm text-slate-400">Use credits to access RID-approved workshops</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="text-center p-3 rounded-lg bg-slate-800/50">
+                  <p className="text-xs text-slate-400">Monthly</p>
+                  <p className="text-2xl font-bold text-amber-400">{credits.monthly}</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-slate-800/50">
+                  <p className="text-xs text-slate-400">Top-Up</p>
+                  <p className="text-2xl font-bold text-teal-400">{credits.topup}</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-slate-800/50 border border-amber-500/30">
+                  <p className="text-xs text-slate-400">Total</p>
+                  <p className="text-2xl font-bold text-white">{credits.total}</p>
+                </div>
+              </div>
+
+              {/* Monthly Credit Counter with Reset Date */}
+              <div className="p-4 rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm font-medium text-slate-200">Monthly Credits</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg font-bold text-amber-400">{credits.monthly}</span>
+                    <span className="text-sm text-slate-400">/{userTier === "pro" ? "6" : "2"}</span>
+                    <span className="text-xs text-slate-500 ml-1">remaining</span>
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div className="h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${(credits.monthly / (userTier === "pro" ? 6 : 2)) * 100}%`
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">
+                    {userTier === "pro" ? "Pro Plan: 6 credits/month" : "Growth Plan: 2 credits/month"}
+                  </span>
+                  {credits.reset_at && (() => {
+                    // Calculate the next reset date from the last reset
+                    const lastReset = new Date(credits.reset_at);
+                    const now = new Date();
+                    const nextReset = new Date(lastReset);
+
+                    // Keep adding months until we're in the future
+                    while (nextReset <= now) {
+                      nextReset.setMonth(nextReset.getMonth() + 1);
+                    }
+
+                    return (
+                      <span className="text-amber-400/80 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Resets {nextReset.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500 mb-4">
+                Monthly credits refresh on your billing date. Top-up credits never expire.
+              </p>
+
+              <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+                <p className="text-xs text-slate-400 mb-1">Credit Value</p>
+                <p className="text-sm text-slate-300">1 credit = 30 min (0.05 CEU) • 2 credits = 60 min (0.1 CEU)</p>
+              </div>
+            </div>
+
+            {/* Top-Up Packages */}
+            <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-2">Buy More Credits</h3>
+              <p className="text-sm text-slate-400 mb-6">Top-up credits never expire and can be used anytime.</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                  onClick={() => handleTopUp("small")}
+                  disabled={loadingCheckout !== null}
+                  className="p-5 rounded-xl border border-slate-700 bg-slate-800/50 hover:border-teal-500/50 hover:bg-slate-800 transition-all text-center disabled:opacity-50"
+                >
+                  <p className="text-3xl font-bold text-teal-400">2</p>
+                  <p className="text-sm text-slate-400 mb-2">credits</p>
+                  <p className="text-lg font-semibold text-slate-200">$15</p>
+                  <p className="text-xs text-slate-500 mt-1">0.1 CEU value</p>
+                  {loadingCheckout === "topup-small" && (
+                    <p className="text-xs text-teal-400 mt-2">Processing...</p>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => handleTopUp("medium")}
+                  disabled={loadingCheckout !== null}
+                  className="p-5 rounded-xl border border-teal-500/50 bg-teal-500/10 hover:bg-teal-500/20 transition-all text-center relative disabled:opacity-50"
+                >
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-teal-500 text-white text-xs font-medium rounded-full">
+                    10% Off
+                  </span>
+                  <p className="text-3xl font-bold text-teal-400">4</p>
+                  <p className="text-sm text-slate-400 mb-2">credits</p>
+                  <p className="text-lg font-semibold text-slate-200">$27</p>
+                  <p className="text-xs text-slate-500 mt-1">0.2 CEU value</p>
+                  {loadingCheckout === "topup-medium" && (
+                    <p className="text-xs text-teal-400 mt-2">Processing...</p>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => handleTopUp("large")}
+                  disabled={loadingCheckout !== null}
+                  className="p-5 rounded-xl border border-violet-500/50 bg-violet-500/10 hover:bg-violet-500/20 transition-all text-center relative disabled:opacity-50"
+                >
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-violet-500 text-white text-xs font-medium rounded-full">
+                    20% Off
+                  </span>
+                  <p className="text-3xl font-bold text-violet-400">8</p>
+                  <p className="text-sm text-slate-400 mb-2">credits</p>
+                  <p className="text-lg font-semibold text-slate-200">$48</p>
+                  <p className="text-xs text-slate-500 mt-1">0.4 CEU value</p>
+                  {loadingCheckout === "topup-large" && (
+                    <p className="text-xs text-violet-400 mt-2">Processing...</p>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Credit History */}
+            <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-6">
+              <h3 className="text-lg font-semibold text-slate-100 mb-4">Credit History</h3>
+              {loadingHistory ? (
+                <div className="text-center py-4 text-slate-400">Loading...</div>
+              ) : billingHistory.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">No credit transactions yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {billingHistory.map((tx) => (
+                    <div key={tx.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                          tx.amount > 0 ? "bg-emerald-500/20" : "bg-rose-500/20"
+                        }`}>
+                          {tx.amount > 0 ? (
+                            <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm text-slate-200">{tx.description}</p>
+                          <p className="text-xs text-slate-500">
+                            {new Date(tx.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`text-sm font-medium ${tx.amount > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                        {tx.amount > 0 ? "+" : ""}{tx.amount} credits
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Upgrade Prompt for Growth Tier (to get more credits) */}
+            {userTier === "growth" && (
+              <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-purple-500/10 p-6">
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">Want More Monthly Credits?</h3>
+                <p className="text-sm text-slate-400 mb-4">
+                  Upgrade to Pro for 6 monthly credits (0.3 CEUs) instead of 2 credits.
+                </p>
+                <button
+                  onClick={() => router.push("/settings?tab=billing")}
+                  className="px-4 py-2 rounded-lg bg-violet-500 text-white font-medium hover:bg-violet-400 transition-colors text-sm"
+                >
+                  Upgrade to Pro
+                </button>
+              </div>
             )}
           </div>
         )}
