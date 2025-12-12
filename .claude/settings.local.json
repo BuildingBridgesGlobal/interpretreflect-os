@@ -49,7 +49,9 @@
       "Bash(python3:*)",
       "Bash(node:*)",
       "Bash(npx eslint:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npm run test:run:*)",
+      "Bash(sort:*)"
     ],
     "deny": [],
     "ask": []

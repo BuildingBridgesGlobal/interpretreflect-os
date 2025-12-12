@@ -77,9 +77,9 @@ export default function ResetPasswordPage() {
     setSuccess(true);
     setLoading(false);
 
-    // Redirect to login after 3 seconds
+    // Redirect to signin after 3 seconds
     setTimeout(() => {
-      router.push("/login");
+      router.push("/signin");
     }, 3000);
   };
 
@@ -123,7 +123,7 @@ export default function ResetPasswordPage() {
             </Link>
 
             <Link
-              href="/login"
+              href="/signin"
               className="block w-full text-center rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800"
             >
               Back to Sign In
@@ -159,7 +159,7 @@ export default function ResetPasswordPage() {
             </div>
 
             <Link
-              href="/login"
+              href="/signin"
               className="block w-full text-center rounded-lg bg-teal-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-300"
             >
               Sign In Now

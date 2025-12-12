@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
 
             <div className="pt-4 border-t border-slate-800">
               <Link
-                href="/login"
+                href="/signin"
                 className="block w-full text-center rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800"
               >
                 Back to Sign In
@@ -113,7 +113,7 @@ export default function ForgotPasswordPage() {
 
           <p className="text-center text-sm text-slate-400">
             Remember your password?{" "}
-            <Link href="/login" className="text-teal-400 hover:text-teal-300">
+            <Link href="/signin" className="text-teal-400 hover:text-teal-300">
               Sign in
             </Link>
           </p>
