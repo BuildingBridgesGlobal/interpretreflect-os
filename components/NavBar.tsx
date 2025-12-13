@@ -367,14 +367,14 @@ export default function NavBar() {
                 Wellness
               </Link>
               <Link
-                href="/ceu"
+                href="/workshops"
                 className={`text-sm font-medium transition-colors ${
-                  isActive("/ceu")
+                  isActive("/workshops") || pathname?.startsWith("/workshops")
                     ? "text-teal-400"
                     : "text-slate-300 hover:text-teal-300"
                 }`}
               >
-                My CEUs
+                Workshops
               </Link>
             </div>
           )}
@@ -718,15 +718,15 @@ export default function NavBar() {
                   Wellness
                 </Link>
                 <Link
-                  href="/ceu"
+                  href="/workshops"
                   onClick={() => setMobileMenuOpen(false)}
                   className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    isActive("/ceu")
+                    isActive("/workshops") || pathname?.startsWith("/workshops")
                       ? "bg-teal-500/20 text-teal-400"
                       : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
                   }`}
                 >
-                  My CEUs
+                  Workshops
                 </Link>
                 <Link
                   href="/settings"

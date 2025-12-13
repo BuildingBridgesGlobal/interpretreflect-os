@@ -19,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({ variant = "interpreter" }) => {
         <nav className="hidden md:flex items-center gap-6 text-[0.8rem] text-slate-300">
           <a href="/" className="hover:text-teal-300 transition">For Interpreters</a>
           <a href="/for-agencies" className="hover:text-teal-300 transition">For Agencies</a>
+          <a href="/workshops" className="hover:text-teal-300 transition">CEU Workshops</a>
           <a href="#pricing" className="hover:text-teal-300 transition">Pricing</a>
         </nav>
         <div className="flex items-center gap-2">
