@@ -482,7 +482,7 @@ export default function AssessmentQuiz({
           <p className="text-lg text-slate-100 mb-6">{currentQuestion.question}</p>
 
           <div className="space-y-3">
-            {currentQuestion.options.map((option) => {
+            {(currentQuestion.options || []).filter(option => option != null).map((option) => {
               const isSelected = answers[currentQuestion.id] === option.id;
 
               return (
@@ -503,9 +503,9 @@ export default function AssessmentQuiz({
                           : "bg-slate-700 text-slate-400"
                       }`}
                     >
-                      {option.id.toUpperCase()}
+                      {(option.id || '').toUpperCase()}
                     </span>
-                    <span className="text-sm">{option.text}</span>
+                    <span className="text-sm">{option.text || ''}</span>
                   </div>
                 </button>
               );

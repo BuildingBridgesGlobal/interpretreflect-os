@@ -7,6 +7,7 @@ import NavBar from "@/components/NavBar";
 import ElyaInterface from "@/components/dashboard/ElyaInterface";
 import UpgradeModal from "@/components/UpgradeModal";
 import PendingInvitationBanner from "@/components/PendingInvitationBanner";
+import OnboardingChecklist from "@/components/dashboard/OnboardingChecklist";
 import { motion } from "framer-motion";
 import { SkeletonDashboard } from "@/components/ui/skeleton";
 import Link from "next/link";
@@ -94,6 +95,18 @@ function DashboardPageContent() {
     tryNextTime: ""
   });
   const [savingQuickDebrief, setSavingQuickDebrief] = useState(false);
+
+  // Assignment card tab state
+  const [assignmentTab, setAssignmentTab] = useState<"upcoming" | "past">("upcoming");
+
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [onboardingStatus, setOnboardingStatus] = useState({
+    hasAssignments: false,
+    hasWellnessCheckin: false,
+    hasCompletedWorkshop: false,
+    hasPostedInCommunity: false
+  });
 
   // Check for mode, message, assignment, conversation, and quickDebrief parameters
   const initialMode = searchParams.get('mode');
@@ -222,6 +235,49 @@ function DashboardPageContent() {
         setRecentReflections(reflectionsData as unknown as ElyaConversation[]);
       }
 
+      // Check onboarding status
+      const [wellnessCheck, communityCheck] = await Promise.all([
+        // Check for any wellness check-ins
+        supabase
+          .from("wellness_checkins")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", session.user.id)
+          .limit(1),
+        // Check for community posts
+        supabase
+          .from("community_posts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", session.user.id)
+          .limit(1)
+      ]);
+
+      // Use already-fetched data for assignments
+      const hasAnyAssignments = Boolean((upcomingData && upcomingData.length > 0) || (recentData && recentData.length > 0));
+
+      // For CEU completion, check the userData ceu_credits_remaining from profile
+      // If remaining < initial allocation, they've used some (completed workshops)
+      // We'll check if they have any reflections which is a reasonable proxy
+      const hasCompletedAnyCEU = reflectionsData && reflectionsData.some(r => r.mode === 'debrief');
+
+      setOnboardingStatus({
+        hasAssignments: hasAnyAssignments,
+        hasWellnessCheckin: (wellnessCheck.count || 0) > 0,
+        hasCompletedWorkshop: Boolean(hasCompletedAnyCEU),
+        hasPostedInCommunity: (communityCheck.count || 0) > 0
+      });
+
+      // Hide onboarding if user dismissed it (stored in localStorage) or completed all items
+      const dismissed = typeof window !== 'undefined' && localStorage.getItem('onboarding_dismissed') === 'true';
+      const allComplete =
+        hasAnyAssignments &&
+        (wellnessCheck.count || 0) > 0 &&
+        Boolean(hasCompletedAnyCEU) &&
+        (communityCheck.count || 0) > 0;
+
+      if (dismissed || allComplete) {
+        setShowOnboarding(false);
+      }
+
       // If there's a locked assignment ID, fetch that specific assignment
       if (initialAssignmentId) {
         const { data: lockedData } = await supabase
@@ -341,6 +397,14 @@ Try next time: ${quickDebriefData.tryNextTime || 'Not specified'}`;
     }
   };
 
+  // Handle dismissing onboarding
+  const handleDismissOnboarding = () => {
+    setShowOnboarding(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('onboarding_dismissed', 'true');
+    }
+  };
+
   const getReflectionTitle = (reflection: ElyaConversation) => {
     if (reflection.ai_title) return reflection.ai_title;
     return `${getModeLabel(reflection.mode)} session`;
@@ -447,6 +511,24 @@ Try next time: ${quickDebriefData.tryNextTime || 'Not specified'}`;
           </h1>
         </motion.div>
 
+        {/* Onboarding Checklist - show for new users */}
+        {showOnboarding && (
+          <motion.div
+            className="mb-6"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <OnboardingChecklist
+              hasAssignments={onboardingStatus.hasAssignments}
+              hasWellnessCheckin={onboardingStatus.hasWellnessCheckin}
+              hasCompletedWorkshop={onboardingStatus.hasCompletedWorkshop}
+              hasPostedInCommunity={onboardingStatus.hasPostedInCommunity}
+              onDismiss={handleDismissOnboarding}
+            />
+          </motion.div>
+        )}
+
         {/* TWO-COLUMN LAYOUT - Elya on left, Sidebar on right */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
 
@@ -469,346 +551,263 @@ Try next time: ${quickDebriefData.tryNextTime || 'Not specified'}`;
           </motion.div>
 
           {/* ===== SIDEBAR (Right Column) ===== */}
-          <div className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+          <div className="space-y-5 lg:sticky lg:top-24 lg:self-start" ref={quickDebriefRef}>
 
-            {/* No Upcoming Assignments / Upcoming List - Hero style card */}
+            {/* Combined Assignments Card with Tabs */}
             <motion.div
-              className="p-5 rounded-xl bg-slate-900 border border-slate-800"
+              className="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 }}
             >
-              {upcomingAssignments.length > 0 ? (
-                <>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-slate-100 text-sm uppercase tracking-wider">Upcoming Assignments</h3>
-                    <Link href="/assignments" className="text-xs text-teal-400 hover:text-teal-300 transition-colors">
-                      View all
-                    </Link>
-                  </div>
-                  <div className="space-y-2">
-                    {upcomingAssignments.slice(0, 3).map(assignment => {
-                      const days = getDaysUntil(assignment.date);
-                      return (
-                        <Link
-                          key={assignment.id}
-                          href={`/assignments/${assignment.id}`}
-                          className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-teal-500/20 transition-all group"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-slate-200 truncate group-hover:text-teal-300 transition-colors">
-                              {assignment.title}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {formatDate(assignment.date)}
-                              {assignment.time && ` at ${formatTime(assignment.time)}`}
-                            </p>
-                          </div>
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            days === 0 ? 'bg-amber-500/20 text-amber-400' :
-                            days === 1 ? 'bg-cyan-500/20 text-cyan-400' :
-                            'bg-slate-700/50 text-slate-400'
-                          }`}>
-                            {days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
-                          </span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-6">
-                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-teal-500/10 border border-teal-500/20 flex items-center justify-center">
-                    <Calendar className="w-5 h-5 text-teal-400" />
-                  </div>
-                  <h3 className="font-semibold text-slate-100 text-sm uppercase tracking-wider mb-2">No Upcoming Assignments</h3>
-                  <p className="text-sm text-slate-400 mb-4">
-                    Tell Elya about your next assignment to get started!
-                  </p>
-                  <Link
-                    href="/assignments?new=true"
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-sm font-semibold transition-colors w-full justify-center shadow-lg shadow-teal-500/20"
-                  >
-                    <Plus className="w-4 h-4" /> Add Assignment
-                  </Link>
-                </div>
-              )}
-            </motion.div>
-
-            {/* Past Assignments - for debriefing */}
-            <motion.div
-              ref={quickDebriefRef}
-              className="p-5 rounded-xl bg-slate-900 border border-slate-800"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.15 }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-100 text-sm uppercase tracking-wider">Past Assignments</h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowQuickDebrief(!showQuickDebrief)}
-                    className={`text-xs px-2 py-1 rounded-md transition-colors flex items-center gap-1 ${
-                      showQuickDebrief
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                        : 'text-slate-400 hover:text-amber-400 hover:bg-amber-500/10'
-                    }`}
-                  >
-                    <Timer className="w-3 h-3" />
-                    Quick
-                  </button>
-                  <Link href="/assignments?filter=completed" className="text-xs text-teal-400 hover:text-teal-300 transition-colors">
-                    View all
-                  </Link>
-                </div>
+              {/* Tab Header */}
+              <div className="flex border-b border-slate-800">
+                <button
+                  onClick={() => setAssignmentTab("upcoming")}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                    assignmentTab === "upcoming"
+                      ? "text-teal-400 border-b-2 border-teal-400 bg-teal-500/5"
+                      : "text-slate-400 hover:text-slate-300"
+                  }`}
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Calendar className="w-4 h-4" />
+                    Upcoming
+                    {upcomingAssignments.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs bg-teal-500/20 text-teal-400">
+                        {upcomingAssignments.length}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setAssignmentTab("past")}
+                  className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                    assignmentTab === "past"
+                      ? "text-blue-400 border-b-2 border-blue-400 bg-blue-500/5"
+                      : "text-slate-400 hover:text-slate-300"
+                  }`}
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Check className="w-4 h-4" />
+                    Past
+                    {recentAssignments.filter(a => !a.debriefed).length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs bg-blue-500/20 text-blue-400">
+                        {recentAssignments.filter(a => !a.debriefed).length}
+                      </span>
+                    )}
+                  </span>
+                </button>
               </div>
 
-              {/* Quick Debrief Form */}
-              {showQuickDebrief && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mb-4 p-4 rounded-lg bg-amber-500/5 border border-amber-500/20"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Timer className="w-4 h-4 text-amber-400" />
-                      <span className="text-sm font-medium text-slate-200">Quick Debrief</span>
-                      <span className="text-xs text-slate-500">(2 min)</span>
-                    </div>
-                    <button
-                      onClick={() => setShowQuickDebrief(false)}
-                      className="text-slate-500 hover:text-slate-300"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {/* Setting */}
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">Setting</label>
-                      <select
-                        value={quickDebriefData.setting}
-                        onChange={(e) => setQuickDebriefData(prev => ({ ...prev, setting: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-sm focus:border-amber-500/50 focus:outline-none"
-                      >
-                        <option value="">Select setting...</option>
-                        <option value="Medical">Medical</option>
-                        <option value="Legal">Legal</option>
-                        <option value="Educational">Educational</option>
-                        <option value="Mental Health">Mental Health</option>
-                        <option value="VRS/VRI">VRS/VRI</option>
-                        <option value="Conference">Conference</option>
-                        <option value="Community">Community</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-
-                    {/* Challenge Level */}
-                    <div>
-                      <label className="text-xs text-slate-400 mb-2 block">Challenge level</label>
-                      <div className="flex gap-2">
-                        {[
-                          { level: 1, emoji: '😌', label: 'Easy' },
-                          { level: 2, emoji: '😐', label: 'Moderate' },
-                          { level: 3, emoji: '🔥', label: 'Intense' }
-                        ].map(({ level, emoji, label }) => (
-                          <button
-                            key={level}
-                            onClick={() => setQuickDebriefData(prev => ({ ...prev, challengeLevel: level }))}
-                            className={`flex-1 py-2 px-3 rounded-lg text-center transition-all ${
-                              quickDebriefData.challengeLevel === level
-                                ? 'bg-amber-500/20 border-amber-500/50 border'
-                                : 'bg-slate-800 border border-slate-700 hover:border-slate-600'
-                            }`}
+              {/* Tab Content */}
+              <div className="p-4">
+                {assignmentTab === "upcoming" ? (
+                  // Upcoming Assignments Tab
+                  upcomingAssignments.length > 0 ? (
+                    <div className="space-y-2">
+                      {upcomingAssignments.slice(0, 4).map(assignment => {
+                        const days = getDaysUntil(assignment.date);
+                        return (
+                          <Link
+                            key={assignment.id}
+                            href={`/assignments/${assignment.id}`}
+                            className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-teal-500/20 transition-all group"
                           >
-                            <span className="text-lg">{emoji}</span>
-                            <p className="text-xs text-slate-400 mt-1">{label}</p>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-slate-200 truncate group-hover:text-teal-300 transition-colors">
+                                {assignment.title}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {formatDate(assignment.date)}
+                                {assignment.time && ` at ${formatTime(assignment.time)}`}
+                              </p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${
+                              days === 0 ? 'bg-amber-500/20 text-amber-400' :
+                              days === 1 ? 'bg-cyan-500/20 text-cyan-400' :
+                              'bg-slate-700/50 text-slate-400'
+                            }`}>
+                              {days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days}d`}
+                            </span>
+                          </Link>
+                        );
+                      })}
+                      <Link
+                        href="/assignments"
+                        className="block text-center text-xs text-teal-400 hover:text-teal-300 py-2 transition-colors"
+                      >
+                        View all assignments →
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-slate-400 mb-3">No upcoming assignments</p>
+                      <Link
+                        href="/assignments?new=true"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-sm font-semibold transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> Add Assignment
+                      </Link>
+                    </div>
+                  )
+                ) : (
+                  // Past Assignments Tab
+                  <>
+                    {/* Quick Debrief Toggle */}
+                    <div className="flex items-center justify-end mb-3">
+                      <button
+                        onClick={() => setShowQuickDebrief(!showQuickDebrief)}
+                        className={`text-xs px-2 py-1 rounded-md transition-colors flex items-center gap-1 ${
+                          showQuickDebrief
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            : 'text-slate-400 hover:text-amber-400 hover:bg-amber-500/10'
+                        }`}
+                      >
+                        <Timer className="w-3 h-3" />
+                        Quick Debrief
+                      </button>
+                    </div>
+
+                    {/* Quick Debrief Form */}
+                    {showQuickDebrief && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mb-4 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm font-medium text-slate-200">Quick Debrief</span>
+                          <button onClick={() => setShowQuickDebrief(false)} className="text-slate-500 hover:text-slate-300">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="space-y-3">
+                          <select
+                            value={quickDebriefData.setting}
+                            onChange={(e) => setQuickDebriefData(prev => ({ ...prev, setting: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-sm"
+                          >
+                            <option value="">Setting...</option>
+                            <option value="Medical">Medical</option>
+                            <option value="Legal">Legal</option>
+                            <option value="Educational">Educational</option>
+                            <option value="Mental Health">Mental Health</option>
+                            <option value="VRS/VRI">VRS/VRI</option>
+                            <option value="Other">Other</option>
+                          </select>
+                          <div className="flex gap-1">
+                            {[
+                              { level: 1, emoji: '😌' },
+                              { level: 2, emoji: '😐' },
+                              { level: 3, emoji: '🔥' }
+                            ].map(({ level, emoji }) => (
+                              <button
+                                key={level}
+                                onClick={() => setQuickDebriefData(prev => ({ ...prev, challengeLevel: level }))}
+                                className={`flex-1 py-2 rounded-lg text-center ${
+                                  quickDebriefData.challengeLevel === level
+                                    ? 'bg-amber-500/20 border border-amber-500/50'
+                                    : 'bg-slate-800 border border-slate-700'
+                                }`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                          <input
+                            type="text"
+                            value={quickDebriefData.whatWorked}
+                            onChange={(e) => setQuickDebriefData(prev => ({ ...prev, whatWorked: e.target.value }))}
+                            placeholder="What worked?"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-sm"
+                          />
+                          <button
+                            onClick={handleSaveQuickDebrief}
+                            disabled={savingQuickDebrief}
+                            className="w-full py-2 rounded-lg bg-amber-500 text-slate-900 font-medium text-sm"
+                          >
+                            {savingQuickDebrief ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {recentAssignments.length > 0 ? (
+                      <div className="space-y-2">
+                        {recentAssignments.slice(0, 4).map(assignment => (
+                          <button
+                            key={assignment.id}
+                            onClick={() => {
+                              setElyaMode("debrief");
+                              setElyaPreFillMessage(`I'd like to debrief about my ${assignment.assignment_type || 'interpreting'} assignment: "${assignment.title}" from ${formatDate(assignment.date)}.`);
+                            }}
+                            className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-blue-500/20 transition-all group text-left"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-slate-200 truncate group-hover:text-blue-300 transition-colors">
+                                {assignment.title}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-xs text-slate-500">{formatShortDate(assignment.date)}</span>
+                                {!assignment.debriefed && (
+                                  <span className="text-xs text-blue-400">Ready to debrief</span>
+                                )}
+                              </div>
+                            </div>
                           </button>
                         ))}
                       </div>
-                    </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <p className="text-sm text-slate-500">No completed assignments yet</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </motion.div>
 
-                    {/* What worked */}
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">One thing that worked</label>
-                      <input
-                        type="text"
-                        value={quickDebriefData.whatWorked}
-                        onChange={(e) => setQuickDebriefData(prev => ({ ...prev, whatWorked: e.target.value }))}
-                        placeholder="e.g., Kept good eye contact"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-sm placeholder:text-slate-500 focus:border-amber-500/50 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Try next time */}
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">One thing to try next time</label>
-                      <input
-                        type="text"
-                        value={quickDebriefData.tryNextTime}
-                        onChange={(e) => setQuickDebriefData(prev => ({ ...prev, tryNextTime: e.target.value }))}
-                        placeholder="e.g., Ask for more context"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-sm placeholder:text-slate-500 focus:border-amber-500/50 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Save button */}
-                    <button
-                      onClick={handleSaveQuickDebrief}
-                      disabled={savingQuickDebrief}
-                      className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-900 font-medium text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      {savingQuickDebrief ? (
-                        'Saving...'
-                      ) : (
-                        <>
-                          <Check className="w-4 h-4" />
-                          Save & Done
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {recentAssignments.length > 0 ? (
+            {/* Contextual Actions - Only show when relevant */}
+            {(recentAssignments.filter(a => a.completed && !a.debriefed).length > 0 ||
+              (upcomingAssignments.length > 0 && upcomingAssignments[0].prep_status !== 'complete')) && (
+              <motion.div
+                className="p-4 rounded-xl bg-gradient-to-br from-violet-500/10 to-teal-500/10 border border-violet-500/20"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.15 }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <span className="text-sm font-medium text-slate-200">Suggested</span>
+                </div>
                 <div className="space-y-2">
-                  {recentAssignments.slice(0, 3).map(assignment => (
-                    <button
-                      key={assignment.id}
-                      onClick={() => {
-                        setElyaMode("debrief");
-                        setElyaPreFillMessage(`I'd like to debrief about my ${assignment.assignment_type || 'interpreting'} assignment: "${assignment.title}" from ${formatDate(assignment.date)}.`);
-                      }}
-                      className="w-full flex items-center gap-3 p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-blue-500/20 transition-all group text-left"
+                  {recentAssignments.filter(a => a.completed && !a.debriefed).length > 0 && (
+                    <Link
+                      href={`/dashboard?mode=debrief&assignment=${recentAssignments.find(a => a.completed && !a.debriefed)?.id}`}
+                      className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900/50 hover:bg-slate-900 border border-slate-700/50 hover:border-amber-500/30 transition-all group"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
-                        <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-200 truncate group-hover:text-blue-300 transition-colors">
-                          {assignment.title}
-                        </p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-slate-500">{formatShortDate(assignment.date)}</span>
-                          {!assignment.debriefed && (
-                            <span className="text-xs text-blue-400">Ready to debrief</span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-sm text-slate-500">No completed assignments yet</p>
-                  <p className="text-xs text-slate-600 mt-1">Complete an assignment to debrief with Elya</p>
-                </div>
-              )}
-            </motion.div>
-
-            {/* Quick Actions - Dynamic based on user's assignments */}
-            <motion.div
-              className="p-5 rounded-xl bg-slate-900 border border-slate-800"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <h3 className="font-semibold text-slate-100 text-sm uppercase tracking-wider">Quick Actions</h3>
-              </div>
-              <div className="space-y-2">
-                {/* Assignments needing debrief */}
-                {recentAssignments.filter(a => a.completed && !a.debriefed).length > 0 && (
-                  <Link
-                    href={`/dashboard?mode=debrief&assignment=${recentAssignments.find(a => a.completed && !a.debriefed)?.id}`}
-                    className="flex items-center gap-3 p-2.5 rounded-lg bg-amber-500/5 hover:bg-amber-500/10 border border-amber-500/20 hover:border-amber-500/40 transition-all group"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
                       <ClipboardList className="w-4 h-4 text-amber-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-200 group-hover:text-amber-300 transition-colors">
-                        {recentAssignments.filter(a => a.completed && !a.debriefed).length === 1
-                          ? `Debrief: ${recentAssignments.find(a => a.completed && !a.debriefed)?.title || 'Assignment'}`
-                          : `${recentAssignments.filter(a => a.completed && !a.debriefed).length} assignments need debrief`
-                        }
-                      </p>
-                      <p className="text-xs text-slate-500">Reflect on what went well</p>
-                    </div>
-                  </Link>
-                )}
-
-                {/* Next upcoming assignment - prep reminder */}
-                {upcomingAssignments.length > 0 && upcomingAssignments[0].prep_status !== 'complete' && (
-                  <Link
-                    href={`/dashboard?mode=prep&assignment=${upcomingAssignments[0].id}`}
-                    className="flex items-center gap-3 p-2.5 rounded-lg bg-violet-500/5 hover:bg-violet-500/10 border border-violet-500/20 hover:border-violet-500/40 transition-all group"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-violet-500/10 flex items-center justify-center">
+                      <span className="text-sm text-slate-200 group-hover:text-amber-300">
+                        Debrief recent assignment
+                      </span>
+                    </Link>
+                  )}
+                  {upcomingAssignments.length > 0 && upcomingAssignments[0].prep_status !== 'complete' && (
+                    <Link
+                      href={`/dashboard?mode=prep&assignment=${upcomingAssignments[0].id}`}
+                      className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-900/50 hover:bg-slate-900 border border-slate-700/50 hover:border-violet-500/30 transition-all group"
+                    >
                       <FileText className="w-4 h-4 text-violet-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-200 group-hover:text-violet-300 transition-colors truncate">
-                        Prep: {upcomingAssignments[0].title}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {getDaysUntil(upcomingAssignments[0].date) === 0 ? 'Today' :
-                         getDaysUntil(upcomingAssignments[0].date) === 1 ? 'Tomorrow' :
-                         formatShortDate(upcomingAssignments[0].date)}
-                        {upcomingAssignments[0].time && ` at ${formatTime(upcomingAssignments[0].time)}`}
-                      </p>
-                    </div>
-                  </Link>
-                )}
-
-                {/* Team assignment reminder */}
-                {upcomingAssignments.filter(a => a.assignment_type === 'team').length > 0 && (
-                  <Link
-                    href={`/assignments/${upcomingAssignments.find(a => a.assignment_type === 'team')?.id}`}
-                    className="flex items-center gap-3 p-2.5 rounded-lg bg-teal-500/5 hover:bg-teal-500/10 border border-teal-500/20 hover:border-teal-500/40 transition-all group"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-teal-500/10 flex items-center justify-center">
-                      <Users className="w-4 h-4 text-teal-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-200 group-hover:text-teal-300 transition-colors">
-                        Team assignment coming up
-                      </p>
-                      <p className="text-xs text-slate-500">Check in with your team</p>
-                    </div>
-                  </Link>
-                )}
-
-                {/* Always show reflection option */}
-                <Link
-                  href="/dashboard?mode=reflection"
-                  className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-teal-500/30 transition-all group"
-                >
-                  <div className="w-8 h-8 rounded-full bg-teal-500/10 flex items-center justify-center">
-                    <Heart className="w-4 h-4 text-teal-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-200 group-hover:text-teal-300 transition-colors">Quick reflection</p>
-                    <p className="text-xs text-slate-500">5 min check-in with Elya</p>
-                  </div>
-                </Link>
-
-                {/* Empty state - all caught up */}
-                {recentAssignments.filter(a => a.completed && !a.debriefed).length === 0 &&
-                 upcomingAssignments.length === 0 && (
-                  <div className="text-center py-2">
-                    <p className="text-xs text-slate-500">You&apos;re all caught up!</p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
+                      <span className="text-sm text-slate-200 group-hover:text-violet-300">
+                        Prep for {upcomingAssignments[0].title}
+                      </span>
+                    </Link>
+                  )}
+                </div>
+              </motion.div>
+            )}
 
           </div>
         </div>

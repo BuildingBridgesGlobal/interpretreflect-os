@@ -55,7 +55,7 @@ export default function VideoPlayer({
 
   // Detect if the URL is a YouTube or Vimeo embed
   const isYouTube = videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be");
-  const isVimeo = videoUrl.includes("vimeo.com");
+  const isVimeo = videoUrl.includes("vimeo.com") || videoUrl.includes("player.vimeo.com");
   const isEmbed = isYouTube || isVimeo;
 
   // Convert YouTube URLs to embed format
@@ -73,8 +73,41 @@ export default function VideoPlayer({
       return `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&modestbranding=1`;
     }
     if (isVimeo) {
-      const vimeoId = url.split("/").pop()?.split("?")[0];
-      return `https://player.vimeo.com/video/${vimeoId}?autoplay=0`;
+      // Handle multiple Vimeo URL formats:
+      // 1. Full embed code: <iframe ... src="https://player.vimeo.com/video/123?h=abc" ...>
+      // 2. Player URL: https://player.vimeo.com/video/123?h=abc
+      // 3. Standard URL: https://vimeo.com/123?h=abc
+      // 4. Standard URL without hash: https://vimeo.com/123
+
+      let processedUrl = url;
+
+      // Extract src from iframe embed code if present
+      if (url.includes("<iframe")) {
+        const srcMatch = url.match(/src=["']([^"']+)["']/);
+        if (srcMatch) {
+          processedUrl = srcMatch[1];
+        }
+      }
+
+      // If it's already a player.vimeo.com URL, extract and rebuild
+      if (processedUrl.includes("player.vimeo.com/video/")) {
+        const urlParts = processedUrl.split("?");
+        const pathPart = urlParts[0];
+        const vimeoId = pathPart.split("/").pop();
+        const existingParams = urlParts[1] || "";
+        const params = new URLSearchParams(existingParams);
+        params.set("autoplay", "0");
+        return `https://player.vimeo.com/video/${vimeoId}?${params.toString()}`;
+      }
+
+      // Handle standard vimeo.com URLs
+      const urlParts = processedUrl.split("?");
+      const vimeoId = urlParts[0].split("/").pop();
+      const existingParams = urlParts[1] || "";
+      // Parse existing params and add autoplay=0
+      const params = new URLSearchParams(existingParams);
+      params.set("autoplay", "0");
+      return `https://player.vimeo.com/video/${vimeoId}?${params.toString()}`;
     }
     return url;
   };
@@ -389,15 +422,34 @@ export default function VideoPlayer({
               </div>
             ) : requireFullCompletion ? (
               <div className="text-center">
-                <p className="text-slate-400 text-sm mb-3">
-                  Watch 100% of this video, then confirm completion for CEU credit
-                </p>
-                <button
-                  onClick={() => setShowAttestationModal(true)}
-                  className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm"
-                >
-                  I have watched the full video
-                </button>
+                {/* Require minimum 80% of expected duration before allowing attestation */}
+                {(() => {
+                  const requiredSeconds = duration ? duration * 60 * 0.8 : 48 * 60; // 80% of video duration (default 48 min if not specified)
+                  const canAttest = totalWatchTime >= requiredSeconds;
+                  const remainingMinutes = Math.max(0, Math.ceil((requiredSeconds - totalWatchTime) / 60));
+
+                  return (
+                    <>
+                      <p className="text-slate-400 text-sm mb-3">
+                        {canAttest
+                          ? "You've watched enough to confirm completion. Click below when finished."
+                          : `Watch at least ${Math.ceil(requiredSeconds / 60)} minutes before confirming (${remainingMinutes} min remaining)`
+                        }
+                      </p>
+                      <button
+                        onClick={() => setShowAttestationModal(true)}
+                        disabled={!canAttest}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors text-sm ${
+                          canAttest
+                            ? "bg-teal-500 text-slate-950 hover:bg-teal-400"
+                            : "bg-slate-700 text-slate-400 cursor-not-allowed"
+                        }`}
+                      >
+                        {canAttest ? "I have watched the full video" : `Watch ${remainingMinutes} more minutes`}
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             ) : (
               <p className="text-slate-500 text-xs text-center">
@@ -448,7 +500,7 @@ export default function VideoPlayer({
                   className="mt-1 w-4 h-4 rounded border-slate-600 bg-slate-800 text-teal-500 focus:ring-teal-500"
                 />
                 <span className="text-sm text-slate-300">
-                  I confirm that I have watched the entire video from start to finish. I understand that false attestation may result in revocation of CEU credit.
+                  I attest that I have participated in this educational activity in its entirety, watching the complete video from start to finish. I understand that my attestation serves as my electronic signature and proof of attendance, and that false attestation may result in revocation of CEU credit and reporting to RID.
                 </span>
               </label>
 

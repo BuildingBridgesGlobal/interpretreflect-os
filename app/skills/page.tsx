@@ -300,35 +300,52 @@ export default function SkillsPracticePage() {
             <p className="text-sm text-slate-400">Build your interpreter decision-making skills</p>
           </div>
 
-          {/* Readiness Score Card */}
-          <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-slate-700 bg-slate-900/50">
-            <div className="text-center">
-              <div className={`text-3xl font-bold ${readiness.color}`}>
-                {userDrillStats?.readiness_score || '--'}
+          {/* Stats Cards */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Readiness Score Card */}
+            <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-slate-700 bg-slate-900/50">
+              <div className="text-center">
+                <div className={`text-3xl font-bold ${readiness.color}`}>
+                  {userDrillStats?.readiness_score || '--'}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">Readiness</div>
               </div>
-              <div className="text-xs text-slate-500 mt-0.5">Readiness</div>
-            </div>
-            <div className="w-px h-10 bg-slate-700"></div>
-            <div className="space-y-1">
-              <div className={`text-sm font-medium ${readiness.color}`}>{readiness.label}</div>
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span>{userDrillStats?.total_attempts || 0} drills</span>
-                <span>{accuracy}% accuracy</span>
-                {userDrillStats?.current_streak ? (
-                  <span className="text-amber-400">{userDrillStats.current_streak} day streak</span>
-                ) : null}
+              <div className="w-px h-10 bg-slate-700"></div>
+              <div className="space-y-1">
+                <div className={`text-sm font-medium ${readiness.color}`}>{readiness.label}</div>
+                <div className="text-xs text-slate-500">Skill level</div>
               </div>
             </div>
-            <button
-              onClick={() => router.push("/drills/quick_practice")}
-              className="ml-4 px-4 py-2 rounded-lg bg-violet-500 hover:bg-violet-400 text-white text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Quick Practice
-            </button>
+
+            {/* Accuracy Card */}
+            <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-slate-700 bg-slate-900/50">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-teal-400">
+                  {accuracy}%
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">Accuracy</div>
+              </div>
+              <div className="w-px h-10 bg-slate-700"></div>
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-slate-300">{userDrillStats?.total_attempts || 0} drills</div>
+                <div className="text-xs text-slate-500">Total completed</div>
+              </div>
+            </div>
+
+            {/* Streak Card */}
+            <div className="flex items-center gap-4 px-5 py-4 rounded-xl border border-slate-700 bg-slate-900/50">
+              <div className="text-center">
+                <div className="text-3xl font-bold text-amber-400">
+                  {userDrillStats?.current_streak || 0}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">Day Streak</div>
+              </div>
+              <div className="w-px h-10 bg-slate-700"></div>
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-slate-300">{userDrillStats?.longest_streak || 0} best</div>
+                <div className="text-xs text-slate-500">Longest streak</div>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -151,6 +151,8 @@ export default function AgencyDashboard() {
   const [assignmentFilter, setAssignmentFilter] = useState<"all" | "upcoming" | "completed">("upcoming");
   const [interpreterSearch, setInterpreterSearch] = useState("");
   const [downloadingReport, setDownloadingReport] = useState<string | null>(null);
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [rosterSort, setRosterSort] = useState<"name" | "joined" | "prep" | "credentials">("name");
 
   // Invite code state
   interface InviteCode {
@@ -690,63 +692,152 @@ export default function AgencyDashboard() {
       <AgencyNavBar organizationName={organization?.name} />
       <div className="container mx-auto max-w-7xl px-4 md:px-6 py-6 md:py-8">
         {/* Header */}
-        <div className="mb-6 flex items-start justify-between">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-50">{organization?.name || "Agency"} Dashboard</h1>
-            <p className="mt-1 text-sm text-slate-400">Manage your team, credentials, and compliance</p>
+            <h1 className="text-xl sm:text-2xl font-semibold text-slate-50">{organization?.name || "Agency"}</h1>
+            <p className="text-sm text-slate-500">Agency Dashboard</p>
           </div>
           <button
             onClick={() => setSelectedTab("settings")}
-            className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm flex items-center gap-2"
+            className="px-4 py-2.5 rounded-lg bg-teal-500 text-slate-950 font-medium hover:bg-teal-400 transition-colors text-sm flex items-center gap-2 self-start sm:self-auto"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
             </svg>
-            Get Invite Code
+            Invite Interpreters
           </button>
         </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-5">
-            <p className="text-3xl font-bold text-violet-400">{teamMembers.length}</p>
-            <p className="text-sm text-slate-300 mt-1">Team Members</p>
-          </div>
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
-            <p className="text-3xl font-bold text-emerald-400">{credentialStats.active}</p>
-            <p className="text-sm text-slate-300 mt-1">Active Credentials</p>
-          </div>
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
-            <p className="text-3xl font-bold text-amber-400">{credentialStats.expiringSoon}</p>
-            <p className="text-sm text-slate-300 mt-1">Expiring Soon</p>
-          </div>
-          <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-5">
-            <p className="text-3xl font-bold text-blue-400">{avgPrepRate}%</p>
-            <p className="text-sm text-slate-300 mt-1">Avg Prep Rate</p>
-          </div>
+        {/* Quick Stats - More compact with icons */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <button
+            onClick={() => setSelectedTab("roster")}
+            className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 hover:border-violet-500/50 hover:bg-violet-500/5 transition-all text-left group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center group-hover:bg-violet-500/30 transition-colors">
+                <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-100">{teamMembers.length}</p>
+                <p className="text-xs text-slate-500">Interpreters</p>
+              </div>
+            </div>
+          </button>
+          <button
+            onClick={() => setSelectedTab("credentials")}
+            className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all text-left group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500/30 transition-colors">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-100">{credentialStats.active}</p>
+                <p className="text-xs text-slate-500">Active Credentials</p>
+              </div>
+            </div>
+          </button>
+          <button
+            onClick={() => {
+              setSelectedTab("credentials");
+              setCredentialFilter("expiring");
+            }}
+            className={`rounded-xl border p-4 transition-all text-left group ${
+              credentialStats.expiringSoon > 0
+                ? "border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50"
+                : "border-slate-800 bg-slate-900/50 hover:border-slate-700"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+                credentialStats.expiringSoon > 0
+                  ? "bg-amber-500/20 group-hover:bg-amber-500/30"
+                  : "bg-slate-800 group-hover:bg-slate-700"
+              }`}>
+                <svg className={`w-5 h-5 ${credentialStats.expiringSoon > 0 ? "text-amber-400" : "text-slate-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className={`text-2xl font-bold ${credentialStats.expiringSoon > 0 ? "text-amber-400" : "text-slate-400"}`}>{credentialStats.expiringSoon}</p>
+                <p className="text-xs text-slate-500">Expiring Soon</p>
+              </div>
+            </div>
+          </button>
+          <button
+            onClick={() => setSelectedTab("prep")}
+            className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 hover:border-teal-500/50 hover:bg-teal-500/5 transition-all text-left group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-teal-500/20 flex items-center justify-center group-hover:bg-teal-500/30 transition-colors">
+                <svg className="w-5 h-5 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-100">{avgPrepRate}%</p>
+                <p className="text-xs text-slate-500">Avg Prep Rate</p>
+              </div>
+            </div>
+          </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="mb-6 flex gap-2 border-b border-slate-800 overflow-x-auto">
+        <div className="mb-6 flex gap-1 border-b border-slate-800 overflow-x-auto">
           {[
-            { key: "roster", label: "Interpreters" },
-            { key: "assignments", label: "Assignments" },
-            { key: "teams", label: "Teams" },
-            { key: "credentials", label: "Credentials" },
-            { key: "prep", label: "Prep Tracking" },
-            { key: "reports", label: "Reports" },
-            { key: "settings", label: "Settings" },
+            { key: "roster", label: "Interpreters", icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            )},
+            { key: "assignments", label: "Assignments", icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            )},
+            { key: "teams", label: "Teams", icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            )},
+            { key: "credentials", label: "Credentials", icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+              </svg>
+            )},
+            { key: "prep", label: "Prep Tracking", icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            )},
+            { key: "reports", label: "Reports", icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            )},
+            { key: "settings", label: "Settings", icon: (
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            )},
           ].map((tab) => (
             <button
               key={tab.key}
               onClick={() => setSelectedTab(tab.key as TabType)}
-              className={`px-4 py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
                 selectedTab === tab.key
                   ? "border-teal-400 text-teal-400"
-                  : "border-transparent text-slate-400 hover:text-slate-300"
+                  : "border-transparent text-slate-400 hover:text-slate-300 hover:bg-slate-800/50"
               }`}
             >
-              {tab.label}
+              {tab.icon}
+              <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
         </div>
@@ -758,39 +849,123 @@ export default function AgencyDashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-4"
           >
+            {/* Roster Header with Search & Sort */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+              <div className="flex-1 w-full sm:max-w-md relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search interpreters by name or email..."
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500 text-sm"
+                />
+                {rosterSearch && (
+                  <button
+                    onClick={() => setRosterSearch("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500">Sort by:</span>
+                <select
+                  value={rosterSort}
+                  onChange={(e) => setRosterSort(e.target.value as any)}
+                  className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-sm focus:outline-none focus:border-teal-500"
+                >
+                  <option value="name">Name</option>
+                  <option value="joined">Date Joined</option>
+                  <option value="prep">Prep Rate</option>
+                  <option value="credentials">Credentials</option>
+                </select>
+              </div>
+            </div>
+
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+              {/* Table Header with count */}
+              <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-300">
+                  {teamMembers.filter(m => {
+                    if (!rosterSearch) return true;
+                    const search = rosterSearch.toLowerCase();
+                    return m.profile.full_name?.toLowerCase().includes(search) || m.profile.email?.toLowerCase().includes(search);
+                  }).length} interpreter{teamMembers.length !== 1 ? 's' : ''}
+                </span>
+                <button
+                  onClick={() => setSelectedTab("settings")}
+                  className="text-xs text-teal-400 hover:text-teal-300 flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Invite New
+                </button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-slate-800 bg-slate-900/80">
-                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Team Member</th>
-                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Role</th>
-                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Joined</th>
-                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Assignments (This Month)</th>
-                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Prep Rate</th>
-                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Debrief Rate</th>
+                    <tr className="border-b border-slate-800 bg-slate-900/50">
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Interpreter</th>
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4 hidden lg:table-cell">Role</th>
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4 hidden md:table-cell">Joined</th>
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4 hidden xl:table-cell">This Month</th>
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Prep</th>
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4 hidden lg:table-cell">Debrief</th>
                       <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Credentials</th>
-                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4">Actions</th>
+                      <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider p-4 w-16"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {teamMembers.map((member) => {
+                    {teamMembers
+                      .filter((member) => {
+                        if (!rosterSearch) return true;
+                        const search = rosterSearch.toLowerCase();
+                        return (
+                          member.profile.full_name?.toLowerCase().includes(search) ||
+                          member.profile.email?.toLowerCase().includes(search)
+                        );
+                      })
+                      .sort((a, b) => {
+                        if (rosterSort === "name") {
+                          return (a.profile.full_name || "").localeCompare(b.profile.full_name || "");
+                        }
+                        if (rosterSort === "joined") {
+                          return new Date(b.joined_at || 0).getTime() - new Date(a.joined_at || 0).getTime();
+                        }
+                        if (rosterSort === "prep") {
+                          const aRate = a.activity.prepCompletionRate ?? -1;
+                          const bRate = b.activity.prepCompletionRate ?? -1;
+                          return bRate - aRate;
+                        }
+                        if (rosterSort === "credentials") {
+                          return b.credentials.length - a.credentials.length;
+                        }
+                        return 0;
+                      })
+                      .map((member) => {
                       const expiringSoon = member.credentials.filter((c) => c.status === "expiring_soon").length;
                       const expired = member.credentials.filter((c) => c.status === "expired").length;
                       return (
-                        <tr key={member.user_id} className="hover:bg-slate-800/30 transition-colors">
+                        <tr key={member.user_id} className="hover:bg-slate-800/50 transition-colors group">
                           <td className="p-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-teal-500 flex items-center justify-center text-white font-medium">
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-teal-500 flex items-center justify-center text-white font-medium flex-shrink-0">
                                 {member.profile.full_name?.charAt(0) || "?"}
                               </div>
-                              <div>
-                                <p className="text-sm font-medium text-slate-100">{member.profile.full_name || "Unknown"}</p>
-                                <p className="text-xs text-slate-500">{member.profile.email}</p>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-slate-100 truncate">{member.profile.full_name || "Unknown"}</p>
+                                <p className="text-xs text-slate-500 truncate">{member.profile.email}</p>
                               </div>
                             </div>
                           </td>
-                          <td className="p-4">
+                          <td className="p-4 hidden lg:table-cell">
                             <span className={`px-2 py-1 rounded-md text-xs font-medium capitalize ${
                               member.role === "admin" || member.role === "owner"
                                 ? "bg-violet-500/20 text-violet-400"
@@ -798,26 +973,29 @@ export default function AgencyDashboard() {
                                 ? "bg-blue-500/20 text-blue-400"
                                 : "bg-slate-700 text-slate-300"
                             }`}>
-                              {member.role}
+                              {member.role || "interpreter"}
                             </span>
                           </td>
-                          <td className="p-4">
+                          <td className="p-4 hidden md:table-cell">
                             <p className="text-sm text-slate-300">{formatDate(member.joined_at)}</p>
                           </td>
-                          <td className="p-4">
-                            <p className="text-sm text-slate-300">{member.activity.assignmentsThisMonth}</p>
+                          <td className="p-4 hidden xl:table-cell">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-medium text-slate-200">{member.activity.assignmentsThisMonth}</span>
+                              <span className="text-xs text-slate-500">jobs</span>
+                            </div>
                           </td>
                           <td className="p-4">
                             {member.activity.prepCompletionRate === null ? (
-                              <div className="flex items-center gap-1.5 text-slate-500">
+                              <div className="flex items-center gap-1.5 text-slate-500" title="Interpreter has hidden this data">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
-                                <span className="text-xs">Hidden</span>
+                                <span className="text-xs">Private</span>
                               </div>
                             ) : (
                               <div className="flex items-center gap-2">
-                                <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                                   <div
                                     className={`h-full rounded-full ${
                                       member.activity.prepCompletionRate >= 70
@@ -829,21 +1007,21 @@ export default function AgencyDashboard() {
                                     style={{ width: `${member.activity.prepCompletionRate}%` }}
                                   />
                                 </div>
-                                <span className="text-sm text-slate-400">{member.activity.prepCompletionRate}%</span>
+                                <span className="text-xs font-medium text-slate-300">{member.activity.prepCompletionRate}%</span>
                               </div>
                             )}
                           </td>
-                          <td className="p-4">
+                          <td className="p-4 hidden lg:table-cell">
                             {member.activity.debriefCompletionRate === null ? (
-                              <div className="flex items-center gap-1.5 text-slate-500">
+                              <div className="flex items-center gap-1.5 text-slate-500" title="Interpreter has hidden this data">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
-                                <span className="text-xs">Hidden</span>
+                                <span className="text-xs">Private</span>
                               </div>
                             ) : (
                               <div className="flex items-center gap-2">
-                                <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                                   <div
                                     className={`h-full rounded-full ${
                                       member.activity.debriefCompletionRate >= 70
@@ -855,34 +1033,34 @@ export default function AgencyDashboard() {
                                     style={{ width: `${member.activity.debriefCompletionRate}%` }}
                                   />
                                 </div>
-                                <span className="text-sm text-slate-400">{member.activity.debriefCompletionRate}%</span>
+                                <span className="text-xs font-medium text-slate-300">{member.activity.debriefCompletionRate}%</span>
                               </div>
                             )}
                           </td>
                           <td className="p-4">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 flex-wrap">
                               {member.dataSharing?.credentials === false ? (
-                                <div className="flex items-center gap-1.5 text-slate-500">
+                                <div className="flex items-center gap-1.5 text-slate-500" title="Interpreter has hidden credentials">
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                   </svg>
-                                  <span className="text-xs">Hidden</span>
+                                  <span className="text-xs">Private</span>
                                 </div>
                               ) : member.credentials.length === 0 ? (
-                                <span className="text-sm text-slate-500">None</span>
+                                <span className="text-xs text-slate-500">—</span>
                               ) : (
                                 <>
-                                  <span className="px-2 py-1 rounded-md bg-emerald-500/20 text-emerald-400 text-xs">
-                                    {member.credentials.filter((c) => c.status === "active").length} active
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs">
+                                    {member.credentials.filter((c) => c.status === "active").length}
                                   </span>
                                   {expiringSoon > 0 && (
-                                    <span className="px-2 py-1 rounded-md bg-amber-500/20 text-amber-400 text-xs">
-                                      {expiringSoon} expiring
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-xs" title="Expiring soon">
+                                      {expiringSoon}
                                     </span>
                                   )}
                                   {expired > 0 && (
-                                    <span className="px-2 py-1 rounded-md bg-rose-500/20 text-rose-400 text-xs">
-                                      {expired} expired
+                                    <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 text-xs" title="Expired">
+                                      {expired}
                                     </span>
                                   )}
                                 </>
@@ -897,7 +1075,7 @@ export default function AgencyDashboard() {
                                   setMemberToRemove(member);
                                   setShowRemoveMemberModal(true);
                                 }}
-                                className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                className="p-1.5 rounded-lg text-slate-500 opacity-0 group-hover:opacity-100 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
                                 title="Remove from organization"
                               >
                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -911,8 +1089,38 @@ export default function AgencyDashboard() {
                     })}
                     {teamMembers.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-500">
-                          No team members yet. Invite your first team member to get started.
+                        <td colSpan={8} className="p-12">
+                          <div className="text-center">
+                            <div className="w-16 h-16 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center mx-auto mb-4">
+                              <svg className="w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                            </div>
+                            <h3 className="text-base font-medium text-slate-200 mb-1">No interpreters yet</h3>
+                            <p className="text-sm text-slate-400 mb-4">Share your invite code to add interpreters to your agency</p>
+                            <button
+                              onClick={() => setSelectedTab("settings")}
+                              className="px-4 py-2 rounded-lg bg-teal-500 text-slate-950 text-sm font-medium hover:bg-teal-400 transition-colors"
+                            >
+                              Get Invite Code
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {teamMembers.length > 0 && rosterSearch && teamMembers.filter((m) => {
+                      const search = rosterSearch.toLowerCase();
+                      return m.profile.full_name?.toLowerCase().includes(search) || m.profile.email?.toLowerCase().includes(search);
+                    }).length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center">
+                          <p className="text-slate-400">No interpreters match &quot;{rosterSearch}&quot;</p>
+                          <button
+                            onClick={() => setRosterSearch("")}
+                            className="text-sm text-teal-400 hover:text-teal-300 mt-2"
+                          >
+                            Clear search
+                          </button>
                         </td>
                       </tr>
                     )}

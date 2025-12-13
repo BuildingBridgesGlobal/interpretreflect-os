@@ -41,6 +41,8 @@ export default function NavBar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isAgencyAdmin, setIsAgencyAdmin] = useState(false);
+  const [learnDropdownOpen, setLearnDropdownOpen] = useState(false);
+  const learnDropdownRef = useRef<HTMLDivElement>(null);
 
   // Notification state
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -94,6 +96,23 @@ export default function NavBar() {
       setIsAgencyAdmin(false);
     }
   };
+
+  // Close Learn dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (learnDropdownRef.current && !learnDropdownRef.current.contains(event.target as Node)) {
+        setLearnDropdownOpen(false);
+      }
+    };
+
+    if (learnDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [learnDropdownOpen]);
 
   // Fetch notification count
   const fetchNotificationCount = useCallback(async () => {
@@ -291,6 +310,10 @@ export default function NavBar() {
   };
 
   const isActive = (path: string) => pathname === path;
+  const isLearnActive = () =>
+    pathname?.startsWith("/skills") ||
+    pathname?.startsWith("/workshops") ||
+    pathname?.startsWith("/ceu");
 
   return (
     <nav className="border-b border-white/[0.06] bg-ir-bg-primary/95 backdrop-blur-md sticky top-0 z-50">
@@ -317,16 +340,6 @@ export default function NavBar() {
                 Dashboard
               </Link>
               <Link
-                href="/journal"
-                className={`text-sm font-medium transition-colors ${
-                  isActive("/journal")
-                    ? "text-teal-400"
-                    : "text-slate-300 hover:text-teal-300"
-                }`}
-              >
-                Journal
-              </Link>
-              <Link
                 href="/assignments"
                 className={`text-sm font-medium transition-colors ${
                   isActive("/assignments") || pathname?.startsWith("/assignments")
@@ -336,16 +349,88 @@ export default function NavBar() {
               >
                 Assignments
               </Link>
-              <Link
-                href="/skills"
-                className={`text-sm font-medium transition-colors ${
-                  isActive("/skills")
-                    ? "text-teal-400"
-                    : "text-slate-300 hover:text-teal-300"
-                }`}
-              >
-                Skills
-              </Link>
+
+              {/* Learn Dropdown */}
+              <div className="relative" ref={learnDropdownRef}>
+                <button
+                  onClick={() => setLearnDropdownOpen(!learnDropdownOpen)}
+                  className={`flex items-center gap-1 text-sm font-medium transition-colors ${
+                    isLearnActive()
+                      ? "text-teal-400"
+                      : "text-slate-300 hover:text-teal-300"
+                  }`}
+                >
+                  Learn
+                  <svg
+                    className={`w-4 h-4 transition-transform ${learnDropdownOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {learnDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-2 w-56 rounded-lg border border-slate-700 bg-slate-950 shadow-xl shadow-black/50 z-20 overflow-hidden">
+                    <div className="py-1">
+                      <Link
+                        href="/skills"
+                        onClick={() => setLearnDropdownOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                          isActive("/skills")
+                            ? "bg-teal-500/10 text-teal-400"
+                            : "text-slate-200 hover:bg-slate-800 hover:text-teal-300"
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                        </svg>
+                        <div>
+                          <div className="font-medium">Skills Library</div>
+                          <div className="text-xs text-slate-500">Micro-learning modules</div>
+                        </div>
+                      </Link>
+                      <Link
+                        href="/workshops"
+                        onClick={() => setLearnDropdownOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                          pathname?.startsWith("/workshops")
+                            ? "bg-teal-500/10 text-teal-400"
+                            : "text-slate-200 hover:bg-slate-800 hover:text-teal-300"
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
+                        </svg>
+                        <div>
+                          <div className="font-medium">CEU Workshops</div>
+                          <div className="text-xs text-slate-500">Earn CEUs with RID-approved content</div>
+                        </div>
+                      </Link>
+                      <div className="border-t border-slate-800 my-1" />
+                      <Link
+                        href="/ceu"
+                        onClick={() => setLearnDropdownOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                          isActive("/ceu")
+                            ? "bg-teal-500/10 text-teal-400"
+                            : "text-slate-200 hover:bg-slate-800 hover:text-teal-300"
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                        </svg>
+                        <div>
+                          <div className="font-medium">My CEUs</div>
+                          <div className="text-xs text-slate-500">View certificates & progress</div>
+                        </div>
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Link
                 href="/community"
                 className={`text-sm font-medium transition-colors ${
@@ -365,16 +450,6 @@ export default function NavBar() {
                 }`}
               >
                 Wellness
-              </Link>
-              <Link
-                href="/workshops"
-                className={`text-sm font-medium transition-colors ${
-                  isActive("/workshops") || pathname?.startsWith("/workshops")
-                    ? "text-teal-400"
-                    : "text-slate-300 hover:text-teal-300"
-                }`}
-              >
-                Workshops
               </Link>
             </div>
           )}
@@ -569,14 +644,14 @@ export default function NavBar() {
                             </Link>
                           )}
                           <Link
-                            href="/ceu"
+                            href="/journal"
                             onClick={() => setDropdownOpen(false)}
                             className="flex items-center gap-2 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 hover:text-teal-300 transition-colors"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
-                            My CEUs
+                            Journal
                           </Link>
                           <Link
                             href="/settings"
@@ -648,7 +723,7 @@ export default function NavBar() {
           />
 
           {/* Mobile Menu Panel */}
-          <div className="md:hidden fixed top-16 left-0 right-0 bg-slate-950 border-b border-slate-800 z-50 shadow-xl shadow-black/50">
+          <div className="md:hidden fixed top-16 left-0 right-0 bg-slate-950 border-b border-slate-800 z-50 shadow-xl shadow-black/50 max-h-[calc(100vh-4rem)] overflow-y-auto">
             <div className="container mx-auto max-w-7xl px-4 py-4">
               <div className="flex flex-col gap-1">
                 <Link
@@ -663,17 +738,6 @@ export default function NavBar() {
                   Dashboard
                 </Link>
                 <Link
-                  href="/journal"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    isActive("/journal")
-                      ? "bg-teal-500/20 text-teal-400"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
-                  }`}
-                >
-                  Journal
-                </Link>
-                <Link
                   href="/assignments"
                   onClick={() => setMobileMenuOpen(false)}
                   className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
@@ -684,6 +748,11 @@ export default function NavBar() {
                 >
                   Assignments
                 </Link>
+
+                {/* Learn Section Header */}
+                <div className="px-4 py-2 mt-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Learn</p>
+                </div>
                 <Link
                   href="/skills"
                   onClick={() => setMobileMenuOpen(false)}
@@ -693,8 +762,35 @@ export default function NavBar() {
                       : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
                   }`}
                 >
-                  Skills
+                  Skills Library
                 </Link>
+                <Link
+                  href="/workshops"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    pathname?.startsWith("/workshops")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  CEU Workshops
+                </Link>
+                <Link
+                  href="/ceu"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    isActive("/ceu")
+                      ? "bg-teal-500/20 text-teal-400"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
+                  }`}
+                >
+                  My CEUs
+                </Link>
+
+                {/* Connect Section */}
+                <div className="px-4 py-2 mt-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Connect</p>
+                </div>
                 <Link
                   href="/community"
                   onClick={() => setMobileMenuOpen(false)}
@@ -717,16 +813,21 @@ export default function NavBar() {
                 >
                   Wellness
                 </Link>
+
+                {/* Account Section */}
+                <div className="px-4 py-2 mt-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Account</p>
+                </div>
                 <Link
-                  href="/workshops"
+                  href="/journal"
                   onClick={() => setMobileMenuOpen(false)}
                   className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    isActive("/workshops") || pathname?.startsWith("/workshops")
+                    isActive("/journal")
                       ? "bg-teal-500/20 text-teal-400"
                       : "text-slate-300 hover:bg-slate-800 hover:text-teal-300"
                   }`}
                 >
-                  Workshops
+                  Journal
                 </Link>
                 <Link
                   href="/settings"

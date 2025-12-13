@@ -27,6 +27,7 @@ interface Certificate {
   ceu_value: number;
   rid_category: string;
   rid_subcategory?: string;
+  rid_activity_code?: string;
   knowledge_level?: "little_none" | "some" | "extensive";
   learning_objectives_achieved: any[];
   assessment_score: number | null;
@@ -35,9 +36,11 @@ interface Certificate {
   time_spent_minutes: number;
   rid_member_number?: string;
   presenter?: string;
+  user_full_name?: string;
   skill_modules?: {
     module_code: string;
     title: string;
+    rid_activity_code?: string;
   };
   skill_series?: {
     series_code: string;
@@ -97,7 +100,7 @@ export default function CEUDashboard() {
   const [moduleProgress, setModuleProgress] = useState<ModuleProgress[]>([]);
   const [availableCEUs, setAvailableCEUs] = useState(0);
   const [cycle, setCycle] = useState<CycleInfo | null>(null);
-  const [selectedTab, setSelectedTab] = useState<"overview" | "workshops" | "certificates" | "progress" | "credits">("overview");
+  const [selectedTab, setSelectedTab] = useState<"overview" | "certificates" | "progress" | "credits">("overview");
   const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null);
   const [billingHistory, setBillingHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -469,6 +472,13 @@ export default function CEUDashboard() {
       <div class="subtitle">Continuing Education Certificate</div>
     </div>
 
+    ${cert.user_full_name ? `
+    <div class="recipient" style="text-align: center; margin-bottom: 10px;">
+      <p style="color: #64748b; font-size: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">This certifies that</p>
+      <p style="font-family: 'Playfair Display', serif; font-size: 28px; color: #0f172a; font-weight: 700;">${cert.user_full_name}</p>
+    </div>
+    ` : ''}
+    <p style="text-align: center; color: #64748b; font-size: 14px; margin-bottom: 20px;">has successfully completed</p>
     <h1 class="main-title">${cert.title}</h1>
     <div class="cert-number">Certificate #${cert.certificate_number}</div>
     ${cert.rid_member_number ? `<div class="rid-member" style="text-align: center; color: #64748b; font-size: 14px; margin-bottom: 20px;">RID Member #${cert.rid_member_number}</div>` : ''}
@@ -486,7 +496,7 @@ export default function CEUDashboard() {
       </div>
       <div class="detail-row">
         <span class="detail-label">Time Invested</span>
-        <span class="detail-value">${cert.time_spent_minutes} minutes</span>
+        <span class="detail-value">${cert.time_spent_minutes || 60} minutes</span>
       </div>
       ${cert.assessment_score ? `
       <div class="detail-row">
@@ -498,6 +508,12 @@ export default function CEUDashboard() {
         <span class="detail-label">RID Activity Type</span>
         <span class="detail-value">Sponsor Initiated Activity (SIA)</span>
       </div>
+      ${(cert.rid_activity_code || cert.skill_modules?.rid_activity_code) ? `
+      <div class="detail-row">
+        <span class="detail-label">RID Activity Code</span>
+        <span class="detail-value">${cert.rid_activity_code || cert.skill_modules?.rid_activity_code}</span>
+      </div>
+      ` : ''}
     </div>
 
     ${cert.learning_objectives_achieved && cert.learning_objectives_achieved.length > 0 ? `
@@ -979,7 +995,7 @@ export default function CEUDashboard() {
 
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-slate-800 pb-2 overflow-x-auto">
-          {(["overview", "workshops", "certificates", "progress", "credits"] as const).map((tab) => (
+          {(["overview", "certificates", "progress", "credits"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setSelectedTab(tab)}
@@ -990,7 +1006,6 @@ export default function CEUDashboard() {
               }`}
             >
               {tab === "overview" && "Overview"}
-              {tab === "workshops" && `Workshops (${availableWorkshops.length})`}
               {tab === "certificates" && `Certificates (${certificates.length})`}
               {tab === "progress" && "Module Progress"}
               {tab === "credits" && "Buy Credits"}
@@ -1110,209 +1125,6 @@ export default function CEUDashboard() {
           </div>
         )}
 
-        {selectedTab === "workshops" && (
-          <div className="space-y-6">
-            {/* Credit Balance Info */}
-            <div className="rounded-xl border border-teal-500/30 bg-teal-500/10 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-teal-500/20 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-teal-400">{credits.total}</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-slate-100">
-                      Credits Available
-                      {credits.monthly > 0 && <span className="text-slate-400"> ({credits.monthly} monthly{credits.topup > 0 ? ` + ${credits.topup} top-up` : ""})</span>}
-                    </p>
-                    <p className="text-xs text-slate-400">1 credit = 30 min (0.05 CEU) • 2 credits = 60 min (0.1 CEU)</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-400">Need more?</p>
-                  <button
-                    onClick={() => router.push("/settings?tab=billing")}
-                    className="text-xs text-teal-400 hover:text-teal-300"
-                  >
-                    Buy credits →
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Growth tier upsell - show banner to upgrade for more credits */}
-            {userTier === "growth" && (
-              <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-100">
-                      Want more CEU workshops?
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      Upgrade to Pro for 6 credits/month (0.3 CEUs) instead of 2 credits
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => router.push("/settings?tab=billing")}
-                    className="px-4 py-2 bg-violet-500 hover:bg-violet-400 text-white text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    Upgrade to Pro
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Workshop count info */}
-            {availableWorkshops.length > 0 && (
-              <div className="text-sm text-slate-400">
-                {availableWorkshops.length} CEU workshop{availableWorkshops.length !== 1 ? "s" : ""} available
-              </div>
-            )}
-
-            {/* Workshop Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableWorkshops.map((workshop) => {
-                // Check if user has progress on this workshop
-                const progress = moduleProgress.find(p => p.skill_modules?.module_code === workshop.module_code);
-                const isCompleted = progress?.status === "completed";
-                const isInProgress = progress?.status === "in_progress";
-                const hasCertificate = progress?.certificate_id;
-
-                return (
-                  <div
-                    key={workshop.id}
-                    className={`rounded-xl border p-5 transition-all cursor-pointer hover:border-teal-500/50 ${
-                      hasCertificate
-                        ? "border-emerald-500/30 bg-emerald-500/5"
-                        : isCompleted
-                        ? "border-teal-500/30 bg-teal-500/5"
-                        : isInProgress
-                        ? "border-amber-500/30 bg-amber-500/5"
-                        : "border-slate-700 bg-slate-900/50"
-                    }`}
-                    onClick={() => router.push(`/ceu/workshop/${workshop.module_code}`)}
-                  >
-                    {/* Status Badge */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 rounded-full bg-teal-500/20 text-teal-400 text-xs font-bold">
-                          {workshop.ceu_value?.toFixed(2) || "0.00"} CEU
-                        </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          workshop.rid_category === "Professional Studies"
-                            ? "bg-violet-500/20 text-violet-400"
-                            : workshop.rid_category === "PPO"
-                            ? "bg-amber-500/20 text-amber-400"
-                            : "bg-blue-500/20 text-blue-400"
-                        }`}>
-                          {workshop.rid_category === "Professional Studies" ? "Prof. Studies" : workshop.rid_category}
-                        </span>
-                      </div>
-                      {hasCertificate && (
-                        <span className="px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-medium">
-                          Certified
-                        </span>
-                      )}
-                      {isCompleted && !hasCertificate && (
-                        <span className="px-2 py-1 rounded-full bg-teal-500/20 text-teal-400 text-xs font-medium">
-                          Completed
-                        </span>
-                      )}
-                      {isInProgress && (
-                        <span className="px-2 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium">
-                          In Progress
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Title */}
-                    <h3 className="text-base font-semibold text-slate-100 mb-1">
-                      {workshop.title} <span className="text-slate-400 font-normal">({workshop.duration_minutes} min)</span>
-                    </h3>
-                    {workshop.subtitle && (
-                      <p className="text-xs text-slate-500 mb-2">{workshop.subtitle}</p>
-                    )}
-
-                    {/* Description */}
-                    <p className="text-sm text-slate-400 line-clamp-2 mb-3">
-                      {workshop.description || "Interactive workshop with assessment"}
-                    </p>
-
-                    {/* Meta */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          {workshop.duration_minutes} min
-                        </span>
-                        <span>{workshop.module_code}</span>
-                      </div>
-                      <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* No workshops - Coming Soon state */}
-            {availableWorkshops.length === 0 && (
-              <div className="rounded-2xl border border-teal-500/20 bg-gradient-to-br from-slate-900 via-slate-900 to-teal-950/30 p-8 md:p-12 text-center">
-                {/* Animated gradient orb background */}
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-32 h-32 rounded-full bg-teal-500/5 blur-3xl animate-pulse" />
-                  </div>
-
-                  {/* Icon */}
-                  <div className="relative w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-teal-500/20 to-violet-500/20 border border-teal-500/30 flex items-center justify-center">
-                    <svg className="w-10 h-10 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-
-                  {/* Text */}
-                  <h3 className="text-2xl font-bold text-slate-100 mb-3">CEU Workshops Coming Soon</h3>
-                  <p className="text-slate-400 text-base max-w-lg mx-auto mb-6 leading-relaxed">
-                    We're preparing RID-approved workshops with professional video content, comprehensive assessments, and official certificates. You'll be notified when new workshops are available.
-                  </p>
-
-                  {/* Features preview */}
-                  <div className="flex flex-wrap justify-center gap-3 mb-8">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
-                      <svg className="w-4 h-4 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="text-xs text-slate-300">RID Approved</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
-                      <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-xs text-slate-300">Assessments</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/50 border border-slate-700">
-                      <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                      </svg>
-                      <span className="text-xs text-slate-300">Certificates</span>
-                    </div>
-                  </div>
-
-                  {/* RID Badge */}
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-500/10 border border-teal-500/30">
-                    <span className="text-sm font-bold text-teal-400">RID</span>
-                    <span className="text-sm text-slate-400">CMP Sponsor #2309</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          </div>
-        )}
-
         {selectedTab === "certificates" && (
           <div className="space-y-4">
             {certificates.length === 0 ? (
@@ -1327,7 +1139,7 @@ export default function CEUDashboard() {
                   Complete CEU workshops and pass assessments to earn certificates.
                 </p>
                 <button
-                  onClick={() => setSelectedTab("workshops")}
+                  onClick={() => router.push("/workshops")}
                   className="px-4 py-2 bg-teal-500 text-slate-950 font-medium rounded-lg hover:bg-teal-400 transition-colors"
                 >
                   Browse Workshops
@@ -1371,12 +1183,20 @@ export default function CEUDashboard() {
                     <div className="text-right">
                       <p className="text-2xl font-bold text-teal-400">{cert.ceu_value}</p>
                       <p className="text-xs text-slate-500">CEUs</p>
-                      <button
-                        onClick={() => downloadCertificate(cert)}
-                        className="mt-3 px-3 py-1 text-xs bg-slate-800 text-slate-300 rounded hover:bg-slate-700 transition-colors"
-                      >
-                        Download
-                      </button>
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={() => setSelectedCertificate(cert)}
+                          className="px-3 py-1.5 text-xs bg-teal-500 text-slate-950 font-medium rounded hover:bg-teal-400 transition-colors"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => downloadCertificate(cert)}
+                          className="px-3 py-1.5 text-xs bg-violet-500 text-white font-medium rounded hover:bg-violet-400 transition-colors"
+                        >
+                          Download
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1716,6 +1536,122 @@ export default function CEUDashboard() {
             // Could show a toast notification here
           }}
         />
+      )}
+
+      {/* Certificate Preview Modal */}
+      {selectedCertificate && (
+        <div
+          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedCertificate(null)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Certificate Preview Content */}
+            <div className="p-8">
+              {/* Header */}
+              <div className="text-center mb-6 pb-4 border-b-2 border-teal-500">
+                <div className="text-2xl font-bold text-slate-900">
+                  Interpret<span className="text-teal-600">Reflect</span>
+                </div>
+                <div className="text-sm text-slate-500 uppercase tracking-wider mt-1">
+                  Continuing Education Certificate
+                </div>
+              </div>
+
+              {/* Recipient */}
+              {selectedCertificate.user_full_name && (
+                <div className="text-center mb-4">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">This certifies that</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{selectedCertificate.user_full_name}</p>
+                </div>
+              )}
+              <p className="text-center text-slate-500 text-sm mb-4">has successfully completed</p>
+
+              {/* Title */}
+              <h2 className="text-xl font-bold text-slate-900 text-center mb-2">
+                {selectedCertificate.title}
+              </h2>
+              <p className="text-center text-slate-500 text-sm mb-6">
+                Certificate #{selectedCertificate.certificate_number}
+              </p>
+
+              {/* CEU Badge */}
+              <div className="text-center mb-6">
+                <div className="inline-block bg-gradient-to-br from-teal-500 to-teal-600 text-white text-3xl font-bold px-8 py-4 rounded-xl">
+                  {selectedCertificate.ceu_value}
+                </div>
+                <p className="text-slate-600 text-sm mt-2">
+                  CEU{selectedCertificate.ceu_value !== 1 ? 's' : ''} Earned - {selectedCertificate.rid_category}
+                </p>
+              </div>
+
+              {/* Details */}
+              <div className="bg-teal-50 rounded-lg p-4 mb-6 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Completed</span>
+                  <span className="font-medium text-slate-900">{formatDate(selectedCertificate.completed_at)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Time Invested</span>
+                  <span className="font-medium text-slate-900">{selectedCertificate.time_spent_minutes || 60} minutes</span>
+                </div>
+                {selectedCertificate.assessment_score && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Assessment Score</span>
+                    <span className="font-medium text-slate-900">{selectedCertificate.assessment_score}%</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">RID Activity Type</span>
+                  <span className="font-medium text-slate-900">Sponsor Initiated Activity (SIA)</span>
+                </div>
+                {(selectedCertificate.rid_activity_code || selectedCertificate.skill_modules?.rid_activity_code) && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">RID Activity Code</span>
+                    <span className="font-medium text-teal-600">{selectedCertificate.rid_activity_code || selectedCertificate.skill_modules?.rid_activity_code}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Presenter */}
+              <div className="text-center mb-6 p-4 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-500 mb-1">Presenter</p>
+                <p className="font-semibold text-slate-900">{selectedCertificate.presenter || 'Sarah Wheeler, M.Ed., M.S.'}</p>
+                <p className="text-xs text-slate-500">InterpretReflect</p>
+              </div>
+
+              {/* Footer */}
+              <div className="text-center pt-4 border-t border-slate-200">
+                <p className="font-semibold text-slate-700 text-sm">RID CMP Sponsor #2309</p>
+                <p className="text-xs text-slate-500">InterpretReflect by Building Bridges Global</p>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex gap-3 p-4 bg-slate-100 border-t border-slate-200">
+              <button
+                onClick={() => setSelectedCertificate(null)}
+                className="flex-1 px-4 py-2 text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  downloadCertificate(selectedCertificate);
+                  setSelectedCertificate(null);
+                }}
+                className="flex-1 px-4 py-2 bg-violet-500 text-white rounded-lg hover:bg-violet-400 transition-colors font-medium"
+              >
+                Download / Print
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );

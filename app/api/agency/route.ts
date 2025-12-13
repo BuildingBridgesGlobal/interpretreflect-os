@@ -71,13 +71,15 @@ export async function GET(req: NextRequest) {
 
     const orgId = membership.organization_id;
 
-    // Get all team members - SECURITY: Only from the admin's own organization
+    // Get all team members (interpreters only) - SECURITY: Only from the admin's own organization
     // Include membership id for remove action, status for filtering, and data_sharing_preferences
+    // Exclude owner and admin roles - they are not interpreters
     const { data: members } = await supabaseAdmin
       .from("organization_members")
       .select("id, user_id, role, joined_at, is_active, status, removed_at, data_sharing_preferences")
       .eq("organization_id", orgId)
-      .in("status", ["active", "pending"]); // Only show active and pending members by default
+      .in("status", ["active", "pending"])
+      .not("role", "in", "(owner,admin)"); // Only show interpreters, not agency staff
 
     // Handle case where members is null OR empty array
     if (!members || members.length === 0) {

@@ -68,6 +68,17 @@ export default function CEUWorkshopPage() {
   const [accessToken, setAccessToken] = useState<string | undefined>();
   const [userTier, setUserTier] = useState<string>("free");
 
+  // RID Member Number requirement
+  const [ridMemberNumber, setRidMemberNumber] = useState<string | null>(null);
+  const [ridInput, setRidInput] = useState("");
+  const [savingRid, setSavingRid] = useState(false);
+  const [ridError, setRidError] = useState<string | null>(null);
+
+  // Retake eligibility (1 year after completion)
+  const [canRetake, setCanRetake] = useState(false);
+  const [retakeAvailableDate, setRetakeAvailableDate] = useState<Date | null>(null);
+  const [isResettingProgress, setIsResettingProgress] = useState(false);
+
   useEffect(() => {
     loadWorkshopData();
   }, [moduleCode]);
@@ -82,15 +93,17 @@ export default function CEUWorkshopPage() {
     setUser(session.user);
     setAccessToken(session.access_token);
 
-    // Check user's subscription tier
+    // Check user's subscription tier and RID member number
     const { data: profile } = await supabase
       .from("profiles")
-      .select("subscription_tier")
+      .select("subscription_tier, rid_member_number")
       .eq("id", session.user.id)
       .single();
 
-    const tier = profile?.subscription_tier || "free";
+    const profileData = profile as any;
+    const tier = profileData?.subscription_tier || "free";
     setUserTier(tier);
+    setRidMemberNumber(profileData?.rid_member_number || null);
 
     // Load workshop data
     const { data: workshopData } = await supabase
@@ -134,6 +147,23 @@ export default function CEUWorkshopPage() {
 
     const typedProgress = progressData as unknown as WorkshopProgress;
     setProgress(typedProgress);
+
+    // Check if workshop is completed and if 1 year has passed (retake eligibility)
+    const isCompleted = typedProgress?.certificate_id || typedProgress?.evaluation_completed;
+    if (isCompleted && typedProgress?.completed_at) {
+      const completedDate = new Date(typedProgress.completed_at);
+      const oneYearLater = new Date(completedDate);
+      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+      const now = new Date();
+
+      if (now >= oneYearLater) {
+        // Eligible for retake
+        setCanRetake(true);
+      } else {
+        // Not yet eligible - show when they can retake
+        setRetakeAvailableDate(oneYearLater);
+      }
+    }
 
     // Determine current step based on progress
     if (typedProgress?.certificate_id) {
@@ -194,6 +224,91 @@ export default function CEUWorkshopPage() {
     }
   };
 
+  // Reset progress for retaking the workshop (after 1 year)
+  const handleRetakeWorkshop = async () => {
+    if (!user || !workshop || !progress) return;
+
+    setIsResettingProgress(true);
+    try {
+      // Reset the progress record to allow retaking
+      const { error } = await supabase
+        .from("user_module_progress")
+        .update({
+          status: "in_progress",
+          video_completed: false,
+          assessment_completed: false,
+          assessment_passed: null,
+          assessment_score: null,
+          evaluation_completed: false,
+          certificate_id: null,
+          started_at: new Date().toISOString(),
+          completed_at: null,
+          time_spent_seconds: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", progress.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setProgress({
+        ...progress,
+        status: "in_progress",
+        video_completed: false,
+        assessment_completed: false,
+        assessment_passed: null,
+        assessment_score: null,
+        evaluation_completed: false,
+        certificate_id: null,
+        started_at: new Date().toISOString(),
+        completed_at: null,
+        time_spent_seconds: 0,
+      });
+      setCanRetake(false);
+      setRetakeAvailableDate(null);
+      setCurrentStep("intro");
+    } catch (err) {
+      console.error("Error resetting progress:", err);
+    } finally {
+      setIsResettingProgress(false);
+    }
+  };
+
+  // Save RID Member Number
+  const handleSaveRidNumber = async () => {
+    if (!user || !ridInput.trim()) return;
+
+    // Basic validation - RID numbers are typically 5-8 digits
+    const cleaned = ridInput.trim().replace(/\D/g, '');
+    if (cleaned.length < 4 || cleaned.length > 10) {
+      setRidError("Please enter a valid RID member number (typically 5-8 digits)");
+      return;
+    }
+
+    setSavingRid(true);
+    setRidError(null);
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          rid_member_number: cleaned,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      setRidMemberNumber(cleaned);
+      setRidInput("");
+    } catch (err: any) {
+      console.error("Error saving RID number:", err);
+      setRidError("Failed to save RID number. Please try again.");
+    } finally {
+      setSavingRid(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950">
@@ -246,6 +361,101 @@ export default function CEUWorkshopPage() {
             >
               Upgrade to Pro - $30/month
             </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Block users without RID member number - required for CEU submission
+  if (!ridMemberNumber) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <NavBar />
+        <main className="max-w-2xl mx-auto px-4 py-8">
+          <div className="rounded-xl border border-amber-500/30 bg-slate-900/50 p-8">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                <span className="text-amber-400 font-bold text-lg">RID</span>
+              </div>
+              <h2 className="text-xl font-bold text-slate-100 mb-2">RID Member Number Required</h2>
+              <p className="text-slate-400">
+                To earn CEU credit and have your completion reported to RID, we need your RID member number.
+              </p>
+            </div>
+
+            <div className="bg-slate-800/50 rounded-lg p-4 mb-6">
+              <h3 className="text-sm font-semibold text-slate-200 mb-2">Why is this required?</h3>
+              <ul className="text-sm text-slate-400 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="text-teal-400 mt-0.5">•</span>
+                  <span>InterpretReflect is an approved RID CMP Sponsor (#2309)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-teal-400 mt-0.5">•</span>
+                  <span>We report your CEU completions directly to RID on your behalf</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-teal-400 mt-0.5">•</span>
+                  <span>Your RID# ensures your credits are properly recorded in the RID system</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Your RID Member Number
+                </label>
+                <input
+                  type="text"
+                  value={ridInput}
+                  onChange={(e) => {
+                    setRidInput(e.target.value);
+                    setRidError(null);
+                  }}
+                  placeholder="Enter your RID #"
+                  className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                />
+                {ridError && (
+                  <p className="text-sm text-red-400 mt-2">{ridError}</p>
+                )}
+              </div>
+
+              <button
+                onClick={handleSaveRidNumber}
+                disabled={savingRid || !ridInput.trim()}
+                className="w-full px-6 py-3 bg-teal-500 text-slate-950 font-bold rounded-lg hover:bg-teal-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {savingRid ? "Saving..." : "Save & Continue to Workshop"}
+              </button>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-slate-700">
+              <p className="text-sm text-slate-500 mb-3">
+                Don't have an RID member number?
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <a
+                  href="https://rid.org/membership/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 px-4 py-2 text-center rounded-lg border border-violet-500/50 text-violet-400 hover:bg-violet-500/10 transition-colors text-sm font-medium"
+                >
+                  Join RID →
+                </a>
+                <button
+                  onClick={() => router.push("/ceu")}
+                  className="flex-1 px-4 py-2 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-800 transition-colors text-sm"
+                >
+                  Back to CEU Dashboard
+                </button>
+              </div>
+              <p className="text-xs text-slate-600 mt-4">
+                Not RID certified? State interpreters and students may have different CEU requirements.
+                Contact us at support@interpretreflect.com for alternative options.
+              </p>
+            </div>
           </div>
         </main>
       </div>
@@ -397,8 +607,7 @@ export default function CEUWorkshopPage() {
                       <span className="text-violet-400 font-medium"> {workshop.rid_category}</span>.
                     </p>
                     <p className="text-xs text-slate-400">
-                      To earn CEU credit, you must watch the full video, pass the assessment quiz with
-                      {workshop.assessment_pass_threshold}% or higher, and complete the evaluation form.
+                      To earn CEU credit, you must watch the full video, pass the assessment quiz with {workshop.assessment_pass_threshold}% or higher, and complete the evaluation form.
                     </p>
                     {workshop.rid_activity_code && (
                       <p className="text-xs text-slate-500 mt-2">
@@ -407,6 +616,16 @@ export default function CEUWorkshopPage() {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Anti-Discrimination Statement - RID Required */}
+              <div className="rounded-xl border border-slate-700 bg-slate-800/30 p-4">
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  <span className="font-medium text-slate-300">Non-Discrimination Policy:</span> InterpretReflect (RID CMP Sponsor #2309)
+                  does not discriminate in educational programs on the basis of race, color, national origin, sex, age, religion,
+                  disability, sexual orientation, gender identity, veteran status, or any other protected characteristic.
+                  This activity is offered to all RID members and interested professionals without discrimination.
+                </p>
               </div>
 
               {/* Start Button */}
@@ -470,7 +689,10 @@ export default function CEUWorkshopPage() {
                 questions={workshop.assessment_questions.map(q => ({
                   id: String(q.id),
                   question: q.question,
-                  options: q.options.map(o => ({ id: o.letter, text: o.text })),
+                  options: (q.options || []).filter(o => o).map((o: any, idx) => ({
+                    id: o.letter || o.id || String.fromCharCode(65 + idx), // Use letter, id, or generate A/B/C/D
+                    text: o.text || ''
+                  })),
                   correct_answer: q.correct_answer,
                   explanation: q.feedback,
                 }))}
@@ -521,12 +743,50 @@ export default function CEUWorkshopPage() {
               <p className="text-slate-300 mb-6">
                 You've earned <span className="text-teal-400 font-bold">{workshop.ceu_value} CEU</span> in {workshop.rid_category}.
               </p>
-              <button
-                onClick={() => router.push("/ceu")}
-                className="px-6 py-3 rounded-lg bg-teal-500 text-slate-950 font-bold hover:bg-teal-400 transition-colors"
-              >
-                View My Certificates
-              </button>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button
+                  onClick={() => router.push("/ceu")}
+                  className="px-6 py-3 rounded-lg bg-teal-500 text-slate-950 font-bold hover:bg-teal-400 transition-colors"
+                >
+                  View My Certificates
+                </button>
+
+                {/* Retake option - available after 1 year */}
+                {canRetake && (
+                  <button
+                    onClick={handleRetakeWorkshop}
+                    disabled={isResettingProgress}
+                    className="px-6 py-3 rounded-lg border border-violet-500/50 text-violet-400 font-medium hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                  >
+                    {isResettingProgress ? "Resetting..." : "Retake Workshop"}
+                  </button>
+                )}
+              </div>
+
+              {/* Retake countdown - shows when not yet eligible */}
+              {retakeAvailableDate && !canRetake && (
+                <div className="mt-6 pt-6 border-t border-emerald-500/20">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800/50 border border-slate-700">
+                    <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm text-slate-400">
+                      Retake available on{" "}
+                      <span className="text-slate-200 font-medium">
+                        {retakeAvailableDate.toLocaleDateString("en-US", {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Per RID guidelines, you can retake this workshop and earn CEU credit again after 1 year.
+                  </p>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

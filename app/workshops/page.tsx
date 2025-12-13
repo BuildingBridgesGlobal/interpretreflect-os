@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import NavBar from "@/components/NavBar";
 import Link from "next/link";
@@ -21,13 +22,45 @@ interface Workshop {
 }
 
 export default function WorkshopsPage() {
+  const router = useRouter();
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "ps" | "gsd" | "ppod">("all");
+  const [subscriptionTier, setSubscriptionTier] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    loadWorkshops();
+    checkAuthAndLoadWorkshops();
   }, []);
+
+  const checkAuthAndLoadWorkshops = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      // Not logged in - redirect to sign in
+      router.push("/signin?redirect=/workshops");
+      return;
+    }
+
+    setIsAuthenticated(true);
+
+    // Get user's subscription tier
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("subscription_tier")
+      .eq("id", session.user.id)
+      .single();
+
+    const tier = profile?.subscription_tier || "free";
+    setSubscriptionTier(tier);
+
+    // Only load workshops if user has access (growth or pro)
+    if (tier === "growth" || tier === "pro") {
+      await loadWorkshops();
+    } else {
+      setLoading(false);
+    }
+  };
 
   const loadWorkshops = async () => {
     try {
@@ -77,6 +110,85 @@ export default function WorkshopsPage() {
     if (filter === "ppod") return category.includes("ethics") || category.includes("ppod");
     return true;
   });
+
+  // Show loading state while checking auth
+  if (loading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  // Show paywall for free users
+  if (subscriptionTier === "free") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-50">
+        <NavBar />
+        <main className="container mx-auto max-w-2xl px-4 md:px-6 py-12 md:py-16">
+          <div className="text-center">
+            {/* Lock Icon */}
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-amber-500/20 to-teal-500/20 border border-amber-500/30 flex items-center justify-center">
+              <svg className="w-10 h-10 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            </div>
+
+            <h1 className="text-3xl font-bold mb-3">CEU Workshops</h1>
+            <p className="text-lg text-slate-400 mb-8">
+              Earn RID-approved CEU credits with our on-demand professional development workshops.
+            </p>
+
+            {/* Feature List */}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 mb-8 text-left">
+              <h2 className="font-semibold text-slate-200 mb-4">What you get with Growth or Pro:</h2>
+              <ul className="space-y-3">
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-teal-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-slate-300">RID-approved CEU workshops (Provider #2309)</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-teal-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-slate-300">On-demand video content in ASL with English captions</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-teal-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-slate-300">Instant certificates upon completion</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-teal-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-slate-300">Professional Studies, General Studies, and Ethics content</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* CTA */}
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 text-slate-950 font-semibold text-lg hover:from-teal-400 hover:to-cyan-400 transition-all shadow-lg shadow-teal-500/25"
+            >
+              Upgrade to Access Workshops
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+
+            <p className="text-sm text-slate-500 mt-4">
+              Growth starts at $19/month · Pro includes 0.3 CEUs/month
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50">
@@ -232,9 +344,8 @@ export default function WorkshopsPage() {
         {/* Footer Note */}
         <div className="mt-8 text-center">
           <p className="text-sm text-slate-500">
-            CEU workshops require a Growth or Pro subscription.{" "}
             <Link href="/ceu" className="text-teal-400 hover:underline">
-              View your CEU records
+              View your CEU records and certificates
             </Link>
           </p>
         </div>

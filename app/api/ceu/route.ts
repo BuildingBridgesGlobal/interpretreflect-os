@@ -141,14 +141,22 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // Get user's profile for name
+      const { data: userProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name")
+        .eq("id", userId)
+        .single();
+
       // Get certificates for this user
-      const { data: certificates } = await supabaseAdmin
+      const { data: rawCertificates } = await supabaseAdmin
         .from("ceu_certificates")
         .select(`
           *,
           skill_modules (
             module_code,
-            title
+            title,
+            rid_activity_code
           ),
           skill_series (
             series_code,
@@ -158,6 +166,13 @@ export async function GET(req: NextRequest) {
         .eq("user_id", userId)
         .eq("status", "active")
         .order("issued_at", { ascending: false });
+
+      // Add user_full_name and rid_activity_code to each certificate
+      const certificates = (rawCertificates || []).map(cert => ({
+        ...cert,
+        user_full_name: userProfile?.full_name || null,
+        rid_activity_code: cert.rid_activity_code || (cert.skill_modules as any)?.rid_activity_code || null,
+      }));
 
       // Get module progress with CEU info
       const { data: moduleProgress } = await supabaseAdmin
@@ -748,6 +763,7 @@ export async function POST(req: NextRequest) {
             q4_presenter_effective: evaluation_data.q4PresenterEffective,
             q5_most_valuable: evaluation_data.q5MostValuable?.trim() || null,
             q6_suggestions: evaluation_data.q6Suggestions?.trim() || null,
+            submitted_at: new Date().toISOString(),
           })
           .select("id")
           .single();

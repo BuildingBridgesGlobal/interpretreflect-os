@@ -109,43 +109,64 @@ export async function GET(request: NextRequest) {
 
       case "evaluations": {
         const month = searchParams.get("month"); // YYYY-MM format
-        let query = supabaseAdmin
+
+        // Fetch all recent evaluations (simpler and more reliable than complex date queries)
+        // We use created_at for ordering since it's always populated
+        const { data, error } = await supabaseAdmin
           .from("ceu_evaluations")
           .select(`
             *,
-            user:profiles!user_id(full_name, email),
-            module:skill_modules!module_id(title, module_code)
+            user:profiles(full_name, email),
+            module:skill_modules(title, module_code)
           `)
-          .order("submitted_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(500); // Fetch more to ensure we get all in the month
 
-        if (month) {
-          const startDate = `${month}-01`;
-          const endDate = new Date(startDate);
-          endDate.setMonth(endDate.getMonth() + 1);
-          query = query
-            .gte("submitted_at", startDate)
-            .lt("submitted_at", endDate.toISOString().split("T")[0]);
+        if (error) {
+          console.error("Error fetching evaluations:", error);
+          // If table doesn't exist, return empty array instead of throwing
+          if (error.code === "42P01") {
+            return NextResponse.json({
+              evaluations: [],
+              summary: { total: 0, average_rating: 0 },
+              error: "Evaluations table not found - run migrations",
+            });
+          }
+          throw error;
         }
 
-        const { data, error } = await query.limit(100);
-        if (error) throw error;
+        // Filter client-side for the month - use submitted_at if available, else created_at
+        let filteredData = data || [];
+        if (month) {
+          const startDate = new Date(`${month}-01T00:00:00Z`);
+          const endDate = new Date(`${month}-01T00:00:00Z`);
+          endDate.setMonth(endDate.getMonth() + 1);
+
+          filteredData = filteredData.filter((e: any) => {
+            // Use submitted_at if available, fallback to created_at
+            const dateStr = e.submitted_at || e.created_at;
+            if (!dateStr) return false;
+            const evalDate = new Date(dateStr);
+            return evalDate >= startDate && evalDate < endDate;
+          });
+        }
 
         // Calculate averages
-        const ratings = data?.map(e => ({
-          q1: e.q1_objectives_clear,
-          q2: e.q2_content_relevant,
-          q3: e.q3_applicable_to_work,
-          q4: e.q4_presenter_effective,
-        })) || [];
+        const ratings = filteredData.map((e: any) => ({
+          q1: e.q1_objectives_clear || 0,
+          q2: e.q2_content_relevant || 0,
+          q3: e.q3_applicable_to_work || 0,
+          q4: e.q4_presenter_effective || 0,
+        }));
 
         const avgRating = ratings.length > 0
-          ? ratings.reduce((sum, r) => sum + (r.q1 + r.q2 + r.q3 + r.q4) / 4, 0) / ratings.length
+          ? ratings.reduce((sum: number, r: any) => sum + (r.q1 + r.q2 + r.q3 + r.q4) / 4, 0) / ratings.length
           : 0;
 
         return NextResponse.json({
-          evaluations: data,
+          evaluations: filteredData,
           summary: {
-            total: data?.length || 0,
+            total: filteredData.length,
             average_rating: Math.round(avgRating * 100) / 100,
           },
         });
@@ -217,6 +238,104 @@ export async function GET(request: NextRequest) {
 
         if (error) throw error;
         return NextResponse.json({ logs: data });
+      }
+
+      case "evaluations_export": {
+        const month = searchParams.get("month"); // YYYY-MM format
+        const format = searchParams.get("format") || "csv";
+
+        // Fetch all evaluations and filter client-side for reliability
+        const { data: allData, error } = await supabaseAdmin
+          .from("ceu_evaluations")
+          .select(`
+            *,
+            user:profiles(full_name, email, rid_member_number),
+            module:skill_modules(title, module_code)
+          `)
+          .order("created_at", { ascending: true })
+          .limit(1000);
+
+        // Filter for the requested month
+        let data = allData || [];
+        if (month) {
+          const startDate = new Date(`${month}-01T00:00:00Z`);
+          const endDate = new Date(`${month}-01T00:00:00Z`);
+          endDate.setMonth(endDate.getMonth() + 1);
+
+          data = data.filter((e: any) => {
+            const dateStr = e.submitted_at || e.created_at;
+            if (!dateStr) return false;
+            const evalDate = new Date(dateStr);
+            return evalDate >= startDate && evalDate < endDate;
+          });
+        }
+
+        if (error) {
+          console.error("Error fetching evaluations for export:", error);
+          if (error.code === "42P01") {
+            return NextResponse.json({
+              error: "Evaluations table not found - run migrations",
+            }, { status: 500 });
+          }
+          throw error;
+        }
+
+        if (format === "json") {
+          return NextResponse.json({
+            success: true,
+            count: data?.length || 0,
+            month,
+            evaluations: data,
+          });
+        }
+
+        // Generate CSV for RID audit purposes
+        const csvHeaders = [
+          "Submitted Date",
+          "Participant Name",
+          "Email",
+          "RID Member #",
+          "Module Code",
+          "Module Title",
+          "Q1 Objectives Clear (1-5)",
+          "Q2 Content Relevant (1-5)",
+          "Q3 Applicable to Work (1-5)",
+          "Q4 Presenter Effective (1-5)",
+          "Average Rating",
+          "Most Valuable",
+          "Suggestions",
+        ];
+
+        const csvRows = data.map((e: any) => {
+          const avgRating = (((e.q1_objectives_clear || 0) + (e.q2_content_relevant || 0) + (e.q3_applicable_to_work || 0) + (e.q4_presenter_effective || 0)) / 4).toFixed(2);
+          const dateStr = e.submitted_at || e.created_at;
+          return [
+            dateStr ? new Date(dateStr).toLocaleDateString("en-US") : "",
+            `"${(e.user?.full_name || "Unknown").replace(/"/g, '""')}"`,
+            e.user?.email || "",
+            e.user?.rid_member_number || "",
+            e.module?.module_code || "",
+            `"${(e.module?.title || "Unknown").replace(/"/g, '""')}"`,
+            e.q1_objectives_clear || 0,
+            e.q2_content_relevant || 0,
+            e.q3_applicable_to_work || 0,
+            e.q4_presenter_effective || 0,
+            avgRating,
+            `"${(e.q5_most_valuable || "").replace(/"/g, '""')}"`,
+            `"${(e.q6_suggestions || "").replace(/"/g, '""')}"`,
+          ].join(",");
+        });
+
+        const csvContent = [csvHeaders.join(","), ...csvRows].join("\n");
+        const filename = `CEU_Evaluations_${month || "all"}.csv`;
+
+        return new NextResponse(csvContent, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/csv",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+          },
+        });
       }
 
       default:

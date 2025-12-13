@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     // Check if we only want pending (not yet submitted) certificates
     const onlyPending = searchParams.get("pending") === "true";
 
-    // Fetch certificates within date range with user profile info
+    // Fetch certificates within date range
     let query = supabaseAdmin
       .from("ceu_certificates")
       .select(`
@@ -95,13 +95,7 @@ export async function GET(req: NextRequest) {
         assessment_score,
         rid_submitted_at,
         rid_submission_batch,
-        user_id,
-        profiles!inner (
-          id,
-          full_name,
-          email,
-          rid_member_number
-        )
+        user_id
       `)
       .eq("status", "active")
       .gte("issued_at", `${startDate}T00:00:00`)
@@ -113,15 +107,31 @@ export async function GET(req: NextRequest) {
       query = query.is("rid_submitted_at", null);
     }
 
-    const { data: certificates, error } = await query;
+    const { data: rawCertificates, error } = await query;
 
     if (error) {
       console.error("Error fetching certificates:", error);
       return NextResponse.json(
-        { error: "Failed to fetch certificates" },
+        { error: "Failed to fetch certificates", details: error.message },
         { status: 500 }
       );
     }
+
+    // Fetch profiles for all certificate user_ids
+    const userIds = [...new Set((rawCertificates || []).map((c: any) => c.user_id))];
+    const { data: profiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, email, rid_member_number")
+      .in("id", userIds.length > 0 ? userIds : ["none"]);
+
+    // Create a map for quick lookup
+    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+    // Attach profile info to certificates
+    const certificates = (rawCertificates || []).map((cert: any) => ({
+      ...cert,
+      profiles: profileMap.get(cert.user_id) || null,
+    }));
 
     if (!certificates || certificates.length === 0) {
       if (format === "json") {

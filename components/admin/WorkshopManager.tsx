@@ -58,12 +58,29 @@ type NewWorkshop = {
   google_folder_url: string;
 };
 
+type AssessmentQuestion = {
+  id: string;
+  question: string;
+  options: string[];
+  correct_answer: number;
+};
+
 export default function WorkshopManager() {
   const [workshops, setWorkshops] = useState<Workshop[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedWorkshop, setSelectedWorkshop] = useState<Workshop | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Learning objectives editing
+  const [editingObjectives, setEditingObjectives] = useState(false);
+  const [tempObjectives, setTempObjectives] = useState<string[]>([]);
+  const [newObjective, setNewObjective] = useState("");
+
+  // Assessment questions editing
+  const [editingQuestions, setEditingQuestions] = useState(false);
+  const [tempQuestions, setTempQuestions] = useState<AssessmentQuestion[]>([]);
+  const [newQuestion, setNewQuestion] = useState({ question: "", options: ["", "", "", ""], correct_answer: 0 });
 
   const [newWorkshop, setNewWorkshop] = useState<NewWorkshop>({
     title: "",
@@ -209,6 +226,87 @@ export default function WorkshopManager() {
     } catch (err) {
       console.error("Error updating field:", err);
     }
+  };
+
+  // Start editing learning objectives
+  const startEditingObjectives = (workshop: Workshop) => {
+    setTempObjectives(workshop.learning_objectives || []);
+    setEditingObjectives(true);
+    setNewObjective("");
+  };
+
+  // Save learning objectives
+  const saveObjectives = async (workshopId: string) => {
+    setSaving(true);
+    try {
+      await updateWorkshopField(workshopId, "learning_objectives", tempObjectives);
+      setEditingObjectives(false);
+    } catch (err) {
+      console.error("Error saving objectives:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Add a new objective
+  const addObjective = () => {
+    if (newObjective.trim()) {
+      setTempObjectives([...tempObjectives, newObjective.trim()]);
+      setNewObjective("");
+    }
+  };
+
+  // Remove an objective
+  const removeObjective = (index: number) => {
+    setTempObjectives(tempObjectives.filter((_, i) => i !== index));
+  };
+
+  // Start editing questions
+  const startEditingQuestions = (workshop: Workshop) => {
+    setTempQuestions(workshop.assessment_questions || []);
+    setEditingQuestions(true);
+    setNewQuestion({ question: "", options: ["", "", "", ""], correct_answer: 0 });
+  };
+
+  // Save assessment questions
+  const saveQuestions = async (workshopId: string) => {
+    setSaving(true);
+    try {
+      await updateWorkshopField(workshopId, "assessment_questions", tempQuestions);
+      setEditingQuestions(false);
+    } catch (err) {
+      console.error("Error saving questions:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Add a new question
+  const addQuestion = () => {
+    if (newQuestion.question.trim() && newQuestion.options.every(o => o.trim())) {
+      const question: AssessmentQuestion = {
+        id: `q_${Date.now()}`,
+        question: newQuestion.question.trim(),
+        options: newQuestion.options.map(o => o.trim()),
+        correct_answer: newQuestion.correct_answer,
+      };
+      setTempQuestions([...tempQuestions, question]);
+      setNewQuestion({ question: "", options: ["", "", "", ""], correct_answer: 0 });
+    } else {
+      alert("Please fill in the question and all 4 answer options");
+    }
+  };
+
+  // Remove a question
+  const removeQuestion = (id: string) => {
+    setTempQuestions(tempQuestions.filter(q => q.id !== id));
+  };
+
+  // Update a new question option
+  const updateNewQuestionOption = (index: number, value: string) => {
+    const newOptions = [...newQuestion.options];
+    newOptions[index] = value;
+    setNewQuestion({ ...newQuestion, options: newOptions });
   };
 
   const publishWorkshop = async (workshop: Workshop) => {
@@ -423,14 +521,15 @@ export default function WorkshopManager() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Video URL</label>
-                <input
-                  type="url"
+                <label className="block text-sm font-medium text-slate-300 mb-1">Video URL or Embed Code</label>
+                <textarea
                   value={newWorkshop.video_url}
                   onChange={(e) => setNewWorkshop({ ...newWorkshop, video_url: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-teal-500"
+                  placeholder="Paste Vimeo embed code (e.g., <iframe src=&quot;https://player.vimeo.com/video/...&quot;>) or just the URL"
+                  rows={3}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-teal-500 resize-none font-mono text-xs"
                 />
+                <p className="text-xs text-slate-500 mt-1">Accepts: Vimeo embed code, player.vimeo.com URL, or vimeo.com URL</p>
               </div>
 
               <div>
@@ -608,18 +707,24 @@ export default function WorkshopManager() {
                     <div>
                       <h4 className="text-sm font-semibold text-slate-300 mb-3">Content Requirements</h4>
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                        <button
+                          onClick={() => startEditingObjectives(workshop)}
+                          className="w-full flex items-center justify-between p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors text-left"
+                        >
                           <span className="text-sm text-slate-300">Learning Objectives</span>
                           <span className={`text-xs ${workshop.learning_objectives?.length ? "text-emerald-400" : "text-amber-400"}`}>
-                            {workshop.learning_objectives?.length || 0} added
+                            {workshop.learning_objectives?.length || 0} added - Click to edit
                           </span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                        </button>
+                        <button
+                          onClick={() => startEditingQuestions(workshop)}
+                          className="w-full flex items-center justify-between p-3 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors text-left"
+                        >
                           <span className="text-sm text-slate-300">Assessment Questions</span>
                           <span className={`text-xs ${workshop.assessment_questions?.length ? "text-emerald-400" : "text-amber-400"}`}>
-                            {workshop.assessment_questions?.length || 0} added
+                            {workshop.assessment_questions?.length || 0} added - Click to edit
                           </span>
-                        </div>
+                        </button>
                         <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
                           <span className="text-sm text-slate-300">Video URL</span>
                           <span className={`text-xs ${workshop.video_url ? "text-emerald-400" : "text-amber-400"}`}>
@@ -640,6 +745,158 @@ export default function WorkshopManager() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Learning Objectives Editor */}
+                  {editingObjectives && (
+                    <div className="mt-6 pt-6 border-t border-slate-700">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-sm font-semibold text-slate-300">Edit Learning Objectives</h4>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditingObjectives(false)}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveObjectives(workshop.id)}
+                            disabled={saving}
+                            className="px-3 py-1.5 text-xs rounded-lg bg-teal-500 text-slate-950 hover:bg-teal-400 disabled:opacity-50"
+                          >
+                            {saving ? "Saving..." : "Save Objectives"}
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 mb-4">After completing this workshop, participants will be able to:</p>
+                      <div className="space-y-2 mb-4">
+                        {tempObjectives.map((obj, idx) => (
+                          <div key={idx} className="flex items-start gap-2 p-2 rounded-lg bg-slate-800/50">
+                            <span className="text-teal-400 text-sm mt-0.5">{idx + 1}.</span>
+                            <span className="text-sm text-slate-300 flex-1">{obj}</span>
+                            <button
+                              onClick={() => removeObjective(idx)}
+                              className="text-rose-400 hover:text-rose-300 text-xs"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newObjective}
+                          onChange={(e) => setNewObjective(e.target.value)}
+                          placeholder="e.g., Identify three key strategies for team communication"
+                          className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-teal-500 text-sm"
+                          onKeyPress={(e) => e.key === "Enter" && addObjective()}
+                        />
+                        <button
+                          onClick={addObjective}
+                          className="px-3 py-2 text-sm rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Assessment Questions Editor */}
+                  {editingQuestions && (
+                    <div className="mt-6 pt-6 border-t border-slate-700">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-sm font-semibold text-slate-300">Edit Assessment Questions</h4>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditingQuestions(false)}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveQuestions(workshop.id)}
+                            disabled={saving}
+                            className="px-3 py-1.5 text-xs rounded-lg bg-teal-500 text-slate-950 hover:bg-teal-400 disabled:opacity-50"
+                          >
+                            {saving ? "Saving..." : "Save Questions"}
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 mb-4">Must pass with 80% to earn CEU credit. Add 5+ questions recommended.</p>
+
+                      {/* Existing Questions */}
+                      <div className="space-y-4 mb-6">
+                        {tempQuestions.map((q, qIdx) => (
+                          <div key={q.id} className="p-4 rounded-lg bg-slate-800/50 border border-slate-700">
+                            <div className="flex items-start justify-between mb-3">
+                              <span className="text-sm font-medium text-slate-200">Q{qIdx + 1}: {q.question}</span>
+                              <button
+                                onClick={() => removeQuestion(q.id)}
+                                className="text-rose-400 hover:text-rose-300 text-xs"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {q.options.map((opt, optIdx) => (
+                                <div
+                                  key={optIdx}
+                                  className={`px-3 py-2 rounded text-xs ${
+                                    optIdx === q.correct_answer
+                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                      : "bg-slate-900 text-slate-400"
+                                  }`}
+                                >
+                                  {String.fromCharCode(65 + optIdx)}. {opt} {optIdx === q.correct_answer && "(Correct)"}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add New Question Form */}
+                      <div className="p-4 rounded-lg border border-dashed border-slate-600 bg-slate-800/30">
+                        <h5 className="text-sm font-medium text-slate-300 mb-3">Add New Question</h5>
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            value={newQuestion.question}
+                            onChange={(e) => setNewQuestion({ ...newQuestion, question: e.target.value })}
+                            placeholder="Enter your question..."
+                            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-teal-500 text-sm"
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            {newQuestion.options.map((opt, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name="correct_answer"
+                                  checked={newQuestion.correct_answer === idx}
+                                  onChange={() => setNewQuestion({ ...newQuestion, correct_answer: idx })}
+                                  className="text-teal-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={opt}
+                                  onChange={(e) => updateNewQuestionOption(idx, e.target.value)}
+                                  placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+                                  className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:border-teal-500 text-sm"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-xs text-slate-500">Select the radio button next to the correct answer</p>
+                          <button
+                            onClick={addQuestion}
+                            className="w-full px-3 py-2 text-sm rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30"
+                          >
+                            + Add Question
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
